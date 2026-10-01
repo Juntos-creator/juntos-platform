@@ -1,0 +1,12 @@
+{
+  "name": "JUNTOS",
+  "short_name": "JUNTOS",
+  "description": "Acompanamiento humano no clinico en Republica Dominicana",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#0E3A5D",
+  "icons": [
+    { "src": "/images/logo-juntos.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
