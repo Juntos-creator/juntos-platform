@@ -6,38 +6,39 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Logo } from '@/components/brand/Logo';
 import { Button } from '@/components/ui/button';
+import { User } from 'lucide-react';
 
 export function Navbar() {
   const router = useRouter();
   const supabase = createClient();
-  
+
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function getUserRole() {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (user) {
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', user.id)
           .single();
-          
+
         if (profile) {
           setRole(profile.role);
         }
       }
       setLoading(false);
     }
-    
+
     getUserRole();
   }, [supabase]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
-    router.push('/'); // Redirige a la página principal oficial, NO a /login
+    router.push('/');
     router.refresh();
   }
 
@@ -45,25 +46,26 @@ export function Navbar() {
     <header className="bg-juntos-blue text-white w-full">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         
-        {/* Clic en el logo regresa al inicio manteniendo tu sesión */}
+        {/* Logo */}
         <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
           <Logo withText className="[&_span]:text-white" />
         </Link>
 
+        {/* Navegación dinámica por rol */}
         {!loading && (
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
             <Link href="/" className="hover:text-juntos-green transition-colors">
               Inicio
             </Link>
 
-            {/* VISTA B2C (SOLICITANTE) o ACOMPAÑANTE */}
+            {/* Vista B2C / Acompañante */}
             {(role === 'CUSTOMER' || role === 'COMPANION') && (
               <Link href="/services/new" className="hover:text-juntos-green transition-colors">
                 Solicitar servicio
               </Link>
             )}
 
-            {/* VISTA B2B (INSTITUCIÓN) */}
+            {/* Vista Institución B2B */}
             {role === 'INSTITUTION' && (
               <>
                 <Link href="/admin/institutions" className="hover:text-juntos-green transition-colors">
@@ -75,30 +77,49 @@ export function Navbar() {
               </>
             )}
 
-            {/* VISTA ADMINISTRADOR INTERNO */}
+            {/* Vista Administrador Interno */}
             {role === 'ADMIN' && (
               <>
-                <Link href="/services/new" className="hover:text-juntos-green transition-colors">Solicitar servicio</Link>
-                <Link href="/admin/institutions" className="hover:text-juntos-green transition-colors">CRM B2B</Link>
-                <Link href="/admin/payments" className="hover:text-juntos-green transition-colors">Pagos</Link>
-                <Link href="/admin/invoices" className="hover:text-juntos-green transition-colors">Facturas</Link>
-                <Link href="/admin/audit" className="hover:text-juntos-green transition-colors">Auditoría</Link>
+                <Link href="/services/new" className="hover:text-juntos-green transition-colors">
+                  Solicitar servicio
+                </Link>
+                <Link href="/admin/institutions" className="hover:text-juntos-green transition-colors">
+                  CRM B2B
+                </Link>
+                <Link href="/admin/payments" className="hover:text-juntos-green transition-colors">
+                  Pagos
+                </Link>
+                <Link href="/admin/invoices" className="hover:text-juntos-green transition-colors">
+                  Facturas
+                </Link>
+                <Link href="/admin/audit" className="hover:text-juntos-green transition-colors">
+                  Auditoría
+                </Link>
               </>
             )}
           </nav>
         )}
 
-        <div className="flex items-center gap-2">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={handleLogout} 
-            className="text-white hover:bg-white/10 hover:text-white"
+        {/* Acceso a Perfil y Cierre de Sesión */}
+        <div className="flex items-center gap-3">
+          <Link
+            href="/profile"
+            className="flex items-center gap-1.5 text-sm font-medium text-white hover:text-juntos-green transition-colors"
           >
-            Cerrar sesión
+            <User className="h-4 w-4" />
+            <span>Mi Perfil</span>
+          </Link>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="text-white hover:bg-white/10 hover:text-white border border-white/20"
+          >
+            Salir
           </Button>
         </div>
-        
+
       </div>
     </header>
   );
