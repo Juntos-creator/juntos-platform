@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import { HeartHandshake, CheckCircle2, ShieldCheck, FileText } from 'lucide-react';
 
@@ -125,10 +124,10 @@ export default function CompanionOnboardingPage() {
 
               <div className="space-y-2">
                 <Label>Cuéntanos tu experiencia *</Label>
-                <Textarea 
+                <textarea 
                   required 
                   placeholder="¿Has cuidado a personas mayores, niños o pacientes médicos antes? Describe brevemente tu experiencia." 
-                  className="h-24"
+                  className="flex min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>
 
