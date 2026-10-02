@@ -37,7 +37,7 @@ export function Navbar() {
     <header className="bg-juntos-blue text-white w-full">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         
-        {/* Logo (Actúa como botón de Inicio para todos) */}
+        {/* Logo principal */}
         <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
           <Logo withText className="[&_span]:text-white" />
         </Link>
@@ -46,11 +46,14 @@ export function Navbar() {
         {!loading && (
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
             
-            {/* VISTA B2C y ACOMPAÑANTE: 
-                Queda completamente limpia. 
-                El logo los lleva al inicio y el Checkout les da la opción de nuevo servicio. */}
+            {/* 1. Vista Acompañante */}
+            {role === 'COMPANION' && (
+              <Link href="/companion/dashboard" className="hover:text-juntos-green transition-colors">
+                Mi Panel de Trabajo
+              </Link>
+            )}
 
-            {/* Vista Institución B2B (Solo ven sus herramientas de gestión) */}
+            {/* 2. Vista Institución B2B */}
             {role === 'INSTITUTION' && (
               <>
                 <Link href="/admin/institutions" className="hover:text-juntos-green transition-colors">
@@ -62,14 +65,17 @@ export function Navbar() {
               </>
             )}
 
-            {/* Vista Administrador Interno (Ven el sistema completo) */}
+            {/* 3. Vista Administrador Maestro (Acceso a todos los módulos) */}
             {role === 'ADMIN' && (
               <>
                 <Link href="/services/new" className="hover:text-juntos-green transition-colors">
-                  Solicitar servicio
+                  Solicitar (B2C)
                 </Link>
                 <Link href="/admin/institutions" className="hover:text-juntos-green transition-colors">
                   CRM B2B
+                </Link>
+                <Link href="/companion/dashboard" className="hover:text-juntos-green transition-colors">
+                  Panel Acompañantes
                 </Link>
                 <Link href="/admin/payments" className="hover:text-juntos-green transition-colors">
                   Pagos
@@ -85,7 +91,7 @@ export function Navbar() {
           </nav>
         )}
 
-        {/* Acceso exclusivo a Perfil */}
+        {/* Acceso a Perfil */}
         <div className="flex items-center">
           <Link
             href="/profile"
