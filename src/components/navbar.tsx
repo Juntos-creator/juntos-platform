@@ -2,14 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Logo } from '@/components/brand/Logo';
-import { Button } from '@/components/ui/button';
 import { User } from 'lucide-react';
 
 export function Navbar() {
-  const router = useRouter();
   const supabase = createClient();
 
   const [role, setRole] = useState<string | null>(null);
@@ -35,12 +32,6 @@ export function Navbar() {
 
     getUserRole();
   }, [supabase]);
-
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    router.push('/');
-    router.refresh();
-  }
 
   return (
     <header className="bg-juntos-blue text-white w-full">
@@ -100,8 +91,8 @@ export function Navbar() {
           </nav>
         )}
 
-        {/* Acceso a Perfil y Cierre de Sesión */}
-        <div className="flex items-center gap-3">
+        {/* Acceso exclusivo a Perfil */}
+        <div className="flex items-center">
           <Link
             href="/profile"
             className="flex items-center gap-1.5 text-sm font-medium text-white hover:text-juntos-green transition-colors"
@@ -109,15 +100,6 @@ export function Navbar() {
             <User className="h-4 w-4" />
             <span>Mi Perfil</span>
           </Link>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="text-white hover:bg-white/10 hover:text-white border border-white/20"
-          >
-            Salir
-          </Button>
         </div>
 
       </div>
