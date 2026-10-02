@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Logo } from '@/components/brand/Logo';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { HeartHandshake, Building2, ShieldCheck, UserPlus, LogIn, X } from 'lucide-react';
+import { HeartHandshake, Building2, ShieldCheck, UserPlus, X, LayoutDashboard } from 'lucide-react';
 
 export default function Home() {
   const [showB2BModal, setShowB2BModal] = useState(false);
@@ -34,18 +34,22 @@ export default function Home() {
           Solicita acompañantes por horas para consultas y procedimientos médicos en
           República Dominicana. Para familias e instituciones de salud.
         </p>
-        <div className="mt-8 flex justify-center gap-3">
-          <Button asChild size="lg">
+        
+        {/* BOTONES PRINCIPALES CORREGIDOS */}
+        <div className="mt-8 flex flex-col sm:flex-row justify-center gap-3">
+          <Button asChild size="lg" className="w-full sm:w-auto">
             <Link href="/services/new">Solicitar un servicio (B2C)</Link>
           </Button>
-          {/* Botón que abre las opciones B2B */}
-          <Button size="lg" variant="outline" onClick={() => setShowB2BModal(true)}>
+          <Button size="lg" variant="outline" onClick={() => setShowB2BModal(true)} className="w-full sm:w-auto">
             Soy institución (B2B)
+          </Button>
+          <Button asChild size="lg" variant="ghost" className="w-full sm:w-auto border border-juntos-green text-juntos-green hover:bg-juntos-green/10">
+            <Link href="/register">Quiero ser Acompañante</Link>
           </Button>
         </div>
       </section>
 
-      {/* Modal / Selector de acceso B2B */}
+      {/* NUEVO MODAL B2B CON LAS 3 OPCIONES */}
       {showB2BModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <Card className="w-full max-w-md relative shadow-2xl animate-in fade-in zoom-in-95 duration-200">
@@ -61,30 +65,44 @@ export default function Home() {
               </div>
               <CardTitle className="text-xl text-juntos-blue">Portal Institucional B2B</CardTitle>
               <CardDescription>
-                Selecciona cómo deseas ingresar a la plataforma:
+                Selecciona la acción que deseas realizar:
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 pb-6">
-              {/* Opción 1: Nuevo Solicitante B2B */}
-              <Button asChild className="w-full h-12 text-base bg-juntos-green hover:bg-juntos-green/90 text-white flex items-center gap-2">
-                <Link href="/services/new?type=institution">
-                  <UserPlus className="w-5 h-5" />
-                  Nuevo Solicitante (Crear Solicitud)
+            <CardContent className="space-y-3 pb-6">
+              
+              {/* Opción 1: Formulario de afiliación B2B */}
+              <Button asChild className="w-full h-auto py-3 text-sm bg-juntos-blue hover:bg-juntos-blue/90 text-white flex items-center justify-start gap-3 px-4 whitespace-normal text-left">
+                <Link href="/register">
+                  <Building2 className="w-6 h-6 flex-shrink-0" />
+                  <div>
+                    <strong className="block text-base">1. Afiliar mi Institución</strong>
+                    <span className="text-xs font-normal opacity-90">Llenar formulario para ser parte de Juntos</span>
+                  </div>
                 </Link>
               </Button>
 
-              <div className="relative py-1 flex items-center justify-center">
-                <div className="border-t border-slate-200 w-full" />
-                <span className="bg-white px-3 text-xs text-slate-400 uppercase font-medium absolute">o</span>
-              </div>
-
-              {/* Opción 2: Ya registrado */}
-              <Button asChild variant="outline" className="w-full h-12 text-base flex items-center gap-2 border-slate-300">
+              {/* Opción 2: Panel de Control (CRM) */}
+              <Button asChild variant="outline" className="w-full h-auto py-3 text-sm flex items-center justify-start gap-3 px-4 border-slate-300 whitespace-normal text-left">
                 <Link href="/login?redirect=/admin/institutions">
-                  <LogIn className="w-5 h-5 text-slate-600" />
-                  Ya registrado (Iniciar Sesión)
+                  <LayoutDashboard className="w-6 h-6 flex-shrink-0 text-slate-600" />
+                  <div>
+                    <strong className="block text-base text-slate-700">2. Mi Panel de Control</strong>
+                    <span className="text-xs text-slate-500 font-normal">Ver pacientes referidos por mi clínica</span>
+                  </div>
                 </Link>
               </Button>
+
+              {/* Opción 3: Solicitar paciente desde B2B */}
+              <Button asChild variant="outline" className="w-full h-auto py-3 text-sm flex items-center justify-start gap-3 px-4 border-slate-300 whitespace-normal text-left">
+                <Link href="/login?redirect=/services/new">
+                  <UserPlus className="w-6 h-6 flex-shrink-0 text-juntos-green" />
+                  <div>
+                    <strong className="block text-base text-slate-700">3. Solicitar Servicio para Paciente</strong>
+                    <span className="text-xs text-slate-500 font-normal">Registrar un paciente directo a mi panel</span>
+                  </div>
+                </Link>
+              </Button>
+
             </CardContent>
           </Card>
         </div>

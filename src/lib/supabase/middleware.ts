@@ -29,15 +29,19 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // No colocar código entre createServerClient y supabase.auth.getUser()
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Protección de rutas: redirige al login si no hay usuario autenticado
-  if (!user && request.nextUrl.pathname.startsWith('/admin')) {
+  // PROTEGER RUTAS B2C Y B2B: Redirige al login si intentan entrar a /admin o a /services sin sesión
+  const isProtectedPath = 
+    request.nextUrl.pathname.startsWith('/admin') || 
+    request.nextUrl.pathname.startsWith('/services');
+
+  if (!user && isProtectedPath) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
+    // Guarda a dónde querían ir para devolverlos ahí tras hacer login
     url.searchParams.set('redirect', request.nextUrl.pathname);
     return NextResponse.redirect(url);
   }
