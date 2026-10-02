@@ -18,15 +18,34 @@ function RegisterB2BContent() {
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (password !== confirmPassword) {
+      toast({
+        title: 'Error en contraseñas',
+        description: 'Las contraseñas ingresadas no coinciden. Verifícalas.',
+        variant: 'error',
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      toast({
+        title: 'Contraseña débil',
+        description: 'La contraseña debe tener al menos 6 caracteres.',
+        variant: 'error',
+      });
+      return;
+    }
+
     setLoading(true);
     const supabase = createClient();
     
-    // 1. Crear usuario
     const { data, error } = await supabase.auth.signUp({ email, password });
 
     if (error) {
@@ -35,17 +54,14 @@ function RegisterB2BContent() {
       return;
     }
 
-    // 2. Asignar rol INSTITUTION
     if (data.user) {
       await supabase.from('profiles').update({
         full_name: name,
-        role: 'INSTITUTION'
+        role: 'INSTITUTION',
       }).eq('id', data.user.id);
     }
 
     toast({ title: 'Cuenta creada', description: 'Por favor completa tu afiliación.', variant: 'success' });
-    
-    // 3. Redirigir al formulario completo
     router.push('/admin/institutions/affiliation');
   }
 
@@ -62,15 +78,46 @@ function RegisterB2BContent() {
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
             <Label htmlFor="name">Nombre de la Institución</Label>
-            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Ej. Clínica San Rafael" />
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              placeholder="Ej. Clínica San Rafael"
+            />
           </div>
           <div>
             <Label htmlFor="email">Correo electrónico institucional</Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="contacto@clinica.com" />
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="contacto@clinica.com"
+            />
           </div>
           <div>
-            <Label htmlFor="password">Contraseña segura</Label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <Label htmlFor="password">Contraseña</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              placeholder="Mínimo 6 caracteres"
+            />
+          </div>
+          <div>
+            <Label htmlFor="confirmPassword">Confirmar contraseña</Label>
+            <Input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              placeholder="Repite la contraseña"
+            />
           </div>
           <Button type="submit" className="w-full bg-juntos-blue hover:bg-juntos-blue/90 text-white" disabled={loading}>
             {loading ? 'Creando cuenta...' : 'Registrar Institución'}
@@ -78,7 +125,6 @@ function RegisterB2BContent() {
         </form>
         <div className="mt-6 text-center text-sm">
           <span className="text-muted-foreground">¿Ya tienes cuenta? </span>
-          {/* El enlace de inicio de sesión inteligente los devolverá al formulario B2B */}
           <Link href="/login?redirect=/admin/institutions/affiliation" className="text-juntos-blue font-semibold hover:underline">
             Inicia sesión
           </Link>
@@ -90,9 +136,9 @@ function RegisterB2BContent() {
 
 export default function RegisterB2BPage() {
   return (
-    <div className="min-h-screen grid place-items-center bg-slate-50 p-4">
+    <div className="min-h-screen grid place-items-center bg-slate-50 p-4 relative">
       <div className="absolute top-4 left-4">
-        <Link href="/">
+        <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
           <Logo withText={false} size={40} />
         </Link>
       </div>
