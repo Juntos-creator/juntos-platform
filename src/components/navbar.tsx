@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Logo } from '@/components/brand/Logo';
 import { Button } from '@/components/ui/button';
 
-export default function Navbar() {
+export function Navbar() {
   const router = useRouter();
   const supabase = createClient();
   
