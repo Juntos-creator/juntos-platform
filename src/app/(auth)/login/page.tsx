@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -10,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/toast';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const { toast } = useToast();
@@ -61,5 +62,17 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen grid place-items-center bg-juntos-blue-50 p-4">
+        <p className="text-sm text-muted-foreground">Cargando...</p>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }
