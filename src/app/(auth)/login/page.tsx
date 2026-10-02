@@ -12,7 +12,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useToast } from '@/components/ui/toast';
 
 function LoginContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const supabase = createClient();
@@ -25,6 +24,7 @@ function LoginContent() {
     e.preventDefault();
     setLoading(true);
 
+    // 1. Iniciar sesión
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -37,35 +37,37 @@ function LoginContent() {
     }
 
     toast({ title: 'Bienvenido', description: 'Iniciando sesión...', variant: 'success' });
-    router.refresh();
 
-    // 1. Si venía con una redirección explícita distinta a '/', respetarla
-    const explicitRedirect = searchParams.get('redirect');
-    if (explicitRedirect && explicitRedirect !== '/') {
-      window.location.href = explicitRedirect;
-      return;
-    }
-
-    // 2. Redirección inteligente basada en el rol en la base de datos
-    if (data.user) {
+    // 2. Buscar el rol del usuario directamente en la base de datos
+    if (data?.user) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', data.user.id)
         .single();
 
-      if (profile?.role === 'COMPANION') {
+      const userRole = profile?.role;
+      const explicitRedirect = searchParams.get('redirect');
+
+      // Si hay una redirección forzada en la URL (ej. desde un botón específico)
+      if (explicitRedirect && explicitRedirect !== '/') {
+        window.location.href = explicitRedirect;
+        return;
+      }
+
+      // Redirección inteligente por roles
+      if (userRole === 'COMPANION') {
         window.location.href = '/companion/dashboard';
         return;
       }
 
-      if (profile?.role === 'INSTITUTION' || profile?.role === 'ADMIN') {
+      if (userRole === 'INSTITUTION' || userRole === 'ADMIN') {
         window.location.href = '/admin/institutions';
         return;
       }
     }
 
-    // 3. Solicitantes (CUSTOMER) van al inicio
+    // 3. Si es CUSTOMER o no tiene rol, va al inicio
     window.location.href = '/';
   }
 
