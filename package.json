@@ -13,6 +13,9 @@
     "db:reset": "supabase db reset"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2",
     "@hookform/resolvers": "3.9.1",
     "@radix-ui/react-dialog": "1.1.2",
     "@radix-ui/react-label": "2.1.0",
@@ -33,6 +36,7 @@
     "zod": "3.23.8"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.2",
     "@types/node": "20.17.6",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
