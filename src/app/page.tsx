@@ -35,7 +35,6 @@ export default function Home() {
           República Dominicana. Para familias e instituciones de salud.
         </p>
         
-        {/* BOTONES PRINCIPALES CORREGIDOS */}
         <div className="mt-8 flex flex-col sm:flex-row justify-center gap-3">
           <Button asChild size="lg" className="w-full sm:w-auto">
             <Link href="/services/new">Solicitar un servicio (B2C)</Link>
@@ -49,10 +48,9 @@ export default function Home() {
         </div>
       </section>
 
-      {/* NUEVO MODAL B2B CON LAS 3 OPCIONES */}
       {showB2BModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <Card className="w-full max-w-md relative shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <Card className="w-full max-w-md relative shadow-2xl">
             <button
               onClick={() => setShowB2BModal(false)}
               className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"
@@ -70,9 +68,9 @@ export default function Home() {
             </CardHeader>
             <CardContent className="space-y-3 pb-6">
               
-              {/* Opción 1: Formulario de afiliación B2B */}
+              {/* ¡AQUÍ ESTÁ LA CORRECCIÓN CLAVE! href="/register-b2b" */}
               <Button asChild className="w-full h-auto py-3 text-sm bg-juntos-blue hover:bg-juntos-blue/90 text-white flex items-center justify-start gap-3 px-4 whitespace-normal text-left">
-                <Link href="/register">
+                <Link href="/register-b2b">
                   <Building2 className="w-6 h-6 flex-shrink-0" />
                   <div>
                     <strong className="block text-base">1. Afiliar mi Institución</strong>
@@ -81,7 +79,6 @@ export default function Home() {
                 </Link>
               </Button>
 
-              {/* Opción 2: Panel de Control (CRM) */}
               <Button asChild variant="outline" className="w-full h-auto py-3 text-sm flex items-center justify-start gap-3 px-4 border-slate-300 whitespace-normal text-left">
                 <Link href="/login?redirect=/admin/institutions">
                   <LayoutDashboard className="w-6 h-6 flex-shrink-0 text-slate-600" />
@@ -92,7 +89,6 @@ export default function Home() {
                 </Link>
               </Button>
 
-              {/* Opción 3: Solicitar paciente desde B2B */}
               <Button asChild variant="outline" className="w-full h-auto py-3 text-sm flex items-center justify-start gap-3 px-4 border-slate-300 whitespace-normal text-left">
                 <Link href="/login?redirect=/services/new">
                   <UserPlus className="w-6 h-6 flex-shrink-0 text-juntos-green" />
@@ -107,22 +103,6 @@ export default function Home() {
           </Card>
         </div>
       )}
-
-      <section className="container grid gap-6 md:grid-cols-3 pb-20">
-        {[
-          { icon: HeartHandshake, t: 'B2C por horas', d: 'Flujo de solicitud en 9 pasos con geolocalización de centros.' },
-          { icon: Building2, t: 'CRM B2B', d: 'Pilotos de 30 días, funnel comercial y KPIs de calidad.' },
-          { icon: ShieldCheck, t: 'Fiscal DGII', d: 'Facturas con NCF B01/B02, ITBIS 18% y auditoría inmutable.' },
-        ].map((f, i) => (
-          <Card key={i}>
-            <CardHeader>
-              <f.icon className="h-8 w-8 text-juntos-green" />
-              <CardTitle>{f.t}</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">{f.d}</CardContent>
-          </Card>
-        ))}
-      </section>
     </main>
   );
 }
