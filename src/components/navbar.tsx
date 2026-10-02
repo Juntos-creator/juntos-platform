@@ -37,7 +37,7 @@ export function Navbar() {
     <header className="bg-juntos-blue text-white w-full">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         
-        {/* Logo */}
+        {/* Logo (Actúa como botón de Inicio para todos) */}
         <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
           <Logo withText className="[&_span]:text-white" />
         </Link>
@@ -45,18 +45,12 @@ export function Navbar() {
         {/* Navegación dinámica por rol */}
         {!loading && (
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-            <Link href="/" className="hover:text-juntos-green transition-colors">
-              Inicio
-            </Link>
+            
+            {/* VISTA B2C y ACOMPAÑANTE: 
+                Queda completamente limpia. 
+                El logo los lleva al inicio y el Checkout les da la opción de nuevo servicio. */}
 
-            {/* Vista B2C / Acompañante */}
-            {(role === 'CUSTOMER' || role === 'COMPANION') && (
-              <Link href="/services/new" className="hover:text-juntos-green transition-colors">
-                Solicitar servicio
-              </Link>
-            )}
-
-            {/* Vista Institución B2B */}
+            {/* Vista Institución B2B (Solo ven sus herramientas de gestión) */}
             {role === 'INSTITUTION' && (
               <>
                 <Link href="/admin/institutions" className="hover:text-juntos-green transition-colors">
@@ -68,7 +62,7 @@ export function Navbar() {
               </>
             )}
 
-            {/* Vista Administrador Interno */}
+            {/* Vista Administrador Interno (Ven el sistema completo) */}
             {role === 'ADMIN' && (
               <>
                 <Link href="/services/new" className="hover:text-juntos-green transition-colors">
