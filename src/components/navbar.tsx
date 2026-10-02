@@ -19,7 +19,6 @@ export function Navbar() {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
-        // Buscamos el rol del usuario en la tabla profiles
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')
@@ -38,7 +37,7 @@ export function Navbar() {
 
   async function handleLogout() {
     await supabase.auth.signOut();
-    router.push('/login');
+    router.push('/'); // Redirige a la página principal oficial, NO a /login
     router.refresh();
   }
 
@@ -46,13 +45,17 @@ export function Navbar() {
     <header className="bg-juntos-blue text-white w-full">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         
+        {/* Clic en el logo regresa al inicio manteniendo tu sesión */}
         <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
           <Logo withText className="[&_span]:text-white" />
         </Link>
 
         {!loading && (
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-            
+            <Link href="/" className="hover:text-juntos-green transition-colors">
+              Inicio
+            </Link>
+
             {/* VISTA B2C (SOLICITANTE) o ACOMPAÑANTE */}
             {(role === 'CUSTOMER' || role === 'COMPANION') && (
               <Link href="/services/new" className="hover:text-juntos-green transition-colors">
@@ -72,7 +75,7 @@ export function Navbar() {
               </>
             )}
 
-            {/* VISTA ADMINISTRADOR INTERNO (El único que ve el CRM completo) */}
+            {/* VISTA ADMINISTRADOR INTERNO */}
             {role === 'ADMIN' && (
               <>
                 <Link href="/services/new" className="hover:text-juntos-green transition-colors">Solicitar servicio</Link>
@@ -86,8 +89,13 @@ export function Navbar() {
         )}
 
         <div className="flex items-center gap-2">
-          <Button variant="success" size="sm" onClick={handleLogout} className="bg-juntos-green hover:bg-juntos-green/90 text-white">
-            Salir
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleLogout} 
+            className="text-white hover:bg-white/10 hover:text-white"
+          >
+            Cerrar sesión
           </Button>
         </div>
         
