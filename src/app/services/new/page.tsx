@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { 
   User, Users, HeartHandshake, ChevronLeft, 
   ChevronRight, Calendar, Clock, MapPin, 
-  Stethoscope, Home, Activity, CheckCircle2 
+  Stethoscope, Home, LocateFixed, Moon
 } from 'lucide-react';
 
 export default function NewServicePage() {
@@ -19,11 +19,19 @@ export default function NewServicePage() {
 
   const [step, setStep] = useState(1);
   const [recipient, setRecipient] = useState('self');
-  const [service, setService] = useState('Acompañamiento en Clínica');
+  const [service, setService] = useState('Acompañamiento en Clínica / Hospital');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
-  const [duration, setDuration] = useState(2);
-  const [selectedCenter, setSelectedCenter] = useState('CEDIMAT');
+  
+  // Duración y Tarifa Dinámica
+  const [duration, setDuration] = useState<number | ''>(2);
+  const [isNightShift, setIsNightShift] = useState(false);
+  const pricePerHour = isNightShift ? 1100 : 900;
+  
+  const [selectedCenter, setSelectedCenter] = useState('CEDIMAT (Plaza de la Salud)');
+  const [customCenter, setCustomCenter] = useState('');
+  const [isLocating, setIsLocating] = useState(false);
+  
   const [notes, setNotes] = useState('');
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
@@ -31,23 +39,33 @@ export default function NewServicePage() {
   const [loading, setLoading] = useState(false);
 
   // Lógica Financiera
-  const pricePerHour = 900;
-  const subtotal = duration * pricePerHour;
-  const platformFee = 150; // Cargo fijo por uso de plataforma
-  const insuranceFee = subtotal * 0.05; // 5% del subtotal para el seguro del acompañante
-  const itbis = subtotal * 0.18; // 18% ITBIS
-  const total = subtotal + platformFee + insuranceFee + itbis;
+  const numericDuration = typeof duration === 'number' ? duration : 0;
+  const subtotal = numericDuration * pricePerHour;
+  const platformFee = 150; 
+  const insuranceFee = subtotal * 0.05; 
+  const itbis = subtotal * 0.18; 
+  const total = subtotal > 0 ? subtotal + platformFee + insuranceFee + itbis : 0;
 
   const nextStep = () => setStep((prev) => Math.min(prev + 1, 9));
   const prevStep = () => setStep((prev) => Math.max(prev - 1, 1));
 
+  // Función para simular Geolocalización
+  const handleGeoLocation = () => {
+    setIsLocating(true);
+    setTimeout(() => {
+      setSelectedCenter('Otro');
+      setCustomCenter('Av. 27 de Febrero esq. Tiradentes, Santo Domingo');
+      setIsLocating(false);
+      toast({ title: 'Ubicación detectada', description: 'GPS sincronizado con éxito.', variant: 'success' });
+    }, 1500);
+  };
+
   const handleSubmit = () => {
     setLoading(true);
-    // Simulamos validación de pago y redirigimos al radar de búsqueda
     setTimeout(() => {
       setLoading(false);
-      // Guardamos el centro elegido en el navegador para que el radar sepa dónde es
-      localStorage.setItem('juntos_meet_point', selectedCenter);
+      const finalLocation = selectedCenter === 'Otro' ? customCenter : selectedCenter;
+      localStorage.setItem('juntos_meet_point', finalLocation);
       router.push('/services/tracking');
     }, 1500);
   };
@@ -65,8 +83,8 @@ export default function NewServicePage() {
             </div>
             <p className="text-sm font-bold text-slate-700 tracking-wider uppercase">Paso {step} de 9</p>
           </div>
-          <div className="bg-slate-800 text-white px-4 py-2 rounded-full text-sm font-bold shadow-sm">
-            RD$ {pricePerHour}/h
+          <div className={`px-4 py-2 rounded-full text-sm font-bold shadow-sm ${isNightShift ? 'bg-indigo-900 text-white' : 'bg-slate-800 text-white'}`}>
+            {isNightShift ? '🌙 RD$ 1,100/h' : '☀️ RD$ 900/h'}
           </div>
         </div>
 
@@ -123,36 +141,28 @@ export default function NewServicePage() {
             </div>
           )}
 
-          {/* PASO 2: SERVICIO */}
+          {/* PASO 2: SERVICIO (SIN POST-OPERATORIO) */}
           {step === 2 && (
             <div className="space-y-6">
               <div className="space-y-1">
                 <h2 className="text-2xl font-bold text-slate-900">Tipo de Servicio</h2>
-                <p className="text-slate-600">Selecciona el tipo de apoyo que necesitas:</p>
+                <p className="text-slate-600">Selecciona el tipo de apoyo que necesitas (Servicios no clínicos):</p>
               </div>
 
               <div className="space-y-3">
-                <div onClick={() => setService('Acompañamiento en Clínica')} className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${service === 'Acompañamiento en Clínica' ? 'border-juntos-blue bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
-                  <Stethoscope className={`w-8 h-8 ${service === 'Acompañamiento en Clínica' ? 'text-juntos-blue' : 'text-slate-400'}`} />
+                <div onClick={() => setService('Acompañamiento en Clínica / Hospital')} className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${service === 'Acompañamiento en Clínica / Hospital' ? 'border-juntos-blue bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
+                  <Stethoscope className={`w-8 h-8 ${service === 'Acompañamiento en Clínica / Hospital' ? 'text-juntos-blue' : 'text-slate-400'}`} />
                   <div>
                     <p className="text-lg font-bold text-slate-900">Acompañamiento en Clínica / Hospital</p>
-                    <p className="text-sm text-slate-600">Asistencia durante consultas, laboratorios o internamiento.</p>
+                    <p className="text-sm text-slate-600">Asistencia no médica durante consultas, laboratorios o internamiento.</p>
                   </div>
                 </div>
 
-                <div onClick={() => setService('Asistencia en el Hogar')} className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${service === 'Asistencia en el Hogar' ? 'border-juntos-blue bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
-                  <Home className={`w-8 h-8 ${service === 'Asistencia en el Hogar' ? 'text-juntos-blue' : 'text-slate-400'}`} />
+                <div onClick={() => setService('Asistencia Diaria en el Hogar')} className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${service === 'Asistencia Diaria en el Hogar' ? 'border-juntos-blue bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
+                  <Home className={`w-8 h-8 ${service === 'Asistencia Diaria en el Hogar' ? 'text-juntos-blue' : 'text-slate-400'}`} />
                   <div>
                     <p className="text-lg font-bold text-slate-900">Asistencia Diaria en el Hogar</p>
                     <p className="text-sm text-slate-600">Apoyo en tareas diarias, movilidad y compañía en casa.</p>
-                  </div>
-                </div>
-
-                <div onClick={() => setService('Cuidados Post-Operatorios')} className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${service === 'Cuidados Post-Operatorios' ? 'border-juntos-blue bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
-                  <Activity className={`w-8 h-8 ${service === 'Cuidados Post-Operatorios' ? 'text-juntos-blue' : 'text-slate-400'}`} />
-                  <div>
-                    <p className="text-lg font-bold text-slate-900">Cuidados Post-Operatorios</p>
-                    <p className="text-sm text-slate-600">Supervisión tras cirugías y apoyo en la recuperación.</p>
                   </div>
                 </div>
               </div>
@@ -168,10 +178,6 @@ export default function NewServicePage() {
                 </h2>
               </div>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="text-lg p-3 h-14" />
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setDate('2026-10-02')} className="px-4 py-2 rounded-full border bg-slate-50 hover:bg-slate-100 font-medium text-slate-700">Hoy</button>
-                <button type="button" onClick={() => setDate('2026-10-03')} className="px-4 py-2 rounded-full border bg-slate-50 hover:bg-slate-100 font-medium text-slate-700">Mañana</button>
-              </div>
             </div>
           )}
 
@@ -184,57 +190,92 @@ export default function NewServicePage() {
                 </h2>
               </div>
               <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="text-lg p-3 h-14" />
-              <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Horarios comunes</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {['08:00', '09:30', '14:00', '16:00'].map((h) => (
-                    <button key={h} type="button" onClick={() => setTime(h)} className="py-3 border rounded-lg text-sm font-bold text-slate-700 hover:border-juntos-blue bg-slate-50">
-                      {parseInt(h) >= 12 ? `${parseInt(h) === 12 ? 12 : parseInt(h) - 12}:00 PM` : `${h} AM`}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
 
-          {/* PASO 5: DURACIÓN */}
+          {/* PASO 5: DURACIÓN (CON NOCTURNO Y CAMPO MANUAL) */}
           {step === 5 && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-slate-900">¿Cuántas horas necesitas?</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {[1, 2, 4, 6].map((hrs) => (
-                  <div key={hrs} onClick={() => setDuration(hrs)} className={`p-4 rounded-xl border-2 text-center cursor-pointer transition-all ${duration === hrs ? 'border-juntos-blue bg-juntos-blue text-white' : 'border-slate-200 bg-white text-slate-800'}`}>
-                    <p className="text-2xl font-bold">{hrs}h</p>
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900">¿Cuántas horas necesitas?</h2>
+                <p className="text-slate-600 mt-1">Tarifa base: RD$900/h. Turno nocturno: RD$1,100/h.</p>
+              </div>
+
+              {/* Selector de Turno */}
+              <div className="flex gap-4 mb-4">
+                <Button 
+                  type="button" 
+                  variant={isNightShift ? "outline" : "default"} 
+                  className={`w-1/2 h-12 ${!isNightShift ? 'bg-juntos-blue' : ''}`}
+                  onClick={() => setIsNightShift(false)}
+                >
+                  ☀️ Diurno (RD$ 900)
+                </Button>
+                <Button 
+                  type="button" 
+                  variant={isNightShift ? "default" : "outline"} 
+                  className={`w-1/2 h-12 ${isNightShift ? 'bg-indigo-900 hover:bg-indigo-800' : ''}`}
+                  onClick={() => setIsNightShift(true)}
+                >
+                  🌙 Nocturno (RD$ 1,100)
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[1, 2, 4, 8].map((hrs) => (
+                  <div key={hrs} onClick={() => setDuration(hrs)} className={`p-4 rounded-xl border-2 text-center cursor-pointer transition-all ${duration === hrs ? (isNightShift ? 'border-indigo-900 bg-indigo-900 text-white' : 'border-juntos-blue bg-juntos-blue text-white') : 'border-slate-200 bg-white text-slate-800'}`}>
+                    <p className="text-xl font-bold">{hrs}h</p>
                   </div>
                 ))}
               </div>
+
+              <div className="pt-4">
+                <Label className="text-sm font-bold text-slate-700">O escribe una cantidad personalizada de horas:</Label>
+                <Input 
+                  type="number" 
+                  min="1" 
+                  max="24"
+                  placeholder="Ej: 12" 
+                  value={duration} 
+                  onChange={(e) => setDuration(e.target.value === '' ? '' : Number(e.target.value))} 
+                  className="mt-2 h-12 text-lg" 
+                />
+              </div>
             </div>
           )}
 
-          {/* PASO 6: CENTRO MÉDICO O DIRECCIÓN */}
+          {/* PASO 6: CENTRO MÉDICO O DIRECCIÓN (CON GEOLOCALIZACIÓN Y OTROS) */}
           {step === 6 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                  <MapPin className="text-juntos-blue w-6 h-6" /> 
-                  {service === 'Asistencia en el Hogar' ? '¿En qué dirección será?' : '¿En qué centro será?'}
+                  <MapPin className="text-juntos-blue w-6 h-6" /> ¿En qué centro será?
                 </h2>
               </div>
               
-              {service === 'Asistencia en el Hogar' ? (
-                <textarea 
-                  value={selectedCenter === 'CEDIMAT' ? '' : selectedCenter} 
-                  onChange={(e) => setSelectedCenter(e.target.value)} 
-                  placeholder="Ej. Av. Winston Churchill #105, Ensanche Piantini. Torre Azul, Apto 4B."
-                  className="w-full p-4 border rounded-xl min-h-[100px] text-base outline-none focus:border-juntos-blue"
-                />
-              ) : (
-                <select value={selectedCenter} onChange={(e) => setSelectedCenter(e.target.value)} className="w-full h-14 px-3 border rounded-lg text-lg bg-white font-medium text-slate-800">
-                  <option value="CEDIMAT">CEDIMAT (Plaza de la Salud)</option>
+              <div className="flex gap-2">
+                <select value={selectedCenter} onChange={(e) => setSelectedCenter(e.target.value)} className="flex-1 h-14 px-3 border rounded-lg text-lg bg-white font-medium text-slate-800">
+                  <option value="CEDIMAT (Plaza de la Salud)">CEDIMAT (Plaza de la Salud)</option>
                   <option value="Clínica Abreu">Clínica Abreu</option>
                   <option value="HOMS">HOMS</option>
                   <option value="Centro Médico Real">Centro Médico Real</option>
+                  <option value="Otro">Escribir otra ubicación / Casa</option>
                 </select>
+                <Button onClick={handleGeoLocation} disabled={isLocating} className="h-14 w-14 bg-slate-100 hover:bg-slate-200 text-slate-700 border" title="Usar mi ubicación actual">
+                  <LocateFixed className={`w-6 h-6 ${isLocating ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+
+              {selectedCenter === 'Otro' && (
+                <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+                  <Label>Escribe el nombre del centro o dirección exacta:</Label>
+                  <textarea 
+                    value={customCenter} 
+                    onChange={(e) => setCustomCenter(e.target.value)} 
+                    placeholder="Ej. Hospital Traumatológico Dr. Ney Arias Lora, Av. Charles de Gaulle."
+                    className="w-full p-4 mt-2 border rounded-xl min-h-[100px] text-base outline-none focus:border-juntos-blue"
+                  />
+                </div>
               )}
             </div>
           )}
@@ -257,14 +298,8 @@ export default function NewServicePage() {
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-slate-900">Contacto de emergencia</h2>
               <div className="space-y-4">
-                <div>
-                  <Label>Nombre completo</Label>
-                  <Input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Ej. Ana García" className="h-12" />
-                </div>
-                <div>
-                  <Label>WhatsApp / Teléfono</Label>
-                  <Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="+1 809 000 0000" className="h-12" />
-                </div>
+                <div><Label>Nombre completo</Label><Input value={contactName} onChange={(e) => setContactName(e.target.value)} className="h-12" /></div>
+                <div><Label>WhatsApp / Teléfono</Label><Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} className="h-12" /></div>
                 <div>
                   <Label>Parentesco</Label>
                   <select value={contactRelation} onChange={(e) => setContactRelation(e.target.value)} className="w-full h-12 px-3 border rounded-lg bg-white">
@@ -281,75 +316,41 @@ export default function NewServicePage() {
           {step === 9 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-slate-900">Facturación y Resumen</h2>
-              
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 space-y-5">
                 <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm">
-                  <div>
-                    <p className="font-bold text-slate-500">PARA QUIÉN</p>
-                    <p className="font-semibold text-slate-900">{recipient === 'self' ? 'Para mí' : recipient === 'family' ? 'Un familiar' : 'Otra persona'}</p>
-                  </div>
-                  <div>
-                    <p className="font-bold text-slate-500">FECHA Y HORA</p>
-                    <p className="font-semibold text-slate-900">{date || 'Hoy'} • {time || '08:00 AM'}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="font-bold text-slate-500">SERVICIO</p>
-                    <p className="font-semibold text-slate-900">{service}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="font-bold text-slate-500">LUGAR DE ENCUENTRO</p>
-                    <p className="font-semibold text-slate-900">{selectedCenter}</p>
-                  </div>
+                  <div><p className="font-bold text-slate-500">PARA QUIÉN</p><p className="font-semibold text-slate-900">{recipient === 'self' ? 'Para mí' : recipient === 'family' ? 'Un familiar' : 'Otra persona'}</p></div>
+                  <div><p className="font-bold text-slate-500">FECHA Y HORA</p><p className="font-semibold text-slate-900">{date || 'Hoy'} • {time || '08:00 AM'}</p></div>
+                  <div className="col-span-2"><p className="font-bold text-slate-500">SERVICIO</p><p className="font-semibold text-slate-900">{service}</p></div>
+                  <div className="col-span-2"><p className="font-bold text-slate-500">LUGAR</p><p className="font-semibold text-slate-900">{selectedCenter === 'Otro' ? customCenter : selectedCenter}</p></div>
                 </div>
 
                 <div className="pt-4 border-t border-slate-200 space-y-2 text-sm">
-                  <div className="flex justify-between text-slate-600">
-                    <span>Subtotal ({duration} hrs)</span>
-                    <span>RD$ {subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>ITBIS (18%)</span>
-                    <span>RD$ {itbis.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Seguro de Acompañante (5%)</span>
-                    <span>RD$ {insuranceFee.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Cargo por uso de plataforma</span>
-                    <span>RD$ {platformFee.toFixed(2)}</span>
-                  </div>
+                  <div className="flex justify-between text-slate-600"><span>Subtotal ({numericDuration} hrs {isNightShift ? '🌙' : '☀️'})</span><span>RD$ {subtotal.toFixed(2)}</span></div>
+                  <div className="flex justify-between text-slate-600"><span>ITBIS (18%)</span><span>RD$ {itbis.toFixed(2)}</span></div>
+                  <div className="flex justify-between text-slate-600"><span>Seguro de Acompañante (5%)</span><span>RD$ {insuranceFee.toFixed(2)}</span></div>
+                  <div className="flex justify-between text-slate-600"><span>Cargo por uso de plataforma</span><span>RD$ {platformFee.toFixed(2)}</span></div>
                 </div>
 
                 <div className="pt-4 border-t border-slate-200 flex justify-between items-end">
                   <p className="text-base font-bold text-slate-800">TOTAL A PAGAR</p>
-                  <p className="text-3xl font-black text-juntos-blue">RD$ {total.toLocaleString('es-DO')}</p>
+                  <p className="text-3xl font-black text-juntos-blue">RD$ {total.toLocaleString('es-DO', {minimumFractionDigits: 2})}</p>
                 </div>
               </div>
             </div>
           )}
-
         </div>
 
         {/* CONTROLES DE NAVEGACIÓN */}
         <div className="flex gap-4 items-center">
-          {step > 1 && (
-            <Button variant="outline" size="lg" onClick={prevStep} className="w-1/3 border-2 h-14 text-base font-bold">
-              <ChevronLeft className="w-5 h-5 mr-1" /> Atrás
-            </Button>
-          )}
-          
+          {step > 1 && <Button variant="outline" size="lg" onClick={prevStep} className="w-1/3 border-2 h-14 text-base font-bold"><ChevronLeft className="w-5 h-5 mr-1" /> Atrás</Button>}
           {step < 9 ? (
-            <Button size="lg" onClick={nextStep} className={`h-14 text-base font-bold text-white bg-juntos-blue hover:bg-juntos-blue/90 ${step === 1 ? 'w-full' : 'w-2/3'}`}>
-              Continuar <ChevronRight className="w-5 h-5 ml-1" />
-            </Button>
+            <Button size="lg" onClick={nextStep} className={`h-14 text-base font-bold text-white bg-juntos-blue hover:bg-juntos-blue/90 ${step === 1 ? 'w-full' : 'w-2/3'}`}>Continuar <ChevronRight className="w-5 h-5 ml-1" /></Button>
           ) : (
-            <Button size="lg" onClick={handleSubmit} disabled={loading} className="w-2/3 h-14 text-base font-bold bg-juntos-green text-white hover:bg-juntos-green/90">
-              {loading ? 'Procesando Tarjeta...' : `Pagar RD$ ${total.toLocaleString('es-DO')}`}
+            <Button size="lg" onClick={handleSubmit} disabled={loading || numericDuration === 0} className="w-2/3 h-14 text-base font-bold bg-juntos-green text-white hover:bg-juntos-green/90">
+              {loading ? 'Procesando Tarjeta...' : `Pagar RD$ ${total.toLocaleString('es-DO', {minimumFractionDigits: 2})}`}
             </Button>
           )}
         </div>
-
       </main>
     </div>
   );
