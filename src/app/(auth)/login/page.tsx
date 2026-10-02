@@ -21,13 +21,11 @@ function LoginContent() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const redirectTo = searchParams.get('redirect') || '/';
-
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -39,13 +37,36 @@ function LoginContent() {
     }
 
     toast({ title: 'Bienvenido', description: 'Iniciando sesión...', variant: 'success' });
-    
-    // LA SOLUCIÓN AL DOBLE LOGIN:
-    // 1. Refrescamos el estado del servidor
     router.refresh();
-    
-    // 2. Forzamos una recarga dura para que el servidor lea tu nueva sesión de inmediato
-    window.location.href = redirectTo;
+
+    // 1. Si venía con una redirección explícita distinta a '/', respetarla
+    const explicitRedirect = searchParams.get('redirect');
+    if (explicitRedirect && explicitRedirect !== '/') {
+      window.location.href = explicitRedirect;
+      return;
+    }
+
+    // 2. Redirección inteligente basada en el rol en la base de datos
+    if (data.user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single();
+
+      if (profile?.role === 'COMPANION') {
+        window.location.href = '/companion/dashboard';
+        return;
+      }
+
+      if (profile?.role === 'INSTITUTION' || profile?.role === 'ADMIN') {
+        window.location.href = '/admin/institutions';
+        return;
+      }
+    }
+
+    // 3. Solicitantes (CUSTOMER) van al inicio
+    window.location.href = '/';
   }
 
   return (
@@ -90,7 +111,6 @@ function LoginContent() {
 export default function LoginPage() {
   return (
     <div className="min-h-screen grid place-items-center bg-slate-50 p-4 relative">
-      {/* Botón del logo que regresa siempre al inicio */}
       <div className="absolute top-4 left-4">
         <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity" title="Volver al inicio">
           <Logo withText={false} size={40} />
