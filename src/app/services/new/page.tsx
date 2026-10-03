@@ -55,7 +55,6 @@ export default function NewServicePage() {
   const total = subtotal > 0 ? subtotal + platformFee + insuranceFee + itbis : 0;
 
   const nextStep = () => {
-    // Validación para el Paso 1 si es para un tercero
     if (step === 1 && (recipient === 'family' || recipient === 'other')) {
       if (!patientName.trim() || !patientPhone.trim()) {
         toast({
@@ -81,7 +80,6 @@ export default function NewServicePage() {
     }, 1500);
   };
 
-  // Disparo automático de notificación WhatsApp al paciente / solicitante
   const dispararNotificacionWhatsApp = async (finalPatient: string, finalPhone: string, finalLocation: string) => {
     try {
       await fetch('/api/notifications/whatsapp', {
@@ -109,25 +107,39 @@ export default function NewServicePage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
-      // 1. Guardar el servicio en Supabase
+      const payload: Record<string, any> = {
+        customer_id: user?.id || null,
+        for_who: recipient === 'self' ? 'myself' : recipient === 'family' ? 'family' : 'other',
+        for_who_name: finalPatient,
+        service_type: service,
+        requested_date: date || new Date().toISOString().split('T')[0],
+        duration_minutes: numericDuration * 60,
+        center_name: selectedCenter,
+        center_address: finalLocation,
+        address: finalLocation,
+        client_name: finalPatient,
+        client_phone: finalPhone,
+        observations: notes || `Parentesco: ${patientRelation || contactRelation}`,
+        emergency_contact_name: contactName || finalPatient,
+        emergency_contact_phone: contactPhone || finalPhone,
+        emergency_contact_relationship: contactRelation || patientRelation || 'Familiar',
+        emergency_status: 'NORMAL'
+      };
+
+      if (time) {
+        payload.requested_time = time;
+      }
+
+      // 1. Guardar en service_requests con columnas verificadas
       const { data: srvData, error: srvError } = await supabase
         .from('service_requests')
-        .insert([{
-          client_id: user?.id || null,
-          client_name: finalPatient,
-          client_phone: finalPhone,
-          address: finalLocation,
-          scheduled_date: date || new Date().toISOString().split('T')[0],
-          status: 'PENDIENTE_PAGO',
-          notes: `Tipo: ${service} (${numericDuration} hrs). Para: ${recipient === 'self' ? 'Uno mismo' : recipient === 'family' ? `Familiar (${patientRelation})` : 'Otra persona'}. Notas: ${notes}`,
-          emergency_status: 'NORMAL'
-        }])
+        .insert([payload])
         .select()
         .single();
 
       if (srvError) throw srvError;
 
-      // 2. Registrar pre-orden en tabla de pagos
+      // 2. Registrar pre-orden en la tabla payments
       await supabase.from('payments').insert([{
         service_request_id: srvData.id,
         user_id: user?.id || null,
@@ -137,7 +149,7 @@ export default function NewServicePage() {
         payment_method: 'TARJETA'
       }]);
 
-      // 3. Disparo WhatsApp / Notificación
+      // 3. Disparar WhatsApp / Notificación
       await dispararNotificacionWhatsApp(finalPatient, finalPhone, finalLocation);
 
       localStorage.setItem('juntos_meet_point', finalLocation);
@@ -175,7 +187,7 @@ export default function NewServicePage() {
             <p className="text-sm font-bold text-slate-700 tracking-wider uppercase">Paso {step} de 9</p>
           </div>
           <div className={`px-4 py-2 rounded-full text-sm font-bold shadow-sm ${isNightShift ? 'bg-indigo-900 text-white' : 'bg-slate-800 text-white'}`}>
-            {isNightShift ? '🌙 RD$ 1,100/h' : '☀️ RD$ 900/h'}
+            {isNightShift ? '🌙 RD$ 1,100/h' : '☀️️ RD$ 900/h'}
           </div>
         </div>
 
