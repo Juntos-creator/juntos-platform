@@ -18,8 +18,7 @@ function RegisterContent() {
   const router = useRouter();
   const { toast } = useToast();
 
-  // Aquí está la solución de TypeScript: le decimos explícitamente que es un string
-  const [selectedRole, setSelectedRole] = useState<string>('CUSTOMER');
+  const [selectedRole, setSelectedRole] = useState<'CUSTOMER' | 'COMPANION'>('CUSTOMER');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -27,6 +26,25 @@ function RegisterContent() {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Si elige Acompañante, mostramos directamente las 4 fases
+  if (selectedRole === 'COMPANION') {
+    return (
+      <div className="w-full">
+        <div className="max-w-lg mx-auto mb-2">
+          <button
+            type="button"
+            onClick={() => setSelectedRole('CUSTOMER')}
+            className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
+          >
+            ‹ Volver a registro de Solicitante
+          </button>
+        </div>
+        <RegistroAcompanante />
+      </div>
+    );
+  }
+
+  // Formulario rápido para Solicitante
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -55,32 +73,12 @@ function RegisterContent() {
       await supabase.from('profiles').update({
         full_name: name,
         phone,
-        role: selectedRole,
+        role: 'CUSTOMER',
       }).eq('id', data.user.id);
     }
 
     toast({ title: 'Cuenta creada', description: 'Bienvenido a JUNTOS', variant: 'success' });
-
-    if (selectedRole === 'COMPANION') {
-      router.push('/companion/onboarding');
-    } else {
-      router.push('/');
-    }
-  }
-
-  if (selectedRole === 'COMPANION') {
-    return (
-      <div className="w-full relative animate-fade-in mt-8">
-        <button
-          type="button"
-          onClick={() => setSelectedRole('CUSTOMER')}
-          className="absolute -top-10 left-0 text-sm font-bold text-slate-500 flex items-center gap-1 hover:text-slate-800 transition-colors z-50"
-        >
-          ‹ Cambiar a cuenta de Solicitante
-        </button>
-        <RegistroAcompanante />
-      </div>
-    );
+    router.push('/');
   }
 
   return (
@@ -91,6 +89,7 @@ function RegisterContent() {
         <CardDescription>Selecciona el tipo de cuenta con el que deseas ingresar</CardDescription>
       </CardHeader>
       <CardContent>
+        {/* Selector de pestañas */}
         <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-lg mb-6">
           <button
             type="button"
@@ -106,11 +105,7 @@ function RegisterContent() {
           <button
             type="button"
             onClick={() => setSelectedRole('COMPANION')}
-            className={`flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-md transition-all ${
-              selectedRole === 'COMPANION'
-                ? 'bg-white text-juntos-green shadow-sm font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className="flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-md transition-all text-slate-600 hover:text-slate-900"
           >
             <HeartHandshake className="w-4 h-4" /> Acompañante
           </button>
@@ -119,64 +114,27 @@ function RegisterContent() {
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
             <Label htmlFor="name">Nombre completo</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              placeholder="Ej. Juan Pérez"
-            />
+            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Ej. Juan Pérez" />
           </div>
           <div>
             <Label htmlFor="email">Correo electrónico</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="correo@ejemplo.com"
-            />
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="correo@ejemplo.com" />
           </div>
           <div>
             <Label htmlFor="phone">Teléfono / WhatsApp</Label>
-            <Input
-              id="phone"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              required
-              placeholder="+1 809..."
-            />
+            <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="+1 809..." />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label htmlFor="password">Contraseña</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="Mínimo 6"
-              />
+              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Mínimo 6" />
             </div>
             <div>
               <Label htmlFor="confirmPassword">Confirmar</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                placeholder="Repite clave"
-              />
+              <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required placeholder="Repite clave" />
             </div>
           </div>
-          <Button
-            type="submit"
-            className="w-full text-white bg-juntos-blue hover:bg-juntos-blue/90"
-            disabled={loading}
-          >
+          <Button type="submit" className="w-full text-white bg-juntos-blue hover:bg-juntos-blue/90" disabled={loading}>
             {loading ? 'Creando cuenta...' : 'Registrarme como Solicitante'}
           </Button>
         </form>

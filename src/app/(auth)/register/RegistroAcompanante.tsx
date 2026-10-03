@@ -1,22 +1,64 @@
 'use client';
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 export default function RegistroAcompanante() {
   const router = useRouter();
   const [fase, setFase] = useState(1);
+  const [loading, setLoading] = useState(false);
+
   const [datos, setDatos] = useState({
     nombre: '',
     cedula: '',
     telefono: '',
-    experiencia: ''
+    experiencia: '',
+    email: '',
+    password: '',
   });
   const [firma, setFirma] = useState(false);
 
-  const handleSubmit = (e: any) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert('Tu solicitud ha sido enviada a la Mesa Operacional con éxito. Será depurada en la PGR y te contactaremos pronto.');
-    router.push('/');
+
+    if (!datos.email || !datos.password) {
+      alert('Por favor ingresa tu correo y una contraseña para crear tu acceso.');
+      return;
+    }
+
+    if (datos.password.length < 6) {
+      alert('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+
+    setLoading(true);
+    const supabase = createClient();
+
+    // 1. Crear el usuario en Supabase Auth
+    const { data, error } = await supabase.auth.signUp({
+      email: datos.email,
+      password: datos.password,
+    });
+
+    if (error) {
+      alert(`Error al registrar cuenta: ${error.message}`);
+      setLoading(false);
+      return;
+    }
+
+    // 2. Guardar sus datos completos en la tabla profiles
+    if (data.user) {
+      await supabase.from('profiles').update({
+        full_name: datos.nombre,
+        phone: datos.telefono,
+        role: 'COMPANION',
+      }).eq('id', data.user.id);
+    }
+
+    setLoading(false);
+    alert('Tu solicitud ha sido enviada con éxito. Será depurada en la PGR y te contactaremos pronto.');
+    router.push('/companion/onboarding');
   };
 
   return (
@@ -42,11 +84,11 @@ export default function RegistroAcompanante() {
         ))}
       </div>
 
-      <form onSubmit={fase === 4 ? handleSubmit : (e) => { e.preventDefault(); setFase(fase + 1) }}>
+      <form onSubmit={fase === 4 ? handleSubmit : (e) => { e.preventDefault(); setFase(fase + 1); }}>
         
         {/* FASE 1 */}
         {fase === 1 && (
-          <div className="space-y-4 animate-fade-in">
+          <div className="space-y-4">
             <h3 className="font-bold text-lg text-slate-800 border-b pb-2">Fase 1: Identidad Básica</h3>
             <div>
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Nombre Completo</label>
@@ -87,7 +129,7 @@ export default function RegistroAcompanante() {
 
         {/* FASE 2 */}
         {fase === 2 && (
-          <div className="space-y-4 animate-fade-in">
+          <div className="space-y-4">
             <h3 className="font-bold text-lg text-slate-800 border-b pb-2">Fase 2: Verificación de Seguridad</h3>
             <div className="bg-blue-50 text-blue-800 text-xs p-3 rounded-lg border border-blue-100 font-medium">
               ℹ️ Requisito obligatorio según la Ley 352-98 de Protección a la Persona Envejeciente en República Dominicana.
@@ -109,7 +151,7 @@ export default function RegistroAcompanante() {
 
         {/* FASE 3 */}
         {fase === 3 && (
-          <div className="space-y-4 animate-fade-in">
+          <div className="space-y-4">
             <h3 className="font-bold text-lg text-slate-800 border-b pb-2">Fase 3: Experiencia y Referencias</h3>
             <div>
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Años de experiencia con adultos mayores</label>
@@ -117,7 +159,7 @@ export default function RegistroAcompanante() {
                 required 
                 className="w-full rounded-xl border border-slate-300 bg-white p-3.5 mt-1 text-sm outline-none focus:border-blue-500" 
                 value={datos.experiencia} 
-                onChange={e => setDatos({...datos, experiencia: e.target.value})}
+                onChange={e => setDatos({...datos, experiencia: e.target.value})} 
               >
                 <option value="">Selecciona una opción</option>
                 <option value="0-1">Menos de 1 año</option>
@@ -137,50 +179,70 @@ export default function RegistroAcompanante() {
           </div>
         )}
 
-        {/* FASE 4 */}
+        {/* FASE 4: Firma y creación de credenciales */}
         {fase === 4 && (
-          <div className="space-y-4 animate-fade-in">
-            <h3 className="font-bold text-lg text-slate-800 border-b pb-2">Fase 4: Firma Digital</h3>
-            <p className="text-xs text-slate-600 text-justify leading-relaxed">
-              Al firmar este documento, autorizas a <b>JUNTOS</b> a realizar la depuración de antecedentes penales en la PGR y validar tu identidad. Documento válido y vinculante bajo la <b>Ley 126-02</b> sobre Comercio Electrónico, Documentos y Firmas Digitales en RD, y protegido bajo la Ley 172-13 de Protección de Datos.
+          <div className="space-y-4">
+            <h3 className="font-bold text-lg text-slate-800 border-b pb-2">Fase 4: Firma y Creación de Cuenta</h3>
+            
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Correo para acceder a la app</label>
+                <input 
+                  type="email" 
+                  required 
+                  className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-sm outline-none focus:border-blue-500" 
+                  placeholder="tu-correo@ejemplo.com"
+                  value={datos.email}
+                  onChange={e => setDatos({...datos, email: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Crea una Contraseña (mínimo 6 caracteres)</label>
+                <input 
+                  type="password" 
+                  required 
+                  minLength={6}
+                  className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-sm outline-none focus:border-blue-500" 
+                  placeholder="••••••••"
+                  value={datos.password}
+                  onChange={e => setDatos({...datos, password: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 text-justify leading-relaxed mt-2">
+              Al firmar este documento, autorizas a <b>JUNTOS</b> a realizar la depuración de antecedentes penales en la PGR y validar tu identidad. Documento válido bajo la <b>Ley 126-02</b> y protegido por la Ley 172-13.
             </p>
             
-            <div className="mt-4 rounded-xl border-2 border-slate-200 bg-white p-4 h-48 flex flex-col items-center justify-center relative overflow-hidden">
+            <div className="rounded-xl border-2 border-slate-200 bg-white p-4 h-40 flex flex-col items-center justify-center relative overflow-hidden">
               {!firma ? (
                 <button 
                   type="button" 
                   onClick={() => setFirma(true)} 
                   className="rounded-full bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 border border-blue-200 hover:bg-blue-100 transition"
                 >
-                  ✍️ Toca aquí para firmar con el dedo
+                  ✍️ Toca aquí para firmar digitalmente
                 </button>
               ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center fade-in">
-                  <div className="text-4xl italic text-blue-950 font-serif border-b-2 border-slate-800 px-8 py-4 mb-2">
+                <div className="w-full h-full flex flex-col items-center justify-center">
+                  <div className="text-3xl italic text-blue-950 font-serif border-b-2 border-slate-800 px-6 py-2 mb-1">
                     {datos.nombre || 'Firma Generada'}
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono">ID: {datos.cedula || '---'} | TIMESTAMP: {new Date().toLocaleDateString()}</span>
+                  <span className="text-[10px] text-slate-400 font-mono">ID: {datos.cedula || '---'} | FECHA: {new Date().toLocaleDateString()}</span>
                   <button 
                     type="button" 
                     onClick={() => setFirma(false)} 
-                    className="text-xs text-red-500 mt-2 absolute bottom-2 right-4 font-bold underline"
+                    className="text-xs text-red-500 mt-1 absolute bottom-2 right-4 font-bold underline"
                   >
                     Borrar firma
                   </button>
                 </div>
               )}
             </div>
-
-            <div className="flex items-start gap-3 mt-4 bg-slate-100 p-3 rounded-xl border border-slate-200">
-              <input type="checkbox" required id="terminos" className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600" />
-              <label htmlFor="terminos" className="text-xs font-medium text-slate-700 leading-tight">
-                Declaro bajo fe de juramento que la información suministrada es verídica y acepto los términos y políticas de privacidad de la plataforma.
-              </label>
-            </div>
           </div>
         )}
 
-        {/* Botones de Navegación */}
+        {/* Botones */}
         <div className="mt-8 flex gap-3">
           {fase > 1 && (
             <button 
@@ -193,13 +255,13 @@ export default function RegistroAcompanante() {
           )}
           <button 
             type="submit" 
-            className={`flex-1 rounded-xl px-4 py-3.5 text-sm font-bold text-white shadow-md transition ${fase === 4 && !firma ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`} 
-            disabled={fase === 4 && !firma}
+            className={`flex-1 rounded-xl px-4 py-3.5 text-sm font-bold text-white shadow-md transition ${fase === 4 && (!firma || loading) ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`} 
+            disabled={fase === 4 && (!firma || loading)}
           >
-            {fase === 4 ? 'Firmar y Enviar Solicitud' : 'Siguiente Fase'}
+            {loading ? 'Creando cuenta...' : fase === 4 ? 'Firmar y Registrarme' : 'Siguiente Fase'}
           </button>
         </div>
       </form>
     </div>
-  )
+  );
 }
