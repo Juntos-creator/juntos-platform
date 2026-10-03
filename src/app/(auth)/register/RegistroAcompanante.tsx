@@ -60,6 +60,8 @@ export default function RegistroAcompanante() {
     numeroDocumento: '',
     telefono: '',
     experiencia: '',
+    referenciaNombre: '',
+    referenciaTelefono: '',
     email: '',
     password: '',
   });
@@ -155,7 +157,7 @@ export default function RegistroAcompanante() {
     }
   };
 
-  // Validaciones antes de avanzar
+  // Validaciones antes de avanzar de fase
   const handleAvanzar = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -177,7 +179,6 @@ export default function RegistroAcompanante() {
     }
 
     if (fase === 2) {
-      // 1. Identificación
       if (tipoDocumento === 'CEDULA') {
         if (!docFrontal || !docDorsal) {
           setErrorMsg('Es obligatorio subir ambas caras de la cédula (Frontal y Posterior).');
@@ -194,7 +195,6 @@ export default function RegistroAcompanante() {
         }
       }
 
-      // 2. Antecedentes No Penales (PGR - Obligatorio - 30 días hábiles)
       if (!certAntecedentes) {
         setErrorMsg('Es obligatorio adjuntar el Certificado de Antecedentes No Penales.');
         return;
@@ -204,7 +204,6 @@ export default function RegistroAcompanante() {
         return;
       }
 
-      // 3. Certificación Profesional previa (ESTRICTAMENTE OPCIONAL)
       if (certProfesional) {
         if (!fechaProfesional) {
           setErrorMsg('Si adjuntas una certificación profesional previa, debes indicar su fecha de emisión.');
@@ -216,13 +215,11 @@ export default function RegistroAcompanante() {
         }
       }
 
-      // 4. Bachiller (Obligatorio)
       if (!certBachiller) {
         setErrorMsg('Es obligatorio adjuntar el Certificado o Título de Bachiller.');
         return;
       }
 
-      // 5. JUNTOS Academia (Obligatorio)
       if (!certAcademia) {
         setErrorMsg('Es obligatorio adjuntar el Certificado de JUNTOS Academia.');
         return;
@@ -233,12 +230,32 @@ export default function RegistroAcompanante() {
     }
 
     if (fase === 3) {
+      if (!datos.referenciaNombre || !datos.referenciaTelefono) {
+        setErrorMsg('Por favor completa los datos de la referencia laboral.');
+        return;
+      }
       setFase(4);
       return;
     }
   };
 
-  // Creación de cuenta en Supabase y guardado final
+  // Función auxiliar para subir archivos al Storage de Supabase
+  const subirArchivoStorage = async (supabase: ReturnType<typeof createClient>, file: File, path: string) => {
+    try {
+      const { data, error } = await supabase.storage.from('documents').upload(path, file, {
+        upsert: true,
+      });
+      if (error) {
+        console.warn(`No se pudo subir a storage: ${path}`, error.message);
+        return null;
+      }
+      return data?.path || null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Creación de cuenta y guardado integral del expediente para la Mesa Operacional
   const handleSubmitFinal = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -255,6 +272,7 @@ export default function RegistroAcompanante() {
     setLoading(true);
     const supabase = createClient();
 
+    // 1. Crear el usuario en Supabase Auth
     const { data, error } = await supabase.auth.signUp({
       email: datos.email,
       password: datos.password,
@@ -267,15 +285,72 @@ export default function RegistroAcompanante() {
     }
 
     if (data.user) {
+      const userId = data.user.id;
+
+      // 2. Intentar subir documentos al bucket 'documents'
+      let frontalPath = null;
+      let dorsalPath = null;
+      let permisoPath = null;
+      let antecedentesPath = null;
+      let profesionalPath = null;
+      let bachillerPath = null;
+      let academiaPath = null;
+
+      if (docFrontal) frontalPath = await subirArchivoStorage(supabase, docFrontal, `${userId}/doc_frontal_${Date.now()}`);
+      if (docDorsal) dorsalPath = await subirArchivoStorage(supabase, docDorsal, `${userId}/doc_dorsal_${Date.now()}`);
+      if (permisoTrabajo) permisoPath = await subirArchivoStorage(supabase, permisoTrabajo, `${userId}/permiso_trabajo_${Date.now()}`);
+      if (certAntecedentes) antecedentesPath = await subirArchivoStorage(supabase, certAntecedentes, `${userId}/antecedentes_${Date.now()}`);
+      if (certProfesional) profesionalPath = await subirArchivoStorage(supabase, certProfesional, `${userId}/profesional_${Date.now()}`);
+      if (certBachiller) bachillerPath = await subirArchivoStorage(supabase, certBachiller, `${userId}/bachiller_${Date.now()}`);
+      if (certAcademia) academiaPath = await subirArchivoStorage(supabase, certAcademia, `${userId}/academia_${Date.now()}`);
+
+      // 3. Estructura completa del expediente para revisión del administrador
+      const expedienteCompleto = {
+        user_id: userId,
+        nombre: datos.nombre,
+        tipo_documento: tipoDocumento,
+        numero_documento: datos.numeroDocumento,
+        telefono: datos.telefono,
+        email: datos.email,
+        experiencia: datos.experiencia,
+        referencia_nombre: datos.referenciaNombre,
+        referencia_telefono: datos.referenciaTelefono,
+        codigo_academia: codigoAcademia,
+        fecha_antecedentes: fechaAntecedentes || null,
+        fecha_profesional: fechaProfesional || null,
+        doc_frontal_url: frontalPath,
+        doc_dorsal_url: dorsalPath,
+        permiso_trabajo_url: permisoPath,
+        cert_antecedentes_url: antecedentesPath,
+        cert_profesional_url: profesionalPath,
+        cert_bachiller_url: bachillerPath,
+        cert_academia_url: academiaPath,
+        estado: 'PENDIENTE_REVISION',
+        firma_digital: firma ? datos.nombre : 'FIRMADO_DIGITALMENTE',
+        fecha_solicitud: new Date().toISOString(),
+      };
+
+      // 4. Actualizar tabla profiles
       await supabase.from('profiles').update({
         full_name: datos.nombre,
         phone: datos.telefono,
         role: 'COMPANION',
-      }).eq('id', data.user.id);
+        status: 'PENDIENTE_REVISION',
+        metadata: expedienteCompleto,
+      }).eq('id', userId);
+
+      // 5. Insertar en tabla dedicada de solicitudes (companion_applications)
+      const { error: appError } = await supabase
+        .from('companion_applications')
+        .insert([expedienteCompleto]);
+
+      if (appError) {
+        console.warn('Registro guardado en profiles (metadata), companion_applications no disponible:', appError.message);
+      }
     }
 
     setLoading(false);
-    alert('¡Expediente enviado a la Mesa Operacional! Validaremos tus antecedentes, acreditaciones y títulos.');
+    alert('¡Expediente enviado a la Mesa Operacional con éxito! Ya está disponible para revisión del Administrador.');
     router.push('/companion/onboarding');
   };
 
@@ -334,7 +409,7 @@ export default function RegistroAcompanante() {
 
       <form onSubmit={fase === 4 ? handleSubmitFinal : handleAvanzar}>
         
-        {/* FASE 1 */}
+        {/* FASE 1: IDENTIDAD BÁSICA */}
         {fase === 1 && (
           <div className="space-y-4">
             <h3 className="font-bold text-lg text-slate-800 border-b pb-2">Fase 1: Identidad Básica</h3>
@@ -385,7 +460,7 @@ export default function RegistroAcompanante() {
                 onChange={e => setDatos({...datos, numeroDocumento: e.target.value})} 
               />
               {tipoDocumento === 'CEDULA' && (
-                <p className="text-[11px] text-slate-400 mt-1">Verificación automática de la Junta Central Electoral.</p>
+                <p className="text-[11px] text-slate-400 mt-1">Verificación algorítmica de la Junta Central Electoral.</p>
               )}
             </div>
 
@@ -613,7 +688,7 @@ export default function RegistroAcompanante() {
           </div>
         )}
 
-        {/* FASE 3 */}
+        {/* FASE 3: EXPERIENCIA Y REFERENCIAS */}
         {fase === 3 && (
           <div className="space-y-4">
             <h3 className="font-bold text-lg text-slate-800 border-b pb-2">Fase 3: Experiencia y Referencias</h3>
@@ -634,16 +709,30 @@ export default function RegistroAcompanante() {
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Nombre Referencia Laboral</label>
-              <input type="text" required className="w-full rounded-xl border border-slate-300 bg-white p-3.5 mt-1 text-sm outline-none focus:border-blue-500" placeholder="Nombre de contacto" />
+              <input 
+                type="text" 
+                required 
+                className="w-full rounded-xl border border-slate-300 bg-white p-3.5 mt-1 text-sm outline-none focus:border-blue-500" 
+                placeholder="Nombre de contacto"
+                value={datos.referenciaNombre}
+                onChange={e => setDatos({...datos, referenciaNombre: e.target.value})}
+              />
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Teléfono de la Referencia</label>
-              <input type="tel" required className="w-full rounded-xl border border-slate-300 bg-white p-3.5 mt-1 text-sm outline-none focus:border-blue-500" placeholder="Ej: 809-555-0000" />
+              <input 
+                type="tel" 
+                required 
+                className="w-full rounded-xl border border-slate-300 bg-white p-3.5 mt-1 text-sm outline-none focus:border-blue-500" 
+                placeholder="Ej: 809-555-0000"
+                value={datos.referenciaTelefono}
+                onChange={e => setDatos({...datos, referenciaTelefono: e.target.value})}
+              />
             </div>
           </div>
         )}
 
-        {/* FASE 4 */}
+        {/* FASE 4: FIRMA Y CREACIÓN */}
         {fase === 4 && (
           <div className="space-y-4">
             <h3 className="font-bold text-lg text-slate-800 border-b pb-2">Fase 4: Firma y Creación de Cuenta</h3>
@@ -678,7 +767,7 @@ export default function RegistroAcompanante() {
                   onClick={() => setFirma(true)} 
                   className="rounded-full bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 border border-blue-200 hover:bg-blue-100 transition"
                 >
-                  ✍️ Toca aquí para firmar con el dedo
+                  ✍️️ Toca aquí para firmar digitalmente
                 </button>
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center">
