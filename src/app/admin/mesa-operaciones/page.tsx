@@ -21,7 +21,8 @@ import {
   MessageSquare,
   CreditCard,
   Receipt,
-  Send
+  Send,
+  MessageCircle
 } from 'lucide-react';
 
 interface SolicitudServicio {
@@ -290,6 +291,26 @@ export default function MesaOperacionesPage() {
     cargarDatos();
   }
 
+  // DISPARO DIRECTO DE WHATSAPP CON DATOS OFICIALES DE CITA
+  function enviarWhatsAppConfirmacion(servicio: SolicitudServicio) {
+    if (!servicio.client_phone) {
+      alert('Este servicio no cuenta con número de teléfono registrado.');
+      return;
+    }
+
+    let tel = servicio.client_phone.replace(/[^0-9]/g, '');
+    if (tel.length === 10) {
+      tel = '1' + tel; // Formato internacional RD (+1)
+    }
+
+    const fechaTxt = servicio.scheduled_date ? new Date(servicio.scheduled_date).toLocaleDateString('es-DO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Fecha coordinada';
+    const acompananteTxt = servicio.companion_name ? `${servicio.companion_name} (Tel: ${servicio.companion_phone || 'En central'})` : 'Personal asignado por la Mesa Central';
+
+    const mensaje = `🟢 *JUNTOS - Confirmación de Cita de Acompañamiento*\n\nHola *${servicio.client_name || 'Paciente'}*, te confirmamos tu servicio de asistencia programado:\n\n📅 *Fecha:* ${fechaTxt}\n📍 *Lugar:* ${servicio.address || 'Ubicación coordinada'}\n👤 *Acompañante:* ${acompananteTxt}\n📌 *Estado:* ${servicio.status}\n\nAnte cualquier novedad o consulta, nuestro centro de operaciones está disponible 24/7. ¡Estamos para servirte!`;
+
+    window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`, '_blank');
+  }
+
   const serviciosFiltrados = solicitudes.filter(s => {
     const st = (s.status || '').toUpperCase();
     if (tab === 'EN_CURSO') return st === 'IN_PROGRESS' || st === 'EN_CURSO' || st === 'PENDING' || st === 'PENDIENTE_PAGO';
@@ -552,22 +573,31 @@ export default function MesaOperacionesPage() {
               {tab !== 'EXPEDIENTES' ? (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
                   
-                  {/* COLUMNA 1: DATOS, CONTACTOS Y BITÁCORA */}
+                  {/* COLUMNA 1: DATOS, CONTACTOS, WHATSAPP Y BITÁCORA */}
                   <div className="space-y-4">
-                    {/* Llamadas Rápidas */}
-                    <div className="flex gap-2">
+                    {/* Botones de Comunicación Rápida */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <a
                         href={`tel:${selectedItem.client_phone}`}
-                        className="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 p-2.5 rounded-xl flex items-center justify-center gap-1.5 font-bold text-blue-400"
+                        className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-2.5 rounded-xl flex items-center justify-center gap-1.5 font-bold text-blue-400 text-center"
                       >
-                        <PhoneCall className="w-3.5 h-3.5" /> Llamar Cliente ({selectedItem.client_phone || 'S/N'})
+                        <PhoneCall className="w-3.5 h-3.5 shrink-0" /> Llamar Paciente
                       </a>
+
                       <a
                         href={`tel:${selectedItem.companion_phone}`}
-                        className="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 p-2.5 rounded-xl flex items-center justify-center gap-1.5 font-bold text-emerald-400"
+                        className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-2.5 rounded-xl flex items-center justify-center gap-1.5 font-bold text-emerald-400 text-center"
                       >
-                        <PhoneCall className="w-3.5 h-3.5" /> Llamar Acompañante ({selectedItem.companion_phone || 'S/N'})
+                        <PhoneCall className="w-3.5 h-3.5 shrink-0" /> Llamar Acompañante
                       </a>
+
+                      {/* DISPARO DE WHATSAPP DIRECTO */}
+                      <button
+                        onClick={() => enviarWhatsAppConfirmacion(selectedItem)}
+                        className="bg-emerald-700/80 hover:bg-emerald-600 border border-emerald-600 p-2.5 rounded-xl flex items-center justify-center gap-1.5 font-bold text-white transition shadow text-center"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5 shrink-0" /> WhatsApp Cita
+                      </button>
                     </div>
 
                     {/* Resumen del Servicio con Estado de Pago */}

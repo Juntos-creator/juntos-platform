@@ -7,18 +7,26 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/toast';
+import { createClient } from '@/lib/supabase/client';
 import { 
   User, Users, HeartHandshake, ChevronLeft, 
   ChevronRight, Calendar, Clock, MapPin, 
-  Stethoscope, Home, LocateFixed, Moon
+  Stethoscope, Home, LocateFixed, Phone, CheckCircle
 } from 'lucide-react';
 
 export default function NewServicePage() {
   const router = useRouter();
   const { toast } = useToast();
+  const supabase = createClient();
 
   const [step, setStep] = useState(1);
-  const [recipient, setRecipient] = useState('self');
+  const [recipient, setRecipient] = useState<'self' | 'family' | 'other'>('family');
+
+  // Datos del Paciente / Beneficiario cuando es familiar u otra persona
+  const [patientName, setPatientName] = useState('');
+  const [patientPhone, setPatientPhone] = useState('');
+  const [patientRelation, setPatientRelation] = useState('');
+
   const [service, setService] = useState('Acompañamiento en Clínica / Hospital');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
@@ -46,10 +54,23 @@ export default function NewServicePage() {
   const itbis = subtotal * 0.18; 
   const total = subtotal > 0 ? subtotal + platformFee + insuranceFee + itbis : 0;
 
-  const nextStep = () => setStep((prev) => Math.min(prev + 1, 9));
+  const nextStep = () => {
+    // Validación para el Paso 1 si es para un tercero
+    if (step === 1 && (recipient === 'family' || recipient === 'other')) {
+      if (!patientName.trim() || !patientPhone.trim()) {
+        toast({
+          title: 'Datos requeridos',
+          description: 'Por favor indica el nombre y teléfono de quien recibirá el acompañamiento.',
+          variant: 'error'
+        });
+        return;
+      }
+    }
+    setStep((prev) => Math.min(prev + 1, 9));
+  };
+
   const prevStep = () => setStep((prev) => Math.max(prev - 1, 1));
 
-  // Función para simular Geolocalización
   const handleGeoLocation = () => {
     setIsLocating(true);
     setTimeout(() => {
@@ -60,14 +81,84 @@ export default function NewServicePage() {
     }, 1500);
   };
 
-  const handleSubmit = () => {
+  // Disparo automático de notificación WhatsApp al paciente / solicitante
+  const dispararNotificacionWhatsApp = async (finalPatient: string, finalPhone: string, finalLocation: string) => {
+    try {
+      await fetch('/api/notifications/whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telefono: finalPhone,
+          nombrePaciente: finalPatient,
+          fecha: `${date || 'Hoy'} a las ${time || '08:00 AM'}`,
+          direccion: finalLocation,
+          nombreAcompanante: 'Asignado por Mesa Central JUNTOS'
+        })
+      });
+    } catch (err) {
+      console.warn('Disparo WhatsApp API secundario:', err);
+    }
+  };
+
+  const handleSubmit = async () => {
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      const finalLocation = selectedCenter === 'Otro' ? customCenter : selectedCenter;
+    const finalLocation = selectedCenter === 'Otro' ? customCenter : selectedCenter;
+    const finalPatient = recipient === 'self' ? (contactName || 'El Solicitante') : patientName;
+    const finalPhone = recipient === 'self' ? contactPhone : patientPhone;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // 1. Guardar el servicio en Supabase
+      const { data: srvData, error: srvError } = await supabase
+        .from('service_requests')
+        .insert([{
+          client_id: user?.id || null,
+          client_name: finalPatient,
+          client_phone: finalPhone,
+          address: finalLocation,
+          scheduled_date: date || new Date().toISOString().split('T')[0],
+          status: 'PENDIENTE_PAGO',
+          notes: `Tipo: ${service} (${numericDuration} hrs). Para: ${recipient === 'self' ? 'Uno mismo' : recipient === 'family' ? `Familiar (${patientRelation})` : 'Otra persona'}. Notas: ${notes}`,
+          emergency_status: 'NORMAL'
+        }])
+        .select()
+        .single();
+
+      if (srvError) throw srvError;
+
+      // 2. Registrar pre-orden en tabla de pagos
+      await supabase.from('payments').insert([{
+        service_request_id: srvData.id,
+        user_id: user?.id || null,
+        amount: total,
+        currency: 'DOP',
+        status: 'PENDING',
+        payment_method: 'TARJETA'
+      }]);
+
+      // 3. Disparo WhatsApp / Notificación
+      await dispararNotificacionWhatsApp(finalPatient, finalPhone, finalLocation);
+
       localStorage.setItem('juntos_meet_point', finalLocation);
-      router.push('/services/tracking');
-    }, 1500);
+      localStorage.setItem('juntos_current_service_id', srvData.id);
+
+      toast({ 
+        title: '¡Servicio Solicitado!', 
+        description: 'Hemos registrado la orden exitosamente.', 
+        variant: 'success' 
+      });
+
+      router.push(`/admin/payments?service_id=${srvData.id}&amount=${total}`);
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: 'Error al procesar',
+        description: error.message || 'No se pudo guardar la solicitud.',
+        variant: 'error'
+      });
+      setLoading(false);
+    }
   };
 
   return (
@@ -138,10 +229,65 @@ export default function NewServicePage() {
                   </div>
                 </div>
               </div>
+
+              {/* DESPLIEGUE AUTOMÁTICO DE DATOS DEL PACIENTE/BENEFICIARIO */}
+              {(recipient === 'family' || recipient === 'other') && (
+                <div className="mt-6 p-5 bg-blue-50/70 border-2 border-blue-200 rounded-2xl space-y-4 animate-in fade-in slide-in-from-top-3">
+                  <div className="flex items-center justify-between border-b border-blue-200/80 pb-2">
+                    <h3 className="text-sm font-bold text-blue-950 uppercase tracking-wide flex items-center gap-2">
+                      <Phone className="w-4 h-4 text-blue-600" />
+                      Datos de la persona que recibirá la atención
+                    </h3>
+                    <span className="text-[10px] font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full">
+                      Requerido
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-xs font-bold text-slate-700">Nombre completo del paciente *</Label>
+                      <Input 
+                        required
+                        value={patientName} 
+                        onChange={(e) => setPatientName(e.target.value)} 
+                        placeholder="Ej: Doña Mercedes Altagracia"
+                        className="mt-1 h-12 bg-white text-base"
+                      />
+                    </div>
+
+                    <div>
+                      <Label className="text-xs font-bold text-slate-700">WhatsApp / Teléfono directo *</Label>
+                      <Input 
+                        required
+                        type="tel"
+                        value={patientPhone} 
+                        onChange={(e) => setPatientPhone(e.target.value)} 
+                        placeholder="Ej: 809-555-0199"
+                        className="mt-1 h-12 bg-white text-base"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs font-bold text-slate-700">Parentesco o relación contigo (Opcional)</Label>
+                      <Input 
+                        value={patientRelation} 
+                        onChange={(e) => setPatientRelation(e.target.value)} 
+                        placeholder="Ej: Mi madre, Abuelo, Tía..."
+                        className="mt-1 h-12 bg-white text-base"
+                      />
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-blue-800 bg-blue-100/60 p-2.5 rounded-xl flex items-center gap-1.5">
+                    <CheckCircle className="w-4 h-4 shrink-0 text-blue-600" />
+                    El acompañante utilizará estos datos para contactar a la persona al llegar y confirmar la cita por WhatsApp.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
-          {/* PASO 2: SERVICIO (SIN POST-OPERATORIO) */}
+          {/* PASO 2: SERVICIO */}
           {step === 2 && (
             <div className="space-y-6">
               <div className="space-y-1">
@@ -193,7 +339,7 @@ export default function NewServicePage() {
             </div>
           )}
 
-          {/* PASO 5: DURACIÓN (CON NOCTURNO Y CAMPO MANUAL) */}
+          {/* PASO 5: DURACIÓN */}
           {step === 5 && (
             <div className="space-y-6">
               <div>
@@ -201,7 +347,6 @@ export default function NewServicePage() {
                 <p className="text-slate-600 mt-1">Tarifa base: RD$900/h. Turno nocturno: RD$1,100/h.</p>
               </div>
 
-              {/* Selector de Turno */}
               <div className="flex gap-4 mb-4">
                 <Button 
                   type="button" 
@@ -244,12 +389,12 @@ export default function NewServicePage() {
             </div>
           )}
 
-          {/* PASO 6: CENTRO MÉDICO O DIRECCIÓN (CON GEOLOCALIZACIÓN Y OTROS) */}
+          {/* PASO 6: CENTRO MÉDICO O DIRECCIÓN */}
           {step === 6 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                  <MapPin className="text-juntos-blue w-6 h-6" /> ¿En qué centro será?
+                  <MapPin className="text-juntos-blue w-6 h-6" /> ¿En qué centro o dirección será?
                 </h2>
               </div>
               
@@ -287,7 +432,7 @@ export default function NewServicePage() {
               <textarea 
                 value={notes} 
                 onChange={(e) => setNotes(e.target.value)} 
-                placeholder="Ej. Llevar silla de ruedas, problemas de audición..."
+                placeholder="Ej. Llevar silla de ruedas, problemas de audición, paciente hipertenso..."
                 className="w-full p-4 border rounded-xl min-h-[120px] text-base focus:border-juntos-blue outline-none"
               />
             </div>
@@ -318,10 +463,24 @@ export default function NewServicePage() {
               <h2 className="text-2xl font-bold text-slate-900">Facturación y Resumen</h2>
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 space-y-5">
                 <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm">
-                  <div><p className="font-bold text-slate-500">PARA QUIÉN</p><p className="font-semibold text-slate-900">{recipient === 'self' ? 'Para mí' : recipient === 'family' ? 'Un familiar' : 'Otra persona'}</p></div>
-                  <div><p className="font-bold text-slate-500">FECHA Y HORA</p><p className="font-semibold text-slate-900">{date || 'Hoy'} • {time || '08:00 AM'}</p></div>
-                  <div className="col-span-2"><p className="font-bold text-slate-500">SERVICIO</p><p className="font-semibold text-slate-900">{service}</p></div>
-                  <div className="col-span-2"><p className="font-bold text-slate-500">LUGAR</p><p className="font-semibold text-slate-900">{selectedCenter === 'Otro' ? customCenter : selectedCenter}</p></div>
+                  <div>
+                    <p className="font-bold text-slate-500">PACIENTE A ASISTIR</p>
+                    <p className="font-semibold text-slate-900">
+                      {recipient === 'self' ? 'Para mí' : `${patientName} (${patientPhone})`}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-500">FECHA Y HORA</p>
+                    <p className="font-semibold text-slate-900">{date || 'Hoy'} • {time || '08:00 AM'}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="font-bold text-slate-500">SERVICIO</p>
+                    <p className="font-semibold text-slate-900">{service}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="font-bold text-slate-500">LUGAR</p>
+                    <p className="font-semibold text-slate-900">{selectedCenter === 'Otro' ? customCenter : selectedCenter}</p>
+                  </div>
                 </div>
 
                 <div className="pt-4 border-t border-slate-200 space-y-2 text-sm">
@@ -342,12 +501,18 @@ export default function NewServicePage() {
 
         {/* CONTROLES DE NAVEGACIÓN */}
         <div className="flex gap-4 items-center">
-          {step > 1 && <Button variant="outline" size="lg" onClick={prevStep} className="w-1/3 border-2 h-14 text-base font-bold"><ChevronLeft className="w-5 h-5 mr-1" /> Atrás</Button>}
+          {step > 1 && (
+            <Button variant="outline" size="lg" onClick={prevStep} className="w-1/3 border-2 h-14 text-base font-bold">
+              <ChevronLeft className="w-5 h-5 mr-1" /> Atrás
+            </Button>
+          )}
           {step < 9 ? (
-            <Button size="lg" onClick={nextStep} className={`h-14 text-base font-bold text-white bg-juntos-blue hover:bg-juntos-blue/90 ${step === 1 ? 'w-full' : 'w-2/3'}`}>Continuar <ChevronRight className="w-5 h-5 ml-1" /></Button>
+            <Button size="lg" onClick={nextStep} className={`h-14 text-base font-bold text-white bg-juntos-blue hover:bg-juntos-blue/90 ${step === 1 ? 'w-full' : 'w-2/3'}`}>
+              Continuar <ChevronRight className="w-5 h-5 ml-1" />
+            </Button>
           ) : (
             <Button size="lg" onClick={handleSubmit} disabled={loading || numericDuration === 0} className="w-2/3 h-14 text-base font-bold bg-juntos-green text-white hover:bg-juntos-green/90">
-              {loading ? 'Procesando Tarjeta...' : `Pagar RD$ ${total.toLocaleString('es-DO', {minimumFractionDigits: 2})}`}
+              {loading ? 'Procesando Tarjeta y WhatsApp...' : `Pagar RD$ ${total.toLocaleString('es-DO', {minimumFractionDigits: 2})}`}
             </Button>
           )}
         </div>
