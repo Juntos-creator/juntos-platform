@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/components/ui/toast';
-import { User, HeartHandshake } from 'lucide-react';
+import { HeartHandshake } from 'lucide-react';
 
 import RegistroAcompanante from './RegistroAcompanante';
 
@@ -18,7 +18,7 @@ function RegisterContent() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const [selectedRole, setSelectedRole] = useState<'CUSTOMER' | 'COMPANION'>('CUSTOMER');
+  const [rol, setRol] = useState<'CUSTOMER' | 'COMPANION'>('CUSTOMER');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -26,25 +26,23 @@ function RegisterContent() {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Si elige Acompañante, mostramos directamente las 4 fases
-  if (selectedRole === 'COMPANION') {
+  // Vista exclusiva de Acompañante
+  if (rol === 'COMPANION') {
     return (
-      <div className="w-full">
-        <div className="max-w-lg mx-auto mb-2">
-          <button
-            type="button"
-            onClick={() => setSelectedRole('CUSTOMER')}
-            className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
-          >
-            ‹ Volver a registro de Solicitante
-          </button>
-        </div>
+      <div className="w-full max-w-lg mx-auto mt-4">
+        <button
+          type="button"
+          onClick={() => setRol('CUSTOMER')}
+          className="text-xs font-bold text-blue-600 hover:underline mb-4 flex items-center gap-1"
+        >
+          ‹ Volver a registro de Solicitante
+        </button>
         <RegistroAcompanante />
       </div>
     );
   }
 
-  // Formulario rápido para Solicitante
+  // Flujo para Solicitante
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -86,28 +84,21 @@ function RegisterContent() {
       <CardHeader className="items-center text-center pb-2">
         <Logo withText={false} size={48} className="mb-2" />
         <CardTitle className="text-2xl text-juntos-blue">Crear cuenta</CardTitle>
-        <CardDescription>Selecciona el tipo de cuenta con el que deseas ingresar</CardDescription>
+        <CardDescription>Registro para solicitar servicios de acompañamiento</CardDescription>
       </CardHeader>
       <CardContent>
-        {/* Selector de pestañas */}
-        <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-lg mb-6">
+        {/* Banner para postularse como acompañante */}
+        <div className="mb-6 p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <HeartHandshake className="w-5 h-5 text-blue-700" />
+            <span className="text-xs font-semibold text-blue-900">¿Deseas trabajar como acompañante?</span>
+          </div>
           <button
             type="button"
-            onClick={() => setSelectedRole('CUSTOMER')}
-            className={`flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-md transition-all ${
-              selectedRole === 'CUSTOMER'
-                ? 'bg-white text-juntos-blue shadow-sm font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
+            onClick={() => setRol('COMPANION')}
+            className="text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg transition"
           >
-            <User className="w-4 h-4" /> Solicitante
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedRole('COMPANION')}
-            className="flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-md transition-all text-slate-600 hover:text-slate-900"
-          >
-            <HeartHandshake className="w-4 h-4" /> Acompañante
+            Postularme
           </button>
         </div>
 
@@ -135,7 +126,7 @@ function RegisterContent() {
             </div>
           </div>
           <Button type="submit" className="w-full text-white bg-juntos-blue hover:bg-juntos-blue/90" disabled={loading}>
-            {loading ? 'Creando cuenta...' : 'Registrarme como Solicitante'}
+            {loading ? 'Creando cuenta...' : 'Crear mi cuenta'}
           </Button>
         </form>
 
