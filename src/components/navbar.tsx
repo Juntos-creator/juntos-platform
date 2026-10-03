@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Logo } from '@/components/brand/Logo';
-import { User } from 'lucide-react';
+import { User, Radio } from 'lucide-react';
 
 export function Navbar() {
   const supabase = createClient();
@@ -44,7 +44,7 @@ export function Navbar() {
 
         {/* Navegación dinámica por rol */}
         {!loading && (
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
+          <nav className="hidden md:flex items-center gap-5 text-sm font-medium">
             
             {/* 1. Vista Acompañante */}
             {role === 'COMPANION' && (
@@ -85,6 +85,16 @@ export function Navbar() {
                 </Link>
                 <Link href="/admin/audit" className="hover:text-juntos-green transition-colors">
                   Auditoría
+                </Link>
+
+                {/* BOTÓN MESA DE OPERACIONES CENTRAL */}
+                <Link 
+                  href="/admin/mesa-operaciones" 
+                  className="flex items-center gap-1.5 bg-emerald-950/70 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-900/60 hover:text-emerald-300 px-3 py-1.5 rounded-xl font-bold transition shadow-sm"
+                >
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <Radio className="w-3.5 h-3.5" />
+                  <span>Mesa de Operaciones</span>
                 </Link>
               </>
             )}
