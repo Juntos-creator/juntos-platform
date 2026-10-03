@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { 
   Radio, 
@@ -10,19 +11,17 @@ import {
   PhoneCall, 
   ShieldCheck, 
   CheckCircle2, 
-  XCircle, 
   Eye, 
-  MapPin, 
-  Calendar, 
-  AlertTriangle, 
-  Send, 
   UserCheck, 
   UserPlus, 
   X,
   Play,
   CheckSquare,
   AlertOctagon,
-  MessageSquare
+  MessageSquare,
+  CreditCard,
+  Receipt,
+  Send
 } from 'lucide-react';
 
 interface SolicitudServicio {
@@ -39,9 +38,16 @@ interface SolicitudServicio {
   notes?: string;
   address?: string;
   emergency_status?: 'NORMAL' | 'SOS_ACTIVE';
+  payment_info?: {
+    id?: string;
+    amount?: number;
+    status?: string;
+    currency?: string;
+  };
 }
 
 export default function MesaOperacionesPage() {
+  const router = useRouter();
   const [tab, setTab] = useState<'EN_CURSO' | 'POSTERIORES' | 'PREVIOS' | 'EXPEDIENTES'>('EN_CURSO');
   const [solicitudes, setSolicitudes] = useState<SolicitudServicio[]>([]);
   const [expedientes, setExpedientes] = useState<any[]>([]);
@@ -69,7 +75,6 @@ export default function MesaOperacionesPage() {
   useEffect(() => {
     cargarDatos();
 
-    // Suscripción Realtime a solicitudes y chats
     const channelServices = supabase
       .channel('realtime_mesa_operaciones')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, () => {
@@ -85,7 +90,6 @@ export default function MesaOperacionesPage() {
     };
   }, []);
 
-  // Cargar chat cuando se selecciona un servicio
   useEffect(() => {
     if (selectedItem && tab !== 'EXPEDIENTES') {
       cargarChatServicio(selectedItem.id);
@@ -95,20 +99,35 @@ export default function MesaOperacionesPage() {
   async function cargarDatos() {
     setLoading(true);
 
-    // 1. Solicitudes de servicio
     const { data: srvData } = await supabase
       .from('service_requests')
       .select('*')
       .order('created_at', { ascending: false });
 
+    const { data: payData } = await supabase
+      .from('payments')
+      .select('*');
+
     if (srvData && srvData.length > 0) {
-      setSolicitudes(srvData);
-      if (!selectedItem && tab !== 'EXPEDIENTES') setSelectedItem(srvData[0]);
+      const serviciosConPagos = srvData.map(srv => {
+        const pago = payData?.find(p => p.service_request_id === srv.id);
+        return {
+          ...srv,
+          payment_info: pago ? {
+            id: pago.id,
+            amount: pago.amount,
+            status: pago.status,
+            currency: pago.currency || 'DOP'
+          } : undefined
+        };
+      });
+
+      setSolicitudes(serviciosConPagos);
+      if (!selectedItem && tab !== 'EXPEDIENTES') setSelectedItem(serviciosConPagos[0]);
     } else {
       setSolicitudes([]);
     }
 
-    // 2. Expedientes de Acompañantes
     const { data: compApps } = await supabase
       .from('companion_applications')
       .select('*')
@@ -124,7 +143,6 @@ export default function MesaOperacionesPage() {
       setExpedientes(profCompanions || []);
     }
 
-    // 3. Acompañantes aprobados y disponibles para asignar
     const { data: activos } = await supabase
       .from('profiles')
       .select('id, full_name, phone')
@@ -145,7 +163,6 @@ export default function MesaOperacionesPage() {
     setChatMensajes(data || []);
   }
 
-  // COMANDO 1: Cambiar estado del servicio (Iniciar, Completar, Cancelar)
   async function cambiarEstadoServicio(serviceId: string, nuevoEstado: string) {
     setUpdating(true);
     const { error } = await supabase
@@ -162,7 +179,6 @@ export default function MesaOperacionesPage() {
     setUpdating(false);
   }
 
-  // COMANDO 2: Activar / Desactivar Botón de Pánico (SOS)
   async function toggleAlertaSOS(servicio: SolicitudServicio) {
     const nuevoEstadoSOS = servicio.emergency_status === 'SOS_ACTIVE' ? 'NORMAL' : 'SOS_ACTIVE';
     
@@ -183,7 +199,6 @@ export default function MesaOperacionesPage() {
     setUpdating(false);
   }
 
-  // COMANDO 3: Asignar Acompañante Oficial
   async function handleAsignarAcompanante() {
     if (!acompananteSeleccionado || !selectedItem) return;
 
@@ -215,7 +230,6 @@ export default function MesaOperacionesPage() {
     setUpdating(false);
   }
 
-  // COMANDO 4: Enviar mensaje como Despachador de Mesa al Chat
   async function enviarMensajeAdmin(e: React.FormEvent) {
     e.preventDefault();
     if (!nuevoMensajeAdmin.trim() || !selectedItem) return;
@@ -234,7 +248,6 @@ export default function MesaOperacionesPage() {
     }
   }
 
-  // COMANDO 5: Agregar Novedad u Orden a la Bitácora
   async function handleAgregarNota(e: React.FormEvent) {
     e.preventDefault();
     if (!nuevaNota.trim() || !selectedItem) return;
@@ -254,7 +267,6 @@ export default function MesaOperacionesPage() {
     cargarDatos();
   }
 
-  // COMANDO 6: Aprobación de Expediente RRHH
   async function handleAprobar(expediente: any) {
     if (!confirm(`¿Confirmas la APROBACIÓN de ${expediente.nombre || expediente.full_name}? Podrá recibir servicios de inmediato.`)) return;
 
@@ -278,10 +290,9 @@ export default function MesaOperacionesPage() {
     cargarDatos();
   }
 
-  // Filtrado de servicios
   const serviciosFiltrados = solicitudes.filter(s => {
     const st = (s.status || '').toUpperCase();
-    if (tab === 'EN_CURSO') return st === 'IN_PROGRESS' || st === 'EN_CURSO' || st === 'PENDING';
+    if (tab === 'EN_CURSO') return st === 'IN_PROGRESS' || st === 'EN_CURSO' || st === 'PENDING' || st === 'PENDIENTE_PAGO';
     if (tab === 'POSTERIORES') return st === 'SCHEDULED' || st === 'AGENDADO';
     if (tab === 'PREVIOS') return st === 'COMPLETED' || st === 'CANCELLED' || st === 'FINALIZADO';
     return true;
@@ -319,7 +330,7 @@ export default function MesaOperacionesPage() {
           }`}
         >
           <Radio className="w-4 h-4 text-emerald-400" />
-          Servicios en Tiempo Real ({solicitudes.filter(s => ['IN_PROGRESS', 'PENDING', 'EN_CURSO'].includes((s.status || '').toUpperCase())).length})
+          Servicios en Tiempo Real ({solicitudes.filter(s => ['IN_PROGRESS', 'PENDING', 'EN_CURSO', 'PENDIENTE_PAGO'].includes((s.status || '').toUpperCase())).length})
         </button>
 
         <button
@@ -385,6 +396,15 @@ export default function MesaOperacionesPage() {
                         {s.emergency_status === 'SOS_ACTIVE' && (
                           <span className="text-[10px] font-black bg-rose-600 text-white px-2 py-0.5 rounded">
                             SOS ACTIVO
+                          </span>
+                        )}
+                        {s.payment_info && (
+                          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded font-mono ${
+                            s.payment_info.status === 'COMPLETED'
+                              ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                              : 'bg-amber-950 text-amber-400 border border-amber-800'
+                          }`}>
+                            RD$ {s.payment_info.amount?.toLocaleString()}
                           </span>
                         )}
                       </div>
@@ -471,6 +491,21 @@ export default function MesaOperacionesPage() {
                       {selectedItem.emergency_status === 'SOS_ACTIVE' ? 'SOS ACTIVO (CANCELAR)' : 'BOTÓN SOS'}
                     </button>
 
+                    {/* Atajos Financieros */}
+                    <button
+                      onClick={() => router.push(`/admin/payments?service_id=${selectedItem.id}`)}
+                      className="bg-indigo-950/60 border border-indigo-700 text-indigo-300 hover:bg-indigo-900/50 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" /> Pago
+                    </button>
+
+                    <button
+                      onClick={() => router.push(`/admin/invoices?service_id=${selectedItem.id}`)}
+                      className="bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition"
+                    >
+                      <Receipt className="w-3.5 h-3.5" /> Factura
+                    </button>
+
                     {/* Asignar Acompañante */}
                     <button
                       onClick={() => setAsignarModal(true)}
@@ -535,11 +570,16 @@ export default function MesaOperacionesPage() {
                       </a>
                     </div>
 
-                    {/* Resumen del Servicio */}
+                    {/* Resumen del Servicio con Estado de Pago */}
                     <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-2 text-slate-300">
                       <p><b>Dirección de Atención:</b> {selectedItem.address || 'No registrada'}</p>
                       <p><b>Acompañante Asignado:</b> {selectedItem.companion_name || 'Sin asignar'}</p>
-                      <p><b>Estado Actual:</b> <span className="font-mono text-emerald-400 uppercase">{selectedItem.status}</span></p>
+                      <div className="flex justify-between items-center pt-1 border-t border-slate-800/80">
+                        <span><b>Estado Operativo:</b> <span className="font-mono text-emerald-400 uppercase">{selectedItem.status}</span></span>
+                        {selectedItem.payment_info && (
+                          <span><b>Pago:</b> <span className="font-mono text-amber-400">{selectedItem.payment_info.status} (RD$ {selectedItem.payment_info.amount?.toLocaleString()})</span></span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Bitácora Operacional */}
@@ -565,7 +605,7 @@ export default function MesaOperacionesPage() {
                     </div>
                   </div>
 
-                  {/* COLUMNA 2: CHAT AUDITADO EN VIVO (CLIENTE ↔ ACOMPAÑANTE ↔ MESA) */}
+                  {/* COLUMNA 2: CHAT AUDITADO EN VIVO */}
                   <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 flex flex-col h-[460px]">
                     <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-2">
                       <h4 className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
