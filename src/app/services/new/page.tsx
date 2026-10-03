@@ -1,534 +1,905 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Navbar } from '@/components/navbar';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/components/ui/toast';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { Navbar } from '@/components/navbar';
 import { 
-  User, Users, HeartHandshake, ChevronLeft, 
-  ChevronRight, Calendar, Clock, MapPin, 
-  Stethoscope, Home, LocateFixed, Phone, CheckCircle
+  User, 
+  Users, 
+  HeartHandshake, 
+  Calendar, 
+  Clock, 
+  MapPin, 
+  ShieldCheck, 
+  ArrowRight, 
+  ArrowLeft, 
+  CheckCircle2, 
+  Tag, 
+  Stethoscope, 
+  Home, 
+  Activity, 
+  Navigation, 
+  ExternalLink, 
+  LocateFixed 
 } from 'lucide-react';
 
-export default function NewServicePage() {
+function ServiceBookingWizard() {
   const router = useRouter();
-  const { toast } = useToast();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
   const [step, setStep] = useState(1);
-  const [recipient, setRecipient] = useState<'self' | 'family' | 'other'>('family');
-
-  // Datos del Paciente / Beneficiario cuando es familiar u otra persona
-  const [patientName, setPatientName] = useState('');
-  const [patientPhone, setPatientPhone] = useState('');
-  const [patientRelation, setPatientRelation] = useState('');
-
-  const [service, setService] = useState('Acompañamiento en Clínica / Hospital');
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
-  
-  // Duración y Tarifa Dinámica
-  const [duration, setDuration] = useState<number | ''>(2);
-  const [isNightShift, setIsNightShift] = useState(false);
-  const pricePerHour = isNightShift ? 1100 : 900;
-  
-  const [selectedCenter, setSelectedCenter] = useState('CEDIMAT (Plaza de la Salud)');
-  const [customCenter, setCustomCenter] = useState('');
-  const [isLocating, setIsLocating] = useState(false);
-  
-  const [notes, setNotes] = useState('');
-  const [contactName, setContactName] = useState('');
-  const [contactPhone, setContactPhone] = useState('');
-  const [contactRelation, setContactRelation] = useState('Familiar');
   const [loading, setLoading] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
-  // Lógica Financiera
-  const numericDuration = typeof duration === 'number' ? duration : 0;
-  const subtotal = numericDuration * pricePerHour;
-  const platformFee = 150; 
-  const insuranceFee = subtotal * 0.05; 
-  const itbis = subtotal * 0.18; 
-  const total = subtotal > 0 ? subtotal + platformFee + insuranceFee + itbis : 0;
+  // Descuento red
+  const [discountPercent, setDiscountPercent] = useState<number>(0);
 
-  const nextStep = () => {
-    if (step === 1 && (recipient === 'family' || recipient === 'other')) {
-      if (!patientName.trim() || !patientPhone.trim()) {
-        toast({
-          title: 'Datos requeridos',
-          description: 'Por favor indica el nombre y teléfono de quien recibirá el acompañamiento.',
-          variant: 'error'
-        });
+  // Form State
+  const [formData, setFormData] = useState({
+    forWhom: 'FAMILY', // 'SELF' | 'FAMILY' | 'OTHER'
+    recipientName: '',
+    recipientPhone: '',
+    serviceType: 'CLINIC_APPOINTMENT',
+    facilityName: 'CEDIMAT',
+    city: 'Distrito Nacional (Santo Domingo)',
+    address: '',
+    serviceDate: '',
+    serviceTime: '08:00',
+    hours: 3,
+    geoLat: '',
+    geoLng: '',
+    mapsUrl: '',
+    mobilitySupport: 'NONE',
+    specialInstructions: '',
+    contactName: '',
+    contactPhone: '',
+    relationship: 'Hijo(a)',
+    requiresNCF: false,
+    rncOrCedula: '',
+    fiscalName: '',
+    paymentMethod: 'CARD_ONLINE'
+  });
+
+  useEffect(() => {
+    async function checkAuth() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login?redirect=/services/new');
         return;
       }
-    }
-    setStep((prev) => Math.min(prev + 1, 9));
-  };
+      setUser(user);
 
-  const prevStep = () => setStep((prev) => Math.max(prev - 1, 1));
-
-  const handleGeoLocation = () => {
-    setIsLocating(true);
-    setTimeout(() => {
-      setSelectedCenter('Otro');
-      setCustomCenter('Av. 27 de Febrero esq. Tiradentes, Santo Domingo');
-      setIsLocating(false);
-      toast({ title: 'Ubicación detectada', description: 'GPS sincronizado con éxito.', variant: 'success' });
-    }, 1500);
-  };
-
-  const dispararNotificacionWhatsApp = async (finalPatient: string, finalPhone: string, finalLocation: string) => {
-    try {
-      await fetch('/api/notifications/whatsapp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          telefono: finalPhone,
-          nombrePaciente: finalPatient,
-          fecha: `${date || 'Hoy'} a las ${time || '08:00 AM'}`,
-          direccion: finalLocation,
-          nombreAcompanante: 'Asignado por Mesa Central JUNTOS'
-        })
-      });
-    } catch (err) {
-      console.warn('Disparo WhatsApp API secundario:', err);
-    }
-  };
-
-  const handleSubmit = async () => {
-    setLoading(true);
-    const finalLocation = selectedCenter === 'Otro' ? customCenter : selectedCenter;
-    const finalPatient = recipient === 'self' ? (contactName || 'El Solicitante') : patientName;
-    const finalPhone = recipient === 'self' ? contactPhone : patientPhone;
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      const payload: Record<string, any> = {
-        customer_id: user?.id || null,
-        for_who: recipient === 'self' ? 'myself' : recipient === 'family' ? 'family' : 'other',
-        for_who_name: finalPatient,
-        service_type: service,
-        requested_date: date || new Date().toISOString().split('T')[0],
-        duration_minutes: numericDuration * 60,
-        center_name: selectedCenter,
-        center_address: finalLocation,
-        address: finalLocation,
-        client_name: finalPatient,
-        client_phone: finalPhone,
-        observations: notes || `Parentesco: ${patientRelation || contactRelation}`,
-        emergency_contact_name: contactName || finalPatient,
-        emergency_contact_phone: contactPhone || finalPhone,
-        emergency_contact_relationship: contactRelation || patientRelation || 'Familiar',
-        emergency_status: 'NORMAL'
-      };
-
-      if (time) {
-        payload.requested_time = time;
-      }
-
-      // 1. Guardar en service_requests con columnas verificadas
-      const { data: srvData, error: srvError } = await supabase
-        .from('service_requests')
-        .insert([payload])
-        .select()
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, full_name, phone')
+        .eq('id', user.id)
         .single();
 
-      if (srvError) throw srvError;
+      const hasUrlDiscount = searchParams.get('discount') === '5';
+      if (profile?.role === 'COMPANION' || hasUrlDiscount) {
+        setDiscountPercent(5);
+      }
 
-      // 2. Registrar pre-orden en la tabla payments
-      await supabase.from('payments').insert([{
-        service_request_id: srvData.id,
-        user_id: user?.id || null,
-        amount: total,
-        currency: 'DOP',
-        status: 'PENDING',
-        payment_method: 'TARJETA'
-      }]);
+      setFormData(prev => ({
+        ...prev,
+        contactName: profile?.full_name || '',
+        contactPhone: profile?.phone || '',
+      }));
+    }
+    checkAuth();
+  }, [router, searchParams, supabase]);
 
-      // 3. Disparar WhatsApp / Notificación
-      await dispararNotificacionWhatsApp(finalPatient, finalPhone, finalLocation);
+  const RATE_PER_HOUR = 900;
+  const subtotal = formData.hours * RATE_PER_HOUR;
+  const discountAmount = (subtotal * discountPercent) / 100;
+  const total = subtotal - discountAmount;
 
-      localStorage.setItem('juntos_meet_point', finalLocation);
-      localStorage.setItem('juntos_current_service_id', srvData.id);
+  function updateField(field: string, value: any) {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  }
 
-      toast({ 
-        title: '¡Servicio Solicitado!', 
-        description: 'Hemos registrado la orden exitosamente.', 
-        variant: 'success' 
-      });
+  function handleNext() {
+    if (step < 9) setStep(step + 1);
+  }
 
-      router.push(`/admin/payments?service_id=${srvData.id}&amount=${total}`);
-    } catch (error: any) {
-      console.error(error);
-      toast({
-        title: 'Error al procesar',
-        description: error.message || 'No se pudo guardar la solicitud.',
-        variant: 'error'
-      });
+  function handlePrev() {
+    if (step > 1) setStep(step - 1);
+  }
+
+  function handleGetDeviceLocation() {
+    if (!navigator.geolocation) {
+      alert('Tu dispositivo no soporta geolocalización directa.');
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude.toFixed(6);
+        const lng = pos.coords.longitude.toFixed(6);
+        updateField('geoLat', lat);
+        updateField('geoLng', lng);
+        updateField('mapsUrl', `https://www.google.com/maps?q=${lat},${lng}`);
+        setLocating(false);
+      },
+      () => {
+        alert('No se pudo obtener GPS. Puedes buscar en Google Maps RD y pegar el enlace.');
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
+  async function handleSubmitService() {
+    setLoading(true);
+    try {
+      // Consolidación de campos para evitar error 'city column does not exist'
+      const ubicacionConsolidada = `${formData.facilityName || 'Domicilio'} - ${formData.address ? formData.address + ', ' : ''}${formData.city}${formData.geoLat ? ` [GPS: ${formData.geoLat}, ${formData.geoLng}]` : ''}`;
+      
+      const recipientFinal = formData.forWhom === 'SELF' 
+        ? (user.user_metadata?.full_name || 'Titular Solicitante') 
+        : (formData.recipientName || 'Familiar');
+
+      const notasConsolidadas = [
+        `Movilidad: ${formData.mobilitySupport}`,
+        formData.specialInstructions ? `Instrucciones: ${formData.specialInstructions}` : '',
+        formData.mapsUrl ? `Punto Google Maps: ${formData.mapsUrl}` : ''
+      ].filter(Boolean).join(' | ');
+
+      const { error } = await supabase
+        .from('service_requests')
+        .insert([{
+          user_id: user.id,
+          recipient_name: recipientFinal,
+          recipient_phone: formData.recipientPhone || formData.contactPhone,
+          service_type: formData.serviceType,
+          facility_or_location: ubicacionConsolidada,
+          scheduled_date: formData.serviceDate,
+          scheduled_time: formData.serviceTime,
+          duration_hours: formData.hours,
+          rate_total: total,
+          discount_applied: discountAmount,
+          mobility_notes: formData.mobilitySupport,
+          special_notes: notasConsolidadas,
+          contact_supervisor_name: formData.contactName,
+          contact_supervisor_phone: formData.contactPhone,
+          status: 'PENDING_DISPATCH',
+          emergency_status: 'NORMAL'
+        }]);
+
+      if (error) throw error;
+
+      alert('✓ Solicitud confirmada exitosamente en la Mesa de Operaciones Central.');
+      router.push('/profile');
+    } catch (err: any) {
+      alert(`Error al registrar el servicio: ${err.message || 'Intente nuevamente'}`);
+    } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20">
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white pb-20">
       <Navbar />
-      
-      <main className="container max-w-3xl py-8 px-4">
-        {/* Indicador de progreso */}
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3 border bg-white px-4 py-2 rounded-full shadow-sm">
-            <div className="bg-juntos-blue text-white w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold">
+
+      <div className="absolute top-0 inset-x-0 h-96 bg-gradient-to-b from-emerald-500/10 via-slate-900/0 to-transparent pointer-events-none" />
+
+      <main className="flex-1 max-w-3xl mx-auto px-4 sm:px-6 pt-8 w-full relative z-10 space-y-6">
+        
+        {/* BARRA SUPERIOR */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="w-7 h-7 rounded-full bg-emerald-500 text-slate-950 font-black text-xs flex items-center justify-center shadow-lg shadow-emerald-500/20">
               {step}
-            </div>
-            <p className="text-sm font-bold text-slate-700 tracking-wider uppercase">Paso {step} de 9</p>
+            </span>
+            <span className="text-xs font-mono font-bold tracking-wider text-slate-300 uppercase">
+              PASO {step} DE 9
+            </span>
           </div>
-          <div className={`px-4 py-2 rounded-full text-sm font-bold shadow-sm ${isNightShift ? 'bg-indigo-900 text-white' : 'bg-slate-800 text-white'}`}>
-            {isNightShift ? '🌙 RD$ 1,100/h' : '☀️️ RD$ 900/h'}
+
+          <div className="flex items-center gap-2">
+            {discountPercent > 0 && (
+              <span className="bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 font-mono text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1">
+                <Tag className="w-3 h-3" /> 5% DESC. FAMILIAR
+              </span>
+            )}
+            <span className="bg-slate-950/90 border border-slate-800 text-amber-400 font-mono text-xs px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-sm">
+              <span>RD$ 900/h</span>
+            </span>
           </div>
         </div>
 
-        <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-200 mb-6 min-h-[400px]">
+        {/* BARRA DE PROGRESO */}
+        <div className="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden">
+          <div 
+            className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-300 rounded-full"
+            style={{ width: `${(step / 9) * 100}%` }}
+          />
+        </div>
+
+        {/* TARJETA PRINCIPAL OSCURA */}
+        <div className="bg-slate-950/80 border border-slate-800 rounded-3xl p-6 sm:p-9 shadow-2xl backdrop-blur-xl space-y-6">
           
-          {/* PASO 1: PARA QUIÉN */}
+          {/* PASO 1 */}
           {step === 1 && (
             <div className="space-y-6">
-              <div className="space-y-1">
-                <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">¿Para quién es el acompañamiento?</h2>
-                <p className="text-slate-600 text-base">Elige la opción que mejor describa a la persona que recibirá el apoyo:</p>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  ¿Para quién es el acompañamiento?
+                </h1>
+                <p className="text-xs text-slate-400 mt-1">
+                  Elige la persona que recibirá el apoyo humano:
+                </p>
               </div>
 
               <div className="space-y-3">
-                <div onClick={() => setRecipient('self')} className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${recipient === 'self' ? 'border-juntos-blue bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
-                  <div className="flex items-center gap-4">
-                    <User className="w-8 h-8 text-slate-500 bg-slate-100 p-1.5 rounded-full" />
+                <button
+                  type="button"
+                  onClick={() => updateField('forWhom', 'SELF')}
+                  className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                    formData.forWhom === 'SELF'
+                      ? 'bg-emerald-950/30 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
+                      : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-slate-800/80 flex items-center justify-center text-emerald-400">
+                      <User className="w-5 h-5" />
+                    </div>
                     <div>
-                      <p className="text-lg font-bold text-slate-900">Para mí (Yo mismo)</p>
-                      <p className="text-sm text-slate-600">Necesito que un acompañante me asista.</p>
+                      <h4 className="font-bold text-sm text-white">Para mí (Yo mismo)</h4>
+                      <p className="text-xs text-slate-400">Necesito que un acompañante me asista</p>
                     </div>
                   </div>
-                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${recipient === 'self' ? 'border-juntos-blue bg-juntos-blue' : 'border-slate-300'}`}>
-                    {recipient === 'self' && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${formData.forWhom === 'SELF' ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'}`}>
+                    {formData.forWhom === 'SELF' && <div className="w-2 h-2 rounded-full bg-slate-950" />}
                   </div>
-                </div>
+                </button>
 
-                <div onClick={() => setRecipient('family')} className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${recipient === 'family' ? 'border-juntos-blue bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
-                  <div className="flex items-center gap-4">
-                    <Users className="w-8 h-8 text-slate-500 bg-slate-100 p-1.5 rounded-full" />
+                <button
+                  type="button"
+                  onClick={() => updateField('forWhom', 'FAMILY')}
+                  className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                    formData.forWhom === 'FAMILY'
+                      ? 'bg-emerald-950/30 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
+                      : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-slate-800/80 flex items-center justify-center text-emerald-400">
+                      <Users className="w-5 h-5" />
+                    </div>
                     <div>
-                      <p className="text-lg font-bold text-slate-900">Para un familiar</p>
-                      <p className="text-sm text-slate-600">Mamá, Papá, Pareja o pariente.</p>
+                      <h4 className="font-bold text-sm text-white">Para un familiar</h4>
+                      <p className="text-xs text-slate-400">Mamá, Papá, Pareja o pariente cercano</p>
                     </div>
                   </div>
-                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${recipient === 'family' ? 'border-juntos-blue bg-juntos-blue' : 'border-slate-300'}`}>
-                    {recipient === 'family' && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${formData.forWhom === 'FAMILY' ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'}`}>
+                    {formData.forWhom === 'FAMILY' && <div className="w-2 h-2 rounded-full bg-slate-950" />}
                   </div>
-                </div>
+                </button>
 
-                <div onClick={() => setRecipient('other')} className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${recipient === 'other' ? 'border-juntos-blue bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
-                  <div className="flex items-center gap-4">
-                    <HeartHandshake className="w-8 h-8 text-slate-500 bg-slate-100 p-1.5 rounded-full" />
+                <button
+                  type="button"
+                  onClick={() => updateField('forWhom', 'OTHER')}
+                  className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                    formData.forWhom === 'OTHER'
+                      ? 'bg-emerald-950/30 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
+                      : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-slate-800/80 flex items-center justify-center text-emerald-400">
+                      <HeartHandshake className="w-5 h-5" />
+                    </div>
                     <div>
-                      <p className="text-lg font-bold text-slate-900">Para otra persona</p>
-                      <p className="text-sm text-slate-600">Amigo, vecino o conocido.</p>
+                      <h4 className="font-bold text-sm text-white">Para otra persona</h4>
+                      <p className="text-xs text-slate-400">Amigo, allegado, vecino o colaborador</p>
                     </div>
                   </div>
-                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${recipient === 'other' ? 'border-juntos-blue bg-juntos-blue' : 'border-slate-300'}`}>
-                    {recipient === 'other' && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${formData.forWhom === 'OTHER' ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'}`}>
+                    {formData.forWhom === 'OTHER' && <div className="w-2 h-2 rounded-full bg-slate-950" />}
                   </div>
-                </div>
+                </button>
               </div>
 
-              {/* DESPLIEGUE AUTOMÁTICO DE DATOS DEL PACIENTE/BENEFICIARIO */}
-              {(recipient === 'family' || recipient === 'other') && (
-                <div className="mt-6 p-5 bg-blue-50/70 border-2 border-blue-200 rounded-2xl space-y-4 animate-in fade-in slide-in-from-top-3">
-                  <div className="flex items-center justify-between border-b border-blue-200/80 pb-2">
-                    <h3 className="text-sm font-bold text-blue-950 uppercase tracking-wide flex items-center gap-2">
-                      <Phone className="w-4 h-4 text-blue-600" />
-                      Datos de la persona que recibirá la atención
-                    </h3>
-                    <span className="text-[10px] font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full">
+              {formData.forWhom !== 'SELF' && (
+                <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-emerald-400" /> Datos de la persona acompañada
+                    </span>
+                    <span className="text-[10px] bg-emerald-950 text-emerald-400 font-mono px-2 py-0.5 rounded border border-emerald-800/40">
                       Requerido
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-xs font-bold text-slate-700">Nombre completo del paciente *</Label>
-                      <Input 
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="space-y-1">
+                      <label className="text-slate-300 font-bold block">Nombre completo *</label>
+                      <input
+                        type="text"
                         required
-                        value={patientName} 
-                        onChange={(e) => setPatientName(e.target.value)} 
+                        value={formData.recipientName}
+                        onChange={(e) => updateField('recipientName', e.target.value)}
                         placeholder="Ej: Doña Mercedes Altagracia"
-                        className="mt-1 h-12 bg-white text-base"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
                       />
                     </div>
 
-                    <div>
-                      <Label className="text-xs font-bold text-slate-700">WhatsApp / Teléfono directo *</Label>
-                      <Input 
-                        required
+                    <div className="space-y-1">
+                      <label className="text-slate-300 font-bold block">WhatsApp / Teléfono directo *</label>
+                      <input
                         type="tel"
-                        value={patientPhone} 
-                        onChange={(e) => setPatientPhone(e.target.value)} 
+                        required
+                        value={formData.recipientPhone}
+                        onChange={(e) => updateField('recipientPhone', e.target.value)}
                         placeholder="Ej: 809-555-0199"
-                        className="mt-1 h-12 bg-white text-base"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-2">
-                      <Label className="text-xs font-bold text-slate-700">Parentesco o relación contigo (Opcional)</Label>
-                      <Input 
-                        value={patientRelation} 
-                        onChange={(e) => setPatientRelation(e.target.value)} 
-                        placeholder="Ej: Mi madre, Abuelo, Tía..."
-                        className="mt-1 h-12 bg-white text-base"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
                       />
                     </div>
                   </div>
-
-                  <p className="text-xs text-blue-800 bg-blue-100/60 p-2.5 rounded-xl flex items-center gap-1.5">
-                    <CheckCircle className="w-4 h-4 shrink-0 text-blue-600" />
-                    El acompañante utilizará estos datos para contactar a la persona al llegar y confirmar la cita por WhatsApp.
-                  </p>
                 </div>
               )}
             </div>
           )}
 
-          {/* PASO 2: SERVICIO */}
+          {/* PASO 2 */}
           {step === 2 && (
             <div className="space-y-6">
-              <div className="space-y-1">
-                <h2 className="text-2xl font-bold text-slate-900">Tipo de Servicio</h2>
-                <p className="text-slate-600">Selecciona el tipo de apoyo que necesitas (Servicios no clínicos):</p>
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  Modalidad del Acompañamiento
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Soporte personal y logístico estrictamente no clínico:
+                </p>
               </div>
 
-              <div className="space-y-3">
-                <div onClick={() => setService('Acompañamiento en Clínica / Hospital')} className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${service === 'Acompañamiento en Clínica / Hospital' ? 'border-juntos-blue bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
-                  <Stethoscope className={`w-8 h-8 ${service === 'Acompañamiento en Clínica / Hospital' ? 'text-juntos-blue' : 'text-slate-400'}`} />
-                  <div>
-                    <p className="text-lg font-bold text-slate-900">Acompañamiento en Clínica / Hospital</p>
-                    <p className="text-sm text-slate-600">Asistencia no médica durante consultas, laboratorios o internamiento.</p>
-                  </div>
-                </div>
-
-                <div onClick={() => setService('Asistencia Diaria en el Hogar')} className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${service === 'Asistencia Diaria en el Hogar' ? 'border-juntos-blue bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
-                  <Home className={`w-8 h-8 ${service === 'Asistencia Diaria en el Hogar' ? 'text-juntos-blue' : 'text-slate-400'}`} />
-                  <div>
-                    <p className="text-lg font-bold text-slate-900">Asistencia Diaria en el Hogar</p>
-                    <p className="text-sm text-slate-600">Apoyo en tareas diarias, movilidad y compañía en casa.</p>
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {[
+                  { id: 'CLINIC_APPOINTMENT', title: 'Consultas o Estudios Médicos', desc: 'Espera en sala, asistencia de movilidad y soporte en farmacia.', icon: Stethoscope },
+                  { id: 'HOME_CARE', title: 'Asistencia y Compañía en Hogar', desc: 'Compañía activa, apoyo en movilidad dentro de casa y supervisión diurna.', icon: Home },
+                  { id: 'HOSPITAL_DISCHARGE', title: 'Alta Médica o Procedimiento', desc: 'Soporte presencial en trámites de egreso y traslado de retorno.', icon: Activity },
+                  { id: 'ERRANDS', title: 'Diligencias y Gestión Personal', desc: 'Acompañamiento a banco, compras o trámites cotidianos.', icon: HeartHandshake }
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const active = formData.serviceType === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => updateField('serviceType', item.id)}
+                      className={`p-4 rounded-2xl border text-left flex flex-col justify-between space-y-3 transition-all ${
+                        active 
+                          ? 'bg-emerald-950/30 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-emerald-400">
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <div className={`w-4 h-4 rounded-full border-2 ${active ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'}`} />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-white">{item.title}</h4>
+                        <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{item.desc}</p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* PASO 3: FECHA */}
+          {/* PASO 3 */}
           {step === 3 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                  <Calendar className="text-juntos-blue w-6 h-6" /> ¿Qué día es el servicio?
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  ¿Dónde se brindará el servicio?
                 </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Indica la ciudad y el centro médico o sector de encuentro:
+                </p>
               </div>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="text-lg p-3 h-14" />
+
+              <div className="space-y-4 text-xs">
+                <div className="space-y-1.5">
+                  <label className="text-slate-300 font-bold block">Ciudad / Municipio *</label>
+                  <select
+                    value={formData.city}
+                    onChange={(e) => updateField('city', e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition"
+                  >
+                    <option value="Distrito Nacional (Santo Domingo)">Distrito Nacional (Santo Domingo)</option>
+                    <option value="Santo Domingo Este">Santo Domingo Este</option>
+                    <option value="Santo Domingo Oeste">Santo Domingo Oeste</option>
+                    <option value="Santo Domingo Norte">Santo Domingo Norte</option>
+                    <option value="Santiago de los Caballeros">Santiago de los Caballeros</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-slate-300 font-bold block">Centro de Salud / Hospital o Referencia *</label>
+                  <input
+                    type="text"
+                    value={formData.facilityName}
+                    onChange={(e) => updateField('facilityName', e.target.value)}
+                    placeholder="Ej: CEDIMAT, HOMS, Clínica Abreu o Domicilio"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-slate-300 font-bold block">Dirección o sector específico</label>
+                  <input
+                    type="text"
+                    value={formData.address}
+                    onChange={(e) => updateField('address', e.target.value)}
+                    placeholder="Ej: Calle Ramón A. Castillo No. 20, Ensanche Ozama"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition"
+                  />
+                </div>
+              </div>
             </div>
           )}
 
-          {/* PASO 4: HORA */}
+          {/* PASO 4 */}
           {step === 4 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                  <Clock className="text-juntos-blue w-6 h-6" /> ¿A qué hora inicia?
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  Fecha y Hora de Inicio
                 </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  ¿Cuándo necesitas que el acompañante se presente?
+                </p>
               </div>
-              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="text-lg p-3 h-14" />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="space-y-1.5">
+                  <label className="text-slate-300 font-bold block">Fecha del servicio *</label>
+                  <div className="relative flex items-center">
+                    <Calendar className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                    <input
+                      type="date"
+                      required
+                      value={formData.serviceDate}
+                      onChange={(e) => updateField('serviceDate', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl py-3 pl-10 pr-3 text-white outline-none focus:border-emerald-500 transition [color-scheme:dark]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-slate-300 font-bold block">Hora de inicio *</label>
+                  <div className="relative flex items-center">
+                    <Clock className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                    <input
+                      type="time"
+                      required
+                      value={formData.serviceTime}
+                      onChange={(e) => updateField('serviceTime', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl py-3 pl-10 pr-3 text-white outline-none focus:border-emerald-500 transition [color-scheme:dark]"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* PASO 5: DURACIÓN */}
+          {/* PASO 5 */}
           {step === 5 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">¿Cuántas horas necesitas?</h2>
-                <p className="text-slate-600 mt-1">Tarifa base: RD$900/h. Turno nocturno: RD$1,100/h.</p>
-              </div>
-
-              <div className="flex gap-4 mb-4">
-                <Button 
-                  type="button" 
-                  variant={isNightShift ? "outline" : "default"} 
-                  className={`w-1/2 h-12 ${!isNightShift ? 'bg-juntos-blue' : ''}`}
-                  onClick={() => setIsNightShift(false)}
-                >
-                  ☀️ Diurno (RD$ 900)
-                </Button>
-                <Button 
-                  type="button" 
-                  variant={isNightShift ? "default" : "outline"} 
-                  className={`w-1/2 h-12 ${isNightShift ? 'bg-indigo-900 hover:bg-indigo-800' : ''}`}
-                  onClick={() => setIsNightShift(true)}
-                >
-                  🌙 Nocturno (RD$ 1,100)
-                </Button>
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  Duración del Servicio
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Selecciona la cantidad estimada de horas:
+                </p>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[1, 2, 4, 8].map((hrs) => (
-                  <div key={hrs} onClick={() => setDuration(hrs)} className={`p-4 rounded-xl border-2 text-center cursor-pointer transition-all ${duration === hrs ? (isNightShift ? 'border-indigo-900 bg-indigo-900 text-white' : 'border-juntos-blue bg-juntos-blue text-white') : 'border-slate-200 bg-white text-slate-800'}`}>
-                    <p className="text-xl font-bold">{hrs}h</p>
-                  </div>
+                {[2, 3, 4, 6, 8, 10, 12].map((h) => (
+                  <button
+                    key={h}
+                    type="button"
+                    onClick={() => updateField('hours', h)}
+                    className={`p-4 rounded-2xl border text-center transition-all ${
+                      formData.hours === h
+                        ? 'bg-emerald-950/40 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
+                        : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="text-2xl font-black block text-white">{h}h</span>
+                    <span className="text-[11px] text-slate-400 font-mono mt-1 block">
+                      RD$ {(h * RATE_PER_HOUR).toLocaleString()}
+                    </span>
+                  </button>
                 ))}
               </div>
 
-              <div className="pt-4">
-                <Label className="text-sm font-bold text-slate-700">O escribe una cantidad personalizada de horas:</Label>
-                <Input 
-                  type="number" 
-                  min="1" 
-                  max="24"
-                  placeholder="Ej: 12" 
-                  value={duration} 
-                  onChange={(e) => setDuration(e.target.value === '' ? '' : Number(e.target.value))} 
-                  className="mt-2 h-12 text-lg" 
+              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex justify-between items-center text-xs">
+                <div>
+                  <p className="text-slate-400">Total calculado para {formData.hours} horas:</p>
+                  <p className="text-xl font-black text-white">RD$ {total.toLocaleString()}</p>
+                </div>
+                {discountPercent > 0 && (
+                  <span className="text-emerald-400 font-bold bg-emerald-950/80 border border-emerald-600/40 px-3 py-1 rounded-xl text-xs">
+                    Incluye 5% de descuento familiar
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* PASO 6: MAPA Y GEOLOCALIZACIÓN */}
+          {step === 6 && (
+            <div className="space-y-6">
+              <div>
+                <div className="inline-flex items-center gap-1.5 bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 px-3 py-1 rounded-full text-[11px] font-mono font-bold mb-2">
+                  <Navigation className="w-3.5 h-3.5" /> MAPA Y LOCALIZACIÓN EN REPÚBLICA DOMINICANA
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  Punto de Encuentro y Movilidad
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Especifica dónde esperará la persona que recibirá el servicio en RD.
+                </p>
+              </div>
+
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-emerald-400" /> Origen de la solicitud
+                  </span>
+                  {formData.forWhom !== 'SELF' && (
+                    <span className="text-[10px] bg-blue-950 border border-blue-800/60 text-blue-400 px-2.5 py-0.5 rounded-full font-bold">
+                      Solicitud familiar / Diáspora
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex flex-col sm:flex-row gap-2.5">
+                    <button
+                      type="button"
+                      onClick={handleGetDeviceLocation}
+                      disabled={locating}
+                      className="flex-1 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 font-bold py-2.5 px-3.5 rounded-xl text-xs flex items-center justify-center gap-2 transition disabled:opacity-50"
+                    >
+                      <LocateFixed className="w-4 h-4 text-emerald-400" />
+                      <span>{locating ? 'Leyendo GPS...' : 'Usar GPS de este teléfono (Solo si estoy en RD)'}</span>
+                    </button>
+
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formData.address || formData.facilityName || 'Santo Domingo, Republica Dominicana')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition shrink-0"
+                    >
+                      <span>Buscar en Google Maps RD</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    💡 Si solicitas desde el extranjero o tu oficina, busca en Google Maps RD y copia el enlace o punto exacto debajo.
+                  </p>
+                </div>
+
+                <div className="space-y-3 pt-2 text-xs">
+                  <div className="space-y-1">
+                    <label className="text-slate-300 font-bold block">
+                      Enlace compartido de Google Maps o Coordenadas (Opcional)
+                    </label>
+                    <input
+                      type="url"
+                      value={formData.mapsUrl}
+                      onChange={(e) => updateField('mapsUrl', e.target.value)}
+                      placeholder="Ej: https://maps.app.goo.gl/... o https://google.com/maps?q=18.486,-69.931"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white placeholder-slate-600 outline-none focus:border-emerald-500 font-mono transition"
+                    />
+                  </div>
+
+                  {formData.geoLat && (
+                    <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-600/30 flex items-center justify-between text-[11px] text-emerald-300 font-mono">
+                      <span>✓ Coordenadas fijadas: {formData.geoLat}, {formData.geoLng}</span>
+                      <button
+                        type="button"
+                        onClick={() => { updateField('geoLat', ''); updateField('geoLng', ''); updateField('mapsUrl', ''); }}
+                        className="text-rose-400 hover:underline ml-2"
+                      >
+                        Limpiar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Requerimientos de movilidad de la persona a acompañar
+                </h4>
+                {[
+                  { id: 'NONE', title: 'Movilidad independiente', desc: 'Camina por sí mismo sin apoyo técnico.' },
+                  { id: 'ARM_ASSIST', title: 'Apoyo de brazo / Paso lento', desc: 'Requiere soporte de brazo para caminar o subir aceras/escalones.' },
+                  { id: 'WALKER', title: 'Uso de Andador / Bastón', desc: 'Lleva su propio equipo de apoyo ambulatorio.' },
+                  { id: 'WHEELCHAIR', title: 'Uso de Silla de Ruedas', desc: 'El acompañante asistirá empujando y trasladando la silla.' }
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => updateField('mobilitySupport', item.id)}
+                    className={`w-full p-3.5 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                      formData.mobilitySupport === item.id
+                        ? 'bg-emerald-950/30 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
+                        : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
+                    }`}
+                  >
+                    <div>
+                      <h4 className="font-bold text-xs text-white">{item.title}</h4>
+                      <p className="text-[11px] text-slate-400">{item.desc}</p>
+                    </div>
+                    <div className={`w-4 h-4 rounded-full border-2 ${formData.mobilitySupport === item.id ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'}`} />
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-1.5 text-xs">
+                <label className="text-slate-300 font-bold block">
+                  Punto de encuentro específico o referencia de llegada en RD
+                </label>
+                <textarea
+                  rows={2}
+                  value={formData.specialInstructions}
+                  onChange={(e) => updateField('specialInstructions', e.target.value)}
+                  placeholder="Ej: Casa blanca con rejas negras frente al colmado; o en CEDIMAT en sala de espera Piso 2..."
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition resize-none"
                 />
               </div>
             </div>
           )}
 
-          {/* PASO 6: CENTRO MÉDICO O DIRECCIÓN */}
-          {step === 6 && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                  <MapPin className="text-juntos-blue w-6 h-6" /> ¿En qué centro o dirección será?
-                </h2>
-              </div>
-              
-              <div className="flex gap-2">
-                <select value={selectedCenter} onChange={(e) => setSelectedCenter(e.target.value)} className="flex-1 h-14 px-3 border rounded-lg text-lg bg-white font-medium text-slate-800">
-                  <option value="CEDIMAT (Plaza de la Salud)">CEDIMAT (Plaza de la Salud)</option>
-                  <option value="Clínica Abreu">Clínica Abreu</option>
-                  <option value="HOMS">HOMS</option>
-                  <option value="Centro Médico Real">Centro Médico Real</option>
-                  <option value="Otro">Escribir otra ubicación / Casa</option>
-                </select>
-                <Button onClick={handleGeoLocation} disabled={isLocating} className="h-14 w-14 bg-slate-100 hover:bg-slate-200 text-slate-700 border" title="Usar mi ubicación actual">
-                  <LocateFixed className={`w-6 h-6 ${isLocating ? 'animate-spin' : ''}`} />
-                </Button>
-              </div>
-
-              {selectedCenter === 'Otro' && (
-                <div className="mt-4 animate-in fade-in slide-in-from-top-2">
-                  <Label>Escribe el nombre del centro o dirección exacta:</Label>
-                  <textarea 
-                    value={customCenter} 
-                    onChange={(e) => setCustomCenter(e.target.value)} 
-                    placeholder="Ej. Hospital Traumatológico Dr. Ney Arias Lora, Av. Charles de Gaulle."
-                    className="w-full p-4 mt-2 border rounded-xl min-h-[100px] text-base outline-none focus:border-juntos-blue"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* PASO 7: NOTAS */}
+          {/* PASO 7 */}
           {step === 7 && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-slate-900">Instrucciones especiales (Opcional)</h2>
-              <textarea 
-                value={notes} 
-                onChange={(e) => setNotes(e.target.value)} 
-                placeholder="Ej. Llevar silla de ruedas, problemas de audición, paciente hipertenso..."
-                className="w-full p-4 border rounded-xl min-h-[120px] text-base focus:border-juntos-blue outline-none"
-              />
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  Contacto de Emergencia y Reportes
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Persona que recibirá reportes de la Mesa de Operaciones por WhatsApp durante el servicio:
+                </p>
+              </div>
+
+              <div className="space-y-4 text-xs">
+                <div className="space-y-1.5">
+                  <label className="text-slate-300 font-bold block">Nombre del familiar responsable *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.contactName}
+                    onChange={(e) => updateField('contactName', e.target.value)}
+                    placeholder="Ej: Carlos Domínguez"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-slate-300 font-bold block">WhatsApp / Teléfono para reportes *</label>
+                    <input
+                      type="tel"
+                      required
+                      value={formData.contactPhone}
+                      onChange={(e) => updateField('contactPhone', e.target.value)}
+                      placeholder="+1 809-555-0100"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-slate-300 font-bold block">Parentesco</label>
+                    <select
+                      value={formData.relationship}
+                      onChange={(e) => updateField('relationship', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition"
+                    >
+                      <option value="Hijo(a)">Hijo(a)</option>
+                      <option value="Cónyuge">Cónyuge / Pareja</option>
+                      <option value="Hermano(a)">Hermano(a)</option>
+                      <option value="Otro">Otro familiar / Amigo</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* PASO 8: CONTACTO */}
+          {/* PASO 8 */}
           {step === 8 && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-slate-900">Contacto de emergencia</h2>
-              <div className="space-y-4">
-                <div><Label>Nombre completo</Label><Input value={contactName} onChange={(e) => setContactName(e.target.value)} className="h-12" /></div>
-                <div><Label>WhatsApp / Teléfono</Label><Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} className="h-12" /></div>
-                <div>
-                  <Label>Parentesco</Label>
-                  <select value={contactRelation} onChange={(e) => setContactRelation(e.target.value)} className="w-full h-12 px-3 border rounded-lg bg-white">
-                    <option value="Hijo/a">Hijo/a</option>
-                    <option value="Pareja">Pareja / Cónyuge</option>
-                    <option value="Familiar">Familiar general</option>
-                  </select>
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  Comprobante Fiscal Dominicano
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Emisión oficial de recibo digital o factura con valor fiscal (NCF):
+                </p>
+              </div>
+
+              <div className="space-y-4 text-xs">
+                <div className="flex items-center gap-3 bg-slate-900/60 p-4 rounded-2xl border border-slate-800 cursor-pointer" onClick={() => updateField('requiresNCF', !formData.requiresNCF)}>
+                  <input
+                    type="checkbox"
+                    checked={formData.requiresNCF}
+                    onChange={(e) => updateField('requiresNCF', e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500 bg-slate-950 border-slate-700"
+                  />
+                  <div>
+                    <h4 className="font-bold text-white text-xs">¿Requiere Factura con Crédito Fiscal (NCF tipo B01)?</h4>
+                    <p className="text-[11px] text-slate-400">Para empresas o deducción fiscal autorizada</p>
+                  </div>
                 </div>
+
+                {formData.requiresNCF && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                    <div className="space-y-1.5">
+                      <label className="text-slate-300 font-bold block">RNC o Cédula fiscal *</label>
+                      <input
+                        type="text"
+                        value={formData.rncOrCedula}
+                        onChange={(e) => updateField('rncOrCedula', e.target.value)}
+                        placeholder="Ej: 1-01-00000-0"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-slate-300 font-bold block">Razón Social *</label>
+                      <input
+                        type="text"
+                        value={formData.fiscalName}
+                        onChange={(e) => updateField('fiscalName', e.target.value)}
+                        placeholder="Nombre registrado en DGII"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* PASO 9: FACTURA / RESUMEN */}
+          {/* PASO 9 */}
           {step === 9 && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-slate-900">Facturación y Resumen</h2>
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 space-y-5">
-                <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm">
-                  <div>
-                    <p className="font-bold text-slate-500">PACIENTE A ASISTIR</p>
-                    <p className="font-semibold text-slate-900">
-                      {recipient === 'self' ? 'Para mí' : `${patientName} (${patientPhone})`}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="font-bold text-slate-500">FECHA Y HORA</p>
-                    <p className="font-semibold text-slate-900">{date || 'Hoy'} • {time || '08:00 AM'}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="font-bold text-slate-500">SERVICIO</p>
-                    <p className="font-semibold text-slate-900">{service}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="font-bold text-slate-500">LUGAR</p>
-                    <p className="font-semibold text-slate-900">{selectedCenter === 'Otro' ? customCenter : selectedCenter}</p>
-                  </div>
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  Resumen de tu Solicitud
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Verifica los detalles antes de enviar a la Mesa de Operaciones Central:
+                </p>
+              </div>
+
+              <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3.5 text-xs text-slate-300">
+                <div className="flex justify-between border-b border-slate-800/80 pb-2">
+                  <span className="text-slate-400">Modalidad:</span>
+                  <span className="font-bold text-white">
+                    {formData.serviceType === 'CLINIC_APPOINTMENT' ? 'Consulta / Estudio Médico' : 'Asistencia en Hogar'}
+                  </span>
                 </div>
 
-                <div className="pt-4 border-t border-slate-200 space-y-2 text-sm">
-                  <div className="flex justify-between text-slate-600"><span>Subtotal ({numericDuration} hrs {isNightShift ? '🌙' : '☀️'})</span><span>RD$ {subtotal.toFixed(2)}</span></div>
-                  <div className="flex justify-between text-slate-600"><span>ITBIS (18%)</span><span>RD$ {itbis.toFixed(2)}</span></div>
-                  <div className="flex justify-between text-slate-600"><span>Seguro de Acompañante (5%)</span><span>RD$ {insuranceFee.toFixed(2)}</span></div>
-                  <div className="flex justify-between text-slate-600"><span>Cargo por uso de plataforma</span><span>RD$ {platformFee.toFixed(2)}</span></div>
+                <div className="flex justify-between border-b border-slate-800/80 pb-2">
+                  <span className="text-slate-400">Ubicación y Sector:</span>
+                  <span className="font-bold text-white text-right">
+                    {formData.facilityName || 'Domicilio'} ({formData.city})
+                  </span>
                 </div>
 
-                <div className="pt-4 border-t border-slate-200 flex justify-between items-end">
-                  <p className="text-base font-bold text-slate-800">TOTAL A PAGAR</p>
-                  <p className="text-3xl font-black text-juntos-blue">RD$ {total.toLocaleString('es-DO', {minimumFractionDigits: 2})}</p>
+                {formData.geoLat && (
+                  <div className="flex justify-between border-b border-slate-800/80 pb-2">
+                    <span className="text-slate-400">Punto GPS Fijado:</span>
+                    <span className="font-mono text-emerald-400 font-bold">
+                      {formData.geoLat}, {formData.geoLng}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex justify-between border-b border-slate-800/80 pb-2">
+                  <span className="text-slate-400">Fecha y hora:</span>
+                  <span className="font-bold text-white">{formData.serviceDate} a las {formData.serviceTime}</span>
                 </div>
+
+                <div className="flex justify-between border-b border-slate-800/80 pb-2">
+                  <span className="text-slate-400">Duración:</span>
+                  <span className="font-bold text-white">{formData.hours} Horas</span>
+                </div>
+
+                <div className="flex justify-between border-b border-slate-800/80 pb-2">
+                  <span className="text-slate-400">Subtotal:</span>
+                  <span className="font-mono text-white">RD$ {subtotal.toLocaleString()}</span>
+                </div>
+
+                {discountPercent > 0 && (
+                  <div className="flex justify-between border-b border-slate-800/80 pb-2 text-emerald-400 font-bold">
+                    <span>Descuento de red (5%):</span>
+                    <span>- RD$ {discountAmount.toLocaleString()}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-1 text-sm font-black text-white">
+                  <span>Total a Pagar:</span>
+                  <span className="text-emerald-400 font-mono text-base">RD$ {total.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex items-start gap-3 text-xs text-slate-400">
+                <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                <p className="leading-relaxed text-[11px]">
+                  <strong>Garantía JUNTOS:</strong> Todos los acompañantes cuentan con depuración penal PGR y carnet de identificación. El servicio es de asistencia y movilidad 100% no clínico.
+                </p>
               </div>
             </div>
           )}
+
+          {/* BOTONERA NAVEGACIÓN */}
+          <div className="flex items-center justify-between pt-6 border-t border-slate-800">
+            {step > 1 ? (
+              <button
+                type="button"
+                onClick={handlePrev}
+                className="bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold px-5 py-3 rounded-xl flex items-center gap-2 text-xs border border-slate-800 transition"
+              >
+                <ArrowLeft className="w-4 h-4" /> Anterior
+              </button>
+            ) : <div />}
+
+            {step < 9 ? (
+              <button
+                type="button"
+                onClick={handleNext}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-3 rounded-xl flex items-center gap-2 text-xs shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02]"
+              >
+                <span>Continuar</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleSubmitService}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-8 py-3.5 rounded-xl flex items-center gap-2 text-xs shadow-xl shadow-emerald-500/25 transition-all hover:scale-[1.02] disabled:opacity-50"
+              >
+                <span>{loading ? 'Enviando a Mesa de Operaciones...' : 'Confirmar y Despachar Acompañante'}</span>
+                <CheckCircle2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
         </div>
 
-        {/* CONTROLES DE NAVEGACIÓN */}
-        <div className="flex gap-4 items-center">
-          {step > 1 && (
-            <Button variant="outline" size="lg" onClick={prevStep} className="w-1/3 border-2 h-14 text-base font-bold">
-              <ChevronLeft className="w-5 h-5 mr-1" /> Atrás
-            </Button>
-          )}
-          {step < 9 ? (
-            <Button size="lg" onClick={nextStep} className={`h-14 text-base font-bold text-white bg-juntos-blue hover:bg-juntos-blue/90 ${step === 1 ? 'w-full' : 'w-2/3'}`}>
-              Continuar <ChevronRight className="w-5 h-5 ml-1" />
-            </Button>
-          ) : (
-            <Button size="lg" onClick={handleSubmit} disabled={loading || numericDuration === 0} className="w-2/3 h-14 text-base font-bold bg-juntos-green text-white hover:bg-juntos-green/90">
-              {loading ? 'Procesando Tarjeta y WhatsApp...' : `Pagar RD$ ${total.toLocaleString('es-DO', {minimumFractionDigits: 2})}`}
-            </Button>
-          )}
+        <div className="text-center text-[11px] text-slate-500 flex items-center justify-center gap-1.5">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+          <span>Mesa de Operaciones activa 24/7 en Santo Domingo y Santiago • JUNTOS ASISTENCIA RD</span>
         </div>
+
       </main>
     </div>
+  );
+}
+
+export default function NewServicePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-900 flex items-center justify-center text-slate-400 text-xs">Cargando reserva...</div>}>
+      <ServiceBookingWizard />
+    </Suspense>
   );
 }
