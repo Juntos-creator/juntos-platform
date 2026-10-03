@@ -22,7 +22,21 @@ import {
 } from 'lucide-react';
 import { Navbar } from '@/components/navbar';
 
+// CONFIGURACIÓN CENTRALIZADA: Dejar vacío hasta que tengas el número oficial asignado
+const WHATSAPP_NUMERO_OFICIAL = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '';
+
 export default function HomePage() {
+  function handleWhatsAppClick(e: React.MouseEvent) {
+    if (!WHATSAPP_NUMERO_OFICIAL) {
+      e.preventDefault();
+      alert('🟢 Central de Asistencia JUNTOS: Nuestra línea oficial de WhatsApp se encuentra en fase final de enlace. Puedes realizar tu solicitud directamente a través del botón "Solicitar Acompañante Ahora".');
+      return;
+    }
+
+    const mensaje = encodeURIComponent('Hola, deseo solicitar información sobre el servicio de acompañamiento y asistencia no clínica.');
+    window.open(`https://wa.me/${WHATSAPP_NUMERO_OFICIAL}?text=${mensaje}`, '_blank');
+  }
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
       <Navbar />
@@ -63,15 +77,19 @@ export default function HomePage() {
                     <ArrowRight className="w-5 h-5" />
                   </Link>
 
-                  <a
-                    href="https://wa.me/18095550100?text=Hola,%20deseo%20información%20sobre%20el%20servicio%20de%20acompañamiento%20no%20clínico"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full sm:w-auto bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold px-6 py-4 rounded-2xl flex items-center justify-center gap-2 text-base transition"
+                  <button
+                    type="button"
+                    onClick={handleWhatsAppClick}
+                    className="w-full sm:w-auto bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold px-6 py-4 rounded-2xl flex items-center justify-center gap-2 text-base transition hover:scale-[1.01]"
                   >
                     <MessageCircle className="w-5 h-5 text-emerald-400" />
                     <span>Hablar por WhatsApp</span>
-                  </a>
+                    {!WHATSAPP_NUMERO_OFICIAL && (
+                      <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full font-mono font-medium">
+                        Por asignar
+                      </span>
+                    )}
+                  </button>
                 </div>
 
                 {/* INSIGNIAS RÁPIDAS DE CONFIANZA */}
@@ -91,7 +109,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* CARD RESUMEN / TARJETA COTIZADORA */}
+              {/* CARD RESUMEN */}
               <div className="lg:col-span-5">
                 <div className="bg-slate-950/80 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative backdrop-blur-xl">
                   <div className="flex items-center justify-between pb-4 border-b border-slate-800">
@@ -148,7 +166,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* BENEFICIOS / VALORES CLAVE */}
+        {/* BENEFICIOS */}
         <section className="py-16 border-b border-slate-800 bg-slate-950/40">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="text-center max-w-2xl mx-auto mb-12">
@@ -190,7 +208,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* CÓMO FUNCIONA (3 PASOS) */}
+        {/* CÓMO FUNCIONA */}
         <section className="py-20 border-b border-slate-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="text-center max-w-2xl mx-auto mb-16">
@@ -236,7 +254,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* MODALIDADES DE SERVICIO */}
+        {/* MODALIDADES */}
         <section className="py-20 border-b border-slate-800 bg-slate-950/30">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="text-center max-w-2xl mx-auto mb-14">
@@ -289,11 +307,11 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* PREGUNTAS FRECUENTES (FAQ) */}
+        {/* PREGUNTAS FRECUENTES */}
         <section className="py-20 border-b border-slate-800">
           <div className="max-w-4xl mx-auto px-4 sm:px-6">
             <div className="text-center mb-12">
-              <h2 className="text-xs uppercase font-mono font-bold tracking-widest text-emerald-400">Dudas resueltas</h2>
+              <h2 className="text-xs uppercase font-mono font-bold tracking-widest text-emerald-400">Alcance de los servicios</h2>
               <p className="text-3xl font-black text-white mt-1">Preguntas Frecuentes</p>
             </div>
 
@@ -301,30 +319,30 @@ export default function HomePage() {
               <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl space-y-2">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <HelpCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                  ¿El servicio incluye cuidados de enfermería o administración de medicamentos invasivos?
+                  ¿El acompañante realiza procedimientos médicos o de enfermería?
                 </h3>
                 <p className="text-slate-400 leading-relaxed pl-6">
-                  <strong>No.</strong> JUNTOS brinda asistencia personal, de movilidad, acompañamiento y soporte estrictamente no clínico. No sustituye al médico ni al personal de enfermería especializado.
+                  <strong>No.</strong> JUNTOS brinda soporte logístico, movilidad y compañía <strong>estrictamente no clínica</strong>. Nuestros acompañantes no inyectan, no recetan, no curan heridas quirúrgicas ni realizan ningún procedimiento clínico reservado a médicos y enfermeros licenciados.
                 </p>
               </div>
 
               <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl space-y-2">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <HelpCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                  ¿Puedo reservar para mi madre si yo estoy fuera del país o en mi trabajo?
+                  ¿Puedo coordinar el acompañamiento si yo estoy en mi trabajo o en el extranjero?
                 </h3>
                 <p className="text-slate-400 leading-relaxed pl-6">
-                  Sí. En el primer paso del formulario puedes elegir "Para un familiar". El acompañante se coordinará con el paciente y te mantendrá informado por WhatsApp durante todo el servicio.
+                  Totalmente. En el formulario indicas los datos de tu familiar. Nuestro acompañante se encontrará con él y la Mesa de Operaciones te enviará notificaciones por WhatsApp en cada momento importante.
                 </p>
               </div>
 
               <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl space-y-2">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <HelpCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                  ¿Cómo se realiza el pago?
+                  ¿Cómo se efectúa el cobro y comprobante?
                 </h3>
                 <p className="text-slate-400 leading-relaxed pl-6">
-                  Aceptamos tarjetas de crédito o débito de manera 100% segura en pesos dominicanos (RD$). Emitimos comprobante oficial y factura con NCF si es requerida.
+                  El pago se realiza en línea con tarjeta de débito o crédito en Pesos Dominicanos (RD$). Emitimos recibo digital y comprobante fiscal formal con NCF si tu empresa o persona lo requiere.
                 </p>
               </div>
             </div>
@@ -335,10 +353,10 @@ export default function HomePage() {
         <section className="py-20 bg-gradient-to-t from-slate-950 via-slate-900 to-slate-900">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center space-y-6">
             <h2 className="text-3xl sm:text-4xl font-black text-white">
-              Coordina el acompañamiento de tu ser querido hoy mismo
+              Seguridad y tranquilidad para tu familia
             </h2>
             <p className="text-sm text-slate-300 max-w-xl mx-auto">
-              Tranquilidad para ti, compañía de confianza para ellos. Disponibles 24 horas al día en todo el Gran Santo Domingo y Santiago.
+              Apoyo humano y confiable para las citas de salud de quienes más quieres. Cobertura disponible 24/7 en República Dominicana.
             </p>
             <div className="pt-2">
               <Link
