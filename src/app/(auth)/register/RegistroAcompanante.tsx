@@ -464,17 +464,26 @@ export default function RegistroAcompanante() {
   return (
     <div className="mx-auto min-h-screen max-w-lg bg-slate-50 px-4 py-8 font-sans text-slate-900">
       
-      {/* MODO AUDITORÍA EXCLUSIVO PARA ADMINISTRADORES */}
+      {/* MODO AUDITORÍA EXCLUSIVO PARA ADMINISTRADORES CON ENLACE A MESA DE OPERACIONES */}
       {esAdmin && (
-        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs">
-          <span className="font-semibold text-amber-900">🛠️ Auditoría RRHH/KYC (Vista Admin)</span>
-          <button
-            type="button"
-            onClick={handleCompletarDemo}
-            className="bg-amber-600 text-white font-bold px-3 py-1.5 rounded-lg hover:bg-amber-700 transition"
-          >
-            Llenar expediente prueba
-          </button>
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs shadow-sm">
+          <span className="font-semibold text-amber-900">🛠️ Vista Admin / RRHH</span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleCompletarDemo}
+              className="bg-amber-600 text-white font-bold px-3 py-1.5 rounded-lg hover:bg-amber-700 transition"
+            >
+              Llenar prueba
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/admin/mesa-operaciones')}
+              className="bg-slate-900 text-white font-bold px-3 py-1.5 rounded-lg hover:bg-black transition flex items-center gap-1 shadow"
+            >
+              📡 Mesa de Operaciones
+            </button>
+          </div>
         </div>
       )}
 
