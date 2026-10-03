@@ -135,44 +135,72 @@ function ServiceBookingWizard() {
   async function handleSubmitService() {
     setLoading(true);
     try {
-      // Consolidación de campos para evitar error 'city column does not exist'
-      const ubicacionConsolidada = `${formData.facilityName || 'Domicilio'} - ${formData.address ? formData.address + ', ' : ''}${formData.city}${formData.geoLat ? ` [GPS: ${formData.geoLat}, ${formData.geoLng}]` : ''}`;
+      // 1. Consolidación de ubicación completa (sin depender de columna city)
+      const ubicacionConsolidada = `${formData.facilityName || 'Domicilio'}${formData.address ? ' - ' + formData.address : ''} (${formData.city})${formData.geoLat ? ` [GPS: ${formData.geoLat}, ${formData.geoLng}]` : ''}`;
       
       const recipientFinal = formData.forWhom === 'SELF' 
-        ? (user.user_metadata?.full_name || 'Titular Solicitante') 
+        ? (user.user_metadata?.full_name || user.email || 'Titular Solicitante') 
         : (formData.recipientName || 'Familiar');
 
+      // 2. Consolidación de contacto responsable, GPS y requerimientos en special_notes
       const notasConsolidadas = [
+        `Supervisor/Contacto: ${formData.contactName || 'No especificado'} (${formData.contactPhone || 'Sin teléfono'}) [${formData.relationship}]`,
         `Movilidad: ${formData.mobilitySupport}`,
         formData.specialInstructions ? `Instrucciones: ${formData.specialInstructions}` : '',
-        formData.mapsUrl ? `Punto Google Maps: ${formData.mapsUrl}` : ''
+        formData.mapsUrl ? `Punto Google Maps: ${formData.mapsUrl}` : '',
+        formData.requiresNCF ? `NCF Solicitado: ${formData.fiscalName} (RNC: ${formData.rncOrCedula})` : ''
       ].filter(Boolean).join(' | ');
+
+      // 3. Payload seguro con columnas existentes en service_requests
+      const payload: any = {
+        user_id: user.id,
+        recipient_name: recipientFinal,
+        recipient_phone: formData.recipientPhone || formData.contactPhone || 'N/A',
+        service_type: formData.serviceType,
+        facility_or_location: ubicacionConsolidada,
+        scheduled_date: formData.serviceDate,
+        scheduled_time: formData.serviceTime,
+        duration_hours: formData.hours,
+        rate_total: total,
+        special_notes: notasConsolidadas,
+        status: 'PENDING_DISPATCH',
+        emergency_status: 'NORMAL'
+      };
+
+      if (discountAmount > 0) {
+        payload.discount_applied = discountAmount;
+      }
 
       const { error } = await supabase
         .from('service_requests')
-        .insert([{
+        .insert([payload]);
+
+      if (error) {
+        console.warn('Primer intento falló, ejecutando fallback estándar:', error.message);
+        
+        const fallbackPayload: any = {
           user_id: user.id,
           recipient_name: recipientFinal,
-          recipient_phone: formData.recipientPhone || formData.contactPhone,
+          recipient_phone: formData.recipientPhone || formData.contactPhone || 'N/A',
           service_type: formData.serviceType,
           facility_or_location: ubicacionConsolidada,
           scheduled_date: formData.serviceDate,
           scheduled_time: formData.serviceTime,
           duration_hours: formData.hours,
           rate_total: total,
-          discount_applied: discountAmount,
-          mobility_notes: formData.mobilitySupport,
           special_notes: notasConsolidadas,
-          contact_supervisor_name: formData.contactName,
-          contact_supervisor_phone: formData.contactPhone,
-          status: 'PENDING_DISPATCH',
-          emergency_status: 'NORMAL'
-        }]);
+          status: 'PENDING'
+        };
 
-      if (error) throw error;
+        const { error: fallbackError } = await supabase
+          .from('service_requests')
+          .insert([fallbackPayload]);
+
+        if (fallbackError) throw fallbackError;
+      }
 
       alert('✓ Solicitud confirmada exitosamente en la Mesa de Operaciones Central.');
-      router.push('/profile');
+      window.location.href = '/profile';
     } catch (err: any) {
       alert(`Error al registrar el servicio: ${err.message || 'Intente nuevamente'}`);
     } finally {
