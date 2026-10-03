@@ -12,11 +12,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useToast } from '@/components/ui/toast';
 import { User, HeartHandshake } from 'lucide-react';
 
+import RegistroAcompanante from './RegistroAcompanante';
+
 function RegisterContent() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const [selectedRole, setSelectedRole] = useState<'CUSTOMER' | 'COMPANION'>('CUSTOMER');
+  // Aquí está la solución de TypeScript: le decimos explícitamente que es un string
+  const [selectedRole, setSelectedRole] = useState<string>('CUSTOMER');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -65,6 +68,21 @@ function RegisterContent() {
     }
   }
 
+  if (selectedRole === 'COMPANION') {
+    return (
+      <div className="w-full relative animate-fade-in mt-8">
+        <button
+          type="button"
+          onClick={() => setSelectedRole('CUSTOMER')}
+          className="absolute -top-10 left-0 text-sm font-bold text-slate-500 flex items-center gap-1 hover:text-slate-800 transition-colors z-50"
+        >
+          ‹ Cambiar a cuenta de Solicitante
+        </button>
+        <RegistroAcompanante />
+      </div>
+    );
+  }
+
   return (
     <Card className="w-full max-w-md shadow-lg border-slate-200 mt-8">
       <CardHeader className="items-center text-center pb-2">
@@ -73,7 +91,6 @@ function RegisterContent() {
         <CardDescription>Selecciona el tipo de cuenta con el que deseas ingresar</CardDescription>
       </CardHeader>
       <CardContent>
-        {/* Selector de pestañas nativo */}
         <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-lg mb-6">
           <button
             type="button"
@@ -107,7 +124,7 @@ function RegisterContent() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              placeholder={selectedRole === 'CUSTOMER' ? 'Ej. Juan Pérez' : 'Ej. María Sánchez'}
+              placeholder="Ej. Juan Pérez"
             />
           </div>
           <div>
@@ -157,18 +174,10 @@ function RegisterContent() {
           </div>
           <Button
             type="submit"
-            className={`w-full text-white ${
-              selectedRole === 'CUSTOMER'
-                ? 'bg-juntos-blue hover:bg-juntos-blue/90'
-                : 'bg-juntos-green hover:bg-juntos-green/90'
-            }`}
+            className="w-full text-white bg-juntos-blue hover:bg-juntos-blue/90"
             disabled={loading}
           >
-            {loading
-              ? 'Creando cuenta...'
-              : selectedRole === 'CUSTOMER'
-              ? 'Registrarme como Solicitante'
-              : 'Registrarme como Acompañante'}
+            {loading ? 'Creando cuenta...' : 'Registrarme como Solicitante'}
           </Button>
         </form>
 
@@ -186,7 +195,7 @@ function RegisterContent() {
 export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 relative">
-      <div className="absolute top-4 left-4">
+      <div className="absolute top-4 left-4 z-50">
         <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity" title="Volver al inicio">
           <Logo withText={false} size={40} />
         </Link>
