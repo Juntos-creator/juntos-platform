@@ -44,6 +44,7 @@ export default function RegisterB2BPage() {
 
     setLoading(true);
 
+    // 1. Registro en Supabase Auth
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
@@ -63,6 +64,7 @@ export default function RegisterB2BPage() {
     }
 
     if (data.user) {
+      // 2. Guardar en profiles
       await supabase.from('profiles').upsert({
         id: data.user.id,
         email: email.trim(),
@@ -72,6 +74,7 @@ export default function RegisterB2BPage() {
         status: 'PENDING_APPROVAL',
       });
 
+      // 3. Crear registro de institución
       await supabase.from('institutions').insert([{
         user_id: data.user.id,
         name: institutionName.trim(),
@@ -81,22 +84,26 @@ export default function RegisterB2BPage() {
         status: 'PENDING_REVIEW'
       }]);
 
-      router.push('/login');
+      // 4. AUTOLOGIN: Si no vino sesión activa por confirmación de email, forzar login inmediato
+      if (!data.session) {
+        await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+      }
+
+      // Redirigir directamente al perfil institucional sin pasar por login
+      router.push('/profile');
     }
     setLoading(false);
   }
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-center items-center p-4 relative overflow-hidden font-sans selection:bg-emerald-500 selection:text-white">
-      
-      {/* DEGRADADO Y EFECTO DE LUZ CORPORATIVA */}
       <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-900" />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* CONTENEDOR CENTRAL */}
       <div className="relative z-10 w-full max-w-md space-y-5 my-8">
-        
-        {/* LOGO ENCABEZADO */}
         <div className="flex flex-col items-center justify-center space-y-2 text-center">
           <Logo size="lg" variant="dark" href="/" />
           <p className="text-xs text-slate-400 font-medium">
@@ -104,7 +111,6 @@ export default function RegisterB2BPage() {
           </p>
         </div>
 
-        {/* TARJETA DE REGISTRO B2B */}
         <div className="bg-slate-950/80 border border-slate-800 rounded-3xl p-7 sm:p-8 shadow-2xl backdrop-blur-xl space-y-5">
           <div className="space-y-1 text-center">
             <div className="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 mx-auto mb-2">
@@ -112,7 +118,7 @@ export default function RegisterB2BPage() {
             </div>
             <h1 className="text-2xl font-black text-white">Registro B2B</h1>
             <p className="text-xs text-slate-400">
-              Crea una cuenta para tu institución, empresa o centro asistencial
+              Crea tu cuenta institucional con ingreso automático
             </p>
           </div>
 
@@ -123,7 +129,6 @@ export default function RegisterB2BPage() {
           )}
 
           <form onSubmit={handleRegisterB2B} className="space-y-3.5 text-xs">
-            {/* NOMBRE DE LA INSTITUCIÓN */}
             <div className="space-y-1">
               <label className="text-slate-300 font-bold block">Nombre de la Institución / Empresa *</label>
               <div className="relative flex items-center">
@@ -133,13 +138,12 @@ export default function RegisterB2BPage() {
                   required
                   value={institutionName}
                   onChange={(e) => setInstitutionName(e.target.value)}
-                  placeholder="Ej. Clínica o Empresa Dominicana"
+                  placeholder="Ej. Clínica San Rafael / Empresa RD"
                   className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
                 />
               </div>
             </div>
 
-            {/* RNC */}
             <div className="space-y-1">
               <label className="text-slate-300 font-bold block">RNC Institucional</label>
               <div className="relative flex items-center">
@@ -154,7 +158,6 @@ export default function RegisterB2BPage() {
               </div>
             </div>
 
-            {/* CORREO INSTITUCIONAL */}
             <div className="space-y-1">
               <label className="text-slate-300 font-bold block">Correo electrónico institucional *</label>
               <div className="relative flex items-center">
@@ -170,9 +173,8 @@ export default function RegisterB2BPage() {
               </div>
             </div>
 
-            {/* TELÉFONO DE CONTACTO */}
             <div className="space-y-1">
-              <label className="text-slate-300 font-bold block">Teléfono de contacto / Extensión *</label>
+              <label className="text-slate-300 font-bold block">Teléfono de contacto / Flota *</label>
               <div className="relative flex items-center">
                 <Phone className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
                 <input
@@ -186,7 +188,6 @@ export default function RegisterB2BPage() {
               </div>
             </div>
 
-            {/* CONTRASEÑAS */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-slate-300 font-bold block">Contraseña *</label>
@@ -219,18 +220,16 @@ export default function RegisterB2BPage() {
               </div>
             </div>
 
-            {/* BOTÓN REGISTRAR INSTITUCIÓN */}
             <button
               type="submit"
               disabled={loading}
               className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.01] disabled:opacity-50 mt-3"
             >
-              <span>{loading ? 'Registrando...' : 'Registrar Institución'}</span>
+              <span>{loading ? 'Conectando cuenta B2B...' : 'Registrar e Ingresar al Portal'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
 
-          {/* ENLACES A LOGIN */}
           <div className="pt-3 border-t border-slate-800/80 text-center text-xs">
             <p className="text-slate-400">
               ¿Ya tienes cuenta institucional?{' '}
@@ -241,12 +240,10 @@ export default function RegisterB2BPage() {
           </div>
         </div>
 
-        {/* PIE DISCRETO */}
         <div className="text-center text-[11px] text-slate-500 flex items-center justify-center gap-1.5">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-          <span>Acceso para convenios corporativos y facturación NCF gubernamental / crédito fiscal</span>
+          <span>Acceso para convenios corporativos y facturación NCF formal</span>
         </div>
-
       </div>
     </div>
   );

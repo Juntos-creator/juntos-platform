@@ -92,10 +92,18 @@ export default function UnifiedRegisterPage() {
         full_name: displayName,
         phone: phone.trim(),
         role: role,
-        status: category === 'COMPANION' ? 'ACTIVE' : 'ACTIVE',
+        status: 'ACTIVE',
       });
 
-      // 3. Registros de expedientes especializados
+      // 3. Autologin general para evitar reingreso de credenciales
+      if (!authData.session) {
+        await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+      }
+
+      // 4. Inserción de expediente y redirección según rol
       if (category === 'COMPANION') {
         await supabase.from('companion_applications').insert([{
           user_id: authData.user.id,
@@ -108,13 +116,6 @@ export default function UnifiedRegisterPage() {
           estado_depuracion: 'EN_PROCESO'
         }]);
 
-        // Autologin para acompañante
-        if (!authData.session) {
-          await supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password,
-          });
-        }
         router.push('/companion');
         return;
       }
@@ -129,12 +130,13 @@ export default function UnifiedRegisterPage() {
           status: 'PENDING_REVIEW'
         }]);
 
-        router.push('/login');
+        router.push('/profile');
         return;
       }
 
-      // Cliente estándar
+      // Rol Solicitante / Cliente
       router.push('/services/new');
+      return;
     }
 
     setLoading(false);
@@ -309,7 +311,7 @@ export default function UnifiedRegisterPage() {
               </div>
             )}
 
-            {/* SECCIÓN 2: CORREO Y TELÉFONO (SI NO SE COLOCÓ ANTES) */}
+            {/* SECCIÓN 2: CORREO Y TELÉFONO */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-slate-300 font-bold block">
