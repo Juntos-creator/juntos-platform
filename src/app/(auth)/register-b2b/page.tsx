@@ -1,150 +1,256 @@
 'use client';
 
-import { useState, Suspense } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Logo } from '@/components/brand/Logo';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { useToast } from '@/components/ui/toast';
-import { Building2 } from 'lucide-react';
+import { 
+  Building2, 
+  Mail, 
+  Lock, 
+  ArrowRight, 
+  ShieldCheck, 
+  FileText, 
+  Phone,
+  Briefcase
+} from 'lucide-react';
 
-function RegisterB2BContent() {
+export default function RegisterB2BPage() {
   const router = useRouter();
-  const { toast } = useToast();
-  
+  const supabase = createClient();
+
+  const [institutionName, setInstitutionName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [rnc, setRnc] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  async function onSubmit(e: React.FormEvent) {
+  async function handleRegisterB2B(e: React.FormEvent) {
     e.preventDefault();
+    setErrorMsg(null);
 
     if (password !== confirmPassword) {
-      toast({
-        title: 'Error en contraseñas',
-        description: 'Las contraseñas ingresadas no coinciden. Verifícalas.',
-        variant: 'error',
-      });
+      setErrorMsg('Las contraseñas no coinciden.');
       return;
     }
 
     if (password.length < 6) {
-      toast({
-        title: 'Contraseña débil',
-        description: 'La contraseña debe tener al menos 6 caracteres.',
-        variant: 'error',
-      });
+      setErrorMsg('La contraseña debe tener al menos 6 caracteres.');
       return;
     }
 
     setLoading(true);
-    const supabase = createClient();
-    
-    const { data, error } = await supabase.auth.signUp({ email, password });
+
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        data: {
+          full_name: institutionName.trim(),
+          phone: phone.trim(),
+          role: 'INSTITUTION',
+        },
+      },
+    });
 
     if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'error' });
+      setErrorMsg(error.message);
       setLoading(false);
       return;
     }
 
     if (data.user) {
-      await supabase.from('profiles').update({
-        full_name: name,
+      // 1. Crear perfil con rol INSTITUTION
+      await supabase.from('profiles').upsert({
+        id: data.user.id,
+        email: email.trim(),
+        full_name: institutionName.trim(),
+        phone: phone.trim(),
         role: 'INSTITUTION',
-      }).eq('id', data.user.id);
-    }
+        status: 'PENDING_APPROVAL',
+      });
 
-    toast({ title: 'Cuenta creada', description: 'Por favor completa tu afiliación.', variant: 'success' });
-    router.push('/admin/institutions/affiliation');
+      // 2. Registrar en la tabla de instituciones si existe
+      await supabase.from('institutions').insert([{
+        user_id: data.user.id,
+        name: institutionName.trim(),
+        rnc: rnc.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        status: 'PENDING_REVIEW'
+      }]);
+
+      router.push('/login');
+    }
+    setLoading(false);
   }
 
   return (
-    <Card className="w-full max-w-sm shadow-lg border-slate-200">
-      <CardHeader className="items-center text-center pb-4">
-        <div className="w-12 h-12 bg-juntos-blue/10 rounded-full flex items-center justify-center mb-2">
-          <Building2 className="w-6 h-6 text-juntos-blue" />
-        </div>
-        <CardTitle className="text-2xl text-juntos-blue">Registro B2B</CardTitle>
-        <CardDescription>Crea una cuenta para tu Institución de Salud</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="name">Nombre de la Institución</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              placeholder="Ej. Clínica San Rafael"
-            />
-          </div>
-          <div>
-            <Label htmlFor="email">Correo electrónico institucional</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="contacto@clinica.com"
-            />
-          </div>
-          <div>
-            <Label htmlFor="password">Contraseña</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              placeholder="Mínimo 6 caracteres"
-            />
-          </div>
-          <div>
-            <Label htmlFor="confirmPassword">Confirmar contraseña</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              placeholder="Repite la contraseña"
-            />
-          </div>
-          <Button type="submit" className="w-full bg-juntos-blue hover:bg-juntos-blue/90 text-white" disabled={loading}>
-            {loading ? 'Creando cuenta...' : 'Registrar Institución'}
-          </Button>
-        </form>
-        <div className="mt-6 text-center text-sm">
-          <span className="text-muted-foreground">¿Ya tienes cuenta? </span>
-          <Link href="/login?redirect=/admin/institutions/affiliation" className="text-juntos-blue font-semibold hover:underline">
-            Inicia sesión
-          </Link>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-center items-center p-4 relative overflow-hidden font-sans selection:bg-emerald-500 selection:text-white">
+      
+      {/* DEGRADADO Y EFECTO DE LUZ CORPORATIVA */}
+      <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-900" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
-export default function RegisterB2BPage() {
-  return (
-    <div className="min-h-screen grid place-items-center bg-slate-50 p-4 relative">
-      <div className="absolute top-4 left-4">
-        <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
-          <Logo withText={false} size={40} />
-        </Link>
+      {/* CONTENEDOR CENTRAL */}
+      <div className="relative z-10 w-full max-w-md space-y-5 my-8">
+        
+        {/* LOGO ENCABEZADO */}
+        <div className="flex flex-col items-center justify-center space-y-2 text-center">
+          <Logo size="lg" variant="dark" href="/" />
+          <p className="text-xs text-slate-400 font-medium">
+            Portal Institucional & Convenios B2B
+          </p>
+        </div>
+
+        {/* TARJETA DE REGISTRO B2B */}
+        <div className="bg-slate-950/80 border border-slate-800 rounded-3xl p-7 sm:p-8 shadow-2xl backdrop-blur-xl space-y-5">
+          <div className="space-y-1 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 mx-auto mb-2">
+              <Building2 className="w-6 h-6" />
+            </div>
+            <h1 className="text-2xl font-black text-white">Registro B2B</h1>
+            <p className="text-xs text-slate-400">
+              Crea una cuenta para tu institución, empresa o centro asistencial
+            </p>
+          </div>
+
+          {errorMsg && (
+            <div className="bg-rose-950/60 border border-rose-800 text-rose-300 text-xs p-3 rounded-xl text-center">
+              {errorMsg}
+            </div>
+          )}
+
+          <form onSubmit={handleRegisterB2B} className="space-y-3.5 text-xs">
+            {/* NOMBRE DE LA INSTITUCIÓN */}
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">Nombre de la Institución / Empresa *</label>
+              <div className="relative flex items-center">
+                <Building2 className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                <input
+                  type="text"
+                  required
+                  value={institutionName}
+                  onChange={(e) => setInstitutionName(e.target.value)}
+                  placeholder="Ej. ARS / Centro Médico / Empresa Dominicana"
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+            </div>
+
+            {/* RNC */}
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">RNC Institucional</label>
+              <div className="relative flex items-center">
+                <FileText className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                <input
+                  type="text"
+                  value={rnc}
+                  onChange={(e) => setRnc(e.target.value)}
+                  placeholder="Ej. 1-01-00000-0"
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+            </div>
+
+            {/* CORREO INSTITUCIONAL */}
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">Correo electrónico institucional *</label>
+              <div className="relative flex items-center">
+                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="contacto@institucion.com"
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+            </div>
+
+            {/* TELÉFONO DE CONTACTO */}
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">Teléfono de contacto / Extensión *</label>
+              <div className="relative flex items-center">
+                <Phone className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                <input
+                  type="tel"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="809-555-0000"
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+            </div>
+
+            {/* CONTRASEÑAS */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">Contraseña *</label>
+                <div className="relative flex items-center">
+                  <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Mínimo 6"
+                    className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">Confirmar *</label>
+                <div className="relative flex items-center">
+                  <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                  <input
+                    type="password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repite clave"
+                    className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* BOTÓN REGISTRAR INSTITUCIÓN */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.01] disabled:opacity-50 mt-3"
+            >
+              <span>{loading ? 'Registrando...' : 'Registrar Institución'}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </form>
+
+          {/* ENLACES A LOGIN */}
+          <div className="pt-3 border-t border-slate-800/80 text-center text-xs">
+            <p className="text-slate-400">
+              ¿Ya tienes cuenta institucional?{' '}
+              <Link href="/login" className="text-emerald-400 font-bold hover:underline">
+                Inicia sesión
+              </Link>
+            </p>
+          </div>
+        </div>
+
+        {/* PIE DISCRETO */}
+        <div className="text-center text-[11px] text-slate-500 flex items-center justify-center gap-1.5">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+          <span>Acceso para convenios corporativos y facturación NCF gubernamental / crédito fiscal</span>
+        </div>
+
       </div>
-      <Suspense fallback={<div>Cargando...</div>}>
-        <RegisterB2BContent />
-      </Suspense>
     </div>
   );
 }
