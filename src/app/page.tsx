@@ -2,7 +2,6 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Navbar } from '@/components/navbar';
 import { 
@@ -13,18 +12,16 @@ import {
   Clock, 
   MapPin, 
   ShieldCheck, 
-  CreditCard, 
   ArrowRight, 
   ArrowLeft, 
   CheckCircle2, 
   Tag, 
-  FileText, 
-  AlertCircle,
-  Building2,
   Stethoscope,
   Home,
   Activity,
-  PhoneCall
+  Navigation,
+  ExternalLink,
+  LocateFixed
 } from 'lucide-react';
 
 function ServiceBookingWizard() {
@@ -34,9 +31,10 @@ function ServiceBookingWizard() {
 
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [user, setUser] = useState<any>(null);
 
-  // Beneficio de descuento (ej: si viene ?discount=5 o usuario acompañante)
+  // Beneficio de descuento
   const [discountPercent, setDiscountPercent] = useState<number>(0);
 
   // Form Data State
@@ -45,16 +43,14 @@ function ServiceBookingWizard() {
     forWhom: 'FAMILY', // 'SELF' | 'FAMILY' | 'OTHER'
     recipientName: '',
     recipientPhone: '',
-    recipientAge: '',
 
     // Paso 2: Tipo de Servicio
-    serviceType: 'CLINIC_APPOINTMENT', // 'CLINIC_APPOINTMENT' | 'HOME_CARE' | 'HOSPITAL_DISCHARGE' | 'ERRANDS'
+    serviceType: 'CLINIC_APPOINTMENT',
     
-    // Paso 3: Ubicación
-    locationType: 'HOSPITAL', // 'HOSPITAL' | 'HOME'
+    // Paso 3: Ubicación y centro
     facilityName: 'CEDIMAT',
+    city: 'Distrito Nacional (Santo Domingo)',
     address: '',
-    city: 'Distrito Nacional',
 
     // Paso 4: Fecha y Hora
     serviceDate: '',
@@ -63,8 +59,11 @@ function ServiceBookingWizard() {
     // Paso 5: Duración
     hours: 3,
 
-    // Paso 6: Requerimientos de Movilidad y Asistencia
-    mobilitySupport: 'NONE', // 'WHEELCHAIR' | 'WALKER' | 'ARM_ASSIST' | 'NONE'
+    // Paso 6: Geolocalización GPS y Punto de Mapa (Google Maps / Diáspora)
+    geoLat: '',
+    geoLng: '',
+    mapsUrl: '',
+    mobilitySupport: 'NONE',
     specialInstructions: '',
 
     // Paso 7: Contacto Familiar Responsable
@@ -77,8 +76,8 @@ function ServiceBookingWizard() {
     rncOrCedula: '',
     fiscalName: '',
 
-    // Paso 9: Método de Confirmación
-    paymentMethod: 'CARD_ONLINE' // 'CARD_ONLINE' | 'TRANSFER'
+    // Paso 9: Método
+    paymentMethod: 'CARD_ONLINE'
   });
 
   useEffect(() => {
@@ -90,7 +89,6 @@ function ServiceBookingWizard() {
       }
       setUser(user);
 
-      // Verificar rol para aplicar descuento de acompañante si aplica
       const { data: profile } = await supabase
         .from('profiles')
         .select('role, full_name, phone')
@@ -112,7 +110,6 @@ function ServiceBookingWizard() {
     checkAuth();
   }, [router, searchParams, supabase]);
 
-  // Cálculos económicos (RD$ 900 tarifa fija estándar diurna por hora)
   const RATE_PER_HOUR = 900;
   const subtotal = formData.hours * RATE_PER_HOUR;
   const discountAmount = (subtotal * discountPercent) / 100;
@@ -130,38 +127,72 @@ function ServiceBookingWizard() {
     if (step > 1) setStep(step - 1);
   }
 
+  // Función de geolocalización GPS nativa del navegador
+  function handleGetDeviceLocation() {
+    if (!navigator.geolocation) {
+      alert('Tu dispositivo no soporta geolocalización directa.');
+      return;
+    }
+
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude.toFixed(6);
+        const lng = pos.coords.longitude.toFixed(6);
+        updateField('geoLat', lat);
+        updateField('geoLng', lng);
+        updateField('mapsUrl', `https://www.google.com/maps?q=${lat},${lng}`);
+        setLocating(false);
+      },
+      () => {
+        alert('No se pudo obtener la señal GPS. Puedes buscar el punto en Google Maps RD y pegar el enlace.');
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
   async function handleSubmitService() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase
+      // Consolidación de dirección para evitar error de columnas no existentes en BD
+      const ubicacionConsolidada = `${formData.facilityName || 'Domicilio'} - ${formData.address ? formData.address + ', ' : ''}${formData.city}${formData.geoLat ? ` [GPS: ${formData.geoLat}, ${formData.geoLng}]` : ''}`;
+      
+      const recipientFinal = formData.forWhom === 'SELF' 
+        ? (user.user_metadata?.full_name || 'Titular Solicitante') 
+        : (formData.recipientName || 'Familiar');
+
+      const notasConsolidadas = [
+        `Movilidad: ${formData.mobilitySupport}`,
+        formData.specialInstructions ? `Instrucciones: ${formData.specialInstructions}` : '',
+        formData.mapsUrl ? `Punto Google Maps: ${formData.mapsUrl}` : ''
+      ].filter(Boolean).join(' | ');
+
+      const { error } = await supabase
         .from('service_requests')
         .insert([{
           user_id: user.id,
-          recipient_name: formData.forWhom === 'SELF' ? (user.user_metadata?.full_name || 'Titular') : formData.recipientName,
-          recipient_phone: formData.recipientPhone,
+          recipient_name: recipientFinal,
+          recipient_phone: formData.recipientPhone || formData.contactPhone,
           service_type: formData.serviceType,
-          facility_or_location: formData.facilityName || formData.address,
-          city: formData.city,
+          facility_or_location: ubicacionConsolidada,
           scheduled_date: formData.serviceDate,
           scheduled_time: formData.serviceTime,
           duration_hours: formData.hours,
           rate_total: total,
           discount_applied: discountAmount,
           mobility_notes: formData.mobilitySupport,
-          special_notes: formData.specialInstructions,
+          special_notes: notasConsolidadas,
           contact_supervisor_name: formData.contactName,
           contact_supervisor_phone: formData.contactPhone,
           status: 'PENDING_DISPATCH',
           emergency_status: 'NORMAL'
-        }])
-        .select()
-        .single();
+        }]);
 
       if (error) throw error;
 
-      // Redirigir a confirmación o mesa de seguimiento
-      alert('✓ Solicitud creada con éxito. La Mesa de Operaciones ha recibido tu requerimiento.');
+      alert('✓ Solicitud confirmada exitosamente. Tu requerimiento ha sido registrado en la Mesa de Operaciones Central.');
       router.push('/profile');
     } catch (err: any) {
       alert(`Error al registrar el servicio: ${err.message || 'Intente nuevamente'}`);
@@ -174,12 +205,11 @@ function ServiceBookingWizard() {
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white pb-20">
       <Navbar />
 
-      {/* GRADIENTES Y RESPLANDOR */}
       <div className="absolute top-0 inset-x-0 h-96 bg-gradient-to-b from-emerald-500/10 via-slate-900/0 to-transparent pointer-events-none" />
 
       <main className="flex-1 max-w-3xl mx-auto px-4 sm:px-6 pt-8 w-full relative z-10 space-y-6">
         
-        {/* BARRA SUPERIOR: INDICADOR DE PASO Y TARIFA */}
+        {/* BARRA SUPERIOR */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="w-7 h-7 rounded-full bg-emerald-500 text-slate-950 font-black text-xs flex items-center justify-center shadow-lg shadow-emerald-500/20">
@@ -210,10 +240,10 @@ function ServiceBookingWizard() {
           />
         </div>
 
-        {/* TARJETA PRINCIPAL DEL FORMULARIO */}
+        {/* CONTENEDOR PRINCIPAL */}
         <div className="bg-slate-950/80 border border-slate-800 rounded-3xl p-6 sm:p-9 shadow-2xl backdrop-blur-xl space-y-6">
           
-          {/* PASO 1: ¿PARA QUIÉN ES EL ACOMPAÑAMIENTO? */}
+          {/* PASO 1 */}
           {step === 1 && (
             <div className="space-y-6">
               <div>
@@ -221,7 +251,7 @@ function ServiceBookingWizard() {
                   ¿Para quién es el acompañamiento?
                 </h1>
                 <p className="text-xs text-slate-400 mt-1">
-                  Elige la opción que mejor describa a la persona que recibirá el apoyo humano:
+                  Elige la persona que recibirá el apoyo humano:
                 </p>
               </div>
 
@@ -300,7 +330,7 @@ function ServiceBookingWizard() {
                 <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                     <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 text-emerald-400" /> Datos de la persona a acompañar
+                      <User className="w-3.5 h-3.5 text-emerald-400" /> Datos de la persona acompañada
                     </span>
                     <span className="text-[10px] bg-emerald-950 text-emerald-400 font-mono px-2 py-0.5 rounded border border-emerald-800/40">
                       Requerido
@@ -337,7 +367,7 @@ function ServiceBookingWizard() {
             </div>
           )}
 
-          {/* PASO 2: TIPO DE SERVICIO NO CLÍNICO */}
+          {/* PASO 2 */}
           {step === 2 && (
             <div className="space-y-6">
               <div>
@@ -353,7 +383,7 @@ function ServiceBookingWizard() {
                 {[
                   { id: 'CLINIC_APPOINTMENT', title: 'Consultas o Estudios Médicos', desc: 'Espera en sala, asistencia de movilidad y soporte en farmacia.', icon: Stethoscope },
                   { id: 'HOME_CARE', title: 'Asistencia y Compañía en Hogar', desc: 'Compañía activa, apoyo en movilidad dentro de casa y supervisión diurna.', icon: Home },
-                  { id: 'HOSPITAL_DISCHARGE', title: 'Alta Médica o Internamiento', desc: 'Soporte presencial en trámites de egreso y traslado de retorno.', icon: Activity },
+                  { id: 'HOSPITAL_DISCHARGE', title: 'Alta Médica o Procedimiento', desc: 'Soporte presencial en trámites de egreso y traslado de retorno.', icon: Activity },
                   { id: 'ERRANDS', title: 'Diligencias y Gestión Personal', desc: 'Acompañamiento a banco, compras o trámites cotidianos.', icon: HeartHandshake }
                 ].map((item) => {
                   const Icon = item.icon;
@@ -386,7 +416,7 @@ function ServiceBookingWizard() {
             </div>
           )}
 
-          {/* PASO 3: LUGAR O CENTRO DE SALUD */}
+          {/* PASO 3 */}
           {step === 3 && (
             <div className="space-y-6">
               <div>
@@ -394,7 +424,7 @@ function ServiceBookingWizard() {
                   ¿Dónde se brindará el servicio?
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Indica el centro de salud, clínica o dirección de encuentro:
+                  Indica la ciudad y el centro médico o sector de encuentro:
                 </p>
               </div>
 
@@ -406,7 +436,7 @@ function ServiceBookingWizard() {
                     onChange={(e) => updateField('city', e.target.value)}
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition"
                   >
-                    <option value="Distrito Nacional">Distrito Nacional (Santo Domingo)</option>
+                    <option value="Distrito Nacional (Santo Domingo)">Distrito Nacional (Santo Domingo)</option>
                     <option value="Santo Domingo Este">Santo Domingo Este</option>
                     <option value="Santo Domingo Oeste">Santo Domingo Oeste</option>
                     <option value="Santo Domingo Norte">Santo Domingo Norte</option>
@@ -415,23 +445,23 @@ function ServiceBookingWizard() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-slate-300 font-bold block">Centro Médico / Hospital o Residencia *</label>
+                  <label className="text-slate-300 font-bold block">Centro de Salud / Hospital o Referencia *</label>
                   <input
                     type="text"
                     value={formData.facilityName}
                     onChange={(e) => updateField('facilityName', e.target.value)}
-                    placeholder="Ej: CEDIMAT, Clínica Abreu, HOMS o Casa particular"
+                    placeholder="Ej: CEDIMAT, HOMS, Clínica Abreu o Domicilio"
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-slate-300 font-bold block">Punto específico de encuentro o dirección exacta</label>
+                  <label className="text-slate-300 font-bold block">Dirección o sector específico</label>
                   <input
                     type="text"
                     value={formData.address}
                     onChange={(e) => updateField('address', e.target.value)}
-                    placeholder="Ej: Entrada principal de consultas, lobby Edificio B o calle y número"
+                    placeholder="Ej: Calle Ramón A. Castillo No. 20, Ensanche Ozama"
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition"
                   />
                 </div>
@@ -439,7 +469,7 @@ function ServiceBookingWizard() {
             </div>
           )}
 
-          {/* PASO 4: FECHA Y HORA */}
+          {/* PASO 4 */}
           {step === 4 && (
             <div className="space-y-6">
               <div>
@@ -483,7 +513,7 @@ function ServiceBookingWizard() {
             </div>
           )}
 
-          {/* PASO 5: DURACIÓN ESTIMADA */}
+          {/* PASO 5 */}
           {step === 5 && (
             <div className="space-y-6">
               <div>
@@ -491,7 +521,7 @@ function ServiceBookingWizard() {
                   Duración del Servicio
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Selecciona la cantidad estimada de horas para el acompañamiento:
+                  Selecciona la cantidad estimada de horas:
                 </p>
               </div>
 
@@ -529,22 +559,99 @@ function ServiceBookingWizard() {
             </div>
           )}
 
-          {/* PASO 6: MOVILIDAD Y NECESIDADES ESPECIALES */}
+          {/* PASO 6: MAPA Y GEOLOCALIZACIÓN (CON SOPORTE DIÁSPORA / FAMILIARES) */}
           {step === 6 && (
             <div className="space-y-6">
               <div>
+                <div className="inline-flex items-center gap-1.5 bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 px-3 py-1 rounded-full text-[11px] font-mono font-bold mb-2">
+                  <Navigation className="w-3.5 h-3.5" /> MAPA Y LOCALIZACIÓN EN REPÚBLICA DOMINICANA
+                </div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  Movilidad y Preferencias
+                  Punto de Encuentro y Movilidad
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Ayuda al acompañante a prepararse para asistir adecuadamente:
+                  Especifica dónde esperará la persona que recibirá el servicio en RD.
                 </p>
               </div>
 
+              {/* CARD DE GEOLOCALIZACIÓN Y GOOGLE MAPS */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-emerald-400" /> Origen de la solicitud
+                  </span>
+                  {formData.forWhom !== 'SELF' && (
+                    <span className="text-[10px] bg-blue-950 border border-blue-800/60 text-blue-400 px-2.5 py-0.5 rounded-full font-bold">
+                      Solicitud familiar / Diáspora
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex flex-col sm:flex-row gap-2.5">
+                    <button
+                      type="button"
+                      onClick={handleGetDeviceLocation}
+                      disabled={locating}
+                      className="flex-1 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 font-bold py-2.5 px-3.5 rounded-xl text-xs flex items-center justify-center gap-2 transition disabled:opacity-50"
+                    >
+                      <LocateFixed className="w-4 h-4 text-emerald-400" />
+                      <span>{locating ? 'Leyendo GPS...' : 'Usar GPS de este teléfono (Solo si estoy en RD)'}</span>
+                    </button>
+
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formData.address || formData.facilityName || 'Santo Domingo, Republica Dominicana')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition shrink-0"
+                    >
+                      <span>Buscar en Google Maps RD</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    💡 Si estás solicitando desde el extranjero (EE. UU., Europa) o tu trabajo, busca el punto en Google Maps RD y copia el enlace o dirección exacta debajo.
+                  </p>
+                </div>
+
+                <div className="space-y-3 pt-2 text-xs">
+                  <div className="space-y-1">
+                    <label className="text-slate-300 font-bold block">
+                      Enlace compartido de Google Maps o Coordenadas (Opcional)
+                    </label>
+                    <input
+                      type="url"
+                      value={formData.mapsUrl}
+                      onChange={(e) => updateField('mapsUrl', e.target.value)}
+                      placeholder="Ej: https://maps.app.goo.gl/... o https://google.com/maps?q=18.486,-69.931"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white placeholder-slate-600 outline-none focus:border-emerald-500 font-mono transition"
+                    />
+                  </div>
+
+                  {formData.geoLat && (
+                    <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-600/30 flex items-center justify-between text-[11px] text-emerald-300 font-mono">
+                      <span>✓ Coordenadas fijadas: {formData.geoLat}, {formData.geoLng}</span>
+                      <button
+                        type="button"
+                        onClick={() => { updateField('geoLat', ''); updateField('geoLng', ''); updateField('mapsUrl', ''); }}
+                        className="text-rose-400 hover:underline ml-2"
+                      >
+                        Limpiar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* REQUERIMIENTOS DE MOVILIDAD */}
               <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Requerimientos de movilidad de la persona a acompañar
+                </h4>
                 {[
                   { id: 'NONE', title: 'Movilidad independiente', desc: 'Camina por sí mismo sin apoyo técnico.' },
-                  { id: 'ARM_ASSIST', title: 'Apoyo de brazo / Paso lento', desc: 'Requiere soporte de brazo para caminar o subir escalones.' },
+                  { id: 'ARM_ASSIST', title: 'Apoyo de brazo / Paso lento', desc: 'Requiere soporte de brazo para caminar o subir aceras/escalones.' },
                   { id: 'WALKER', title: 'Uso de Andador / Bastón', desc: 'Lleva su propio equipo de apoyo ambulatorio.' },
                   { id: 'WHEELCHAIR', title: 'Uso de Silla de Ruedas', desc: 'El acompañante asistirá empujando y trasladando la silla.' }
                 ].map((item) => (
@@ -552,15 +659,15 @@ function ServiceBookingWizard() {
                     key={item.id}
                     type="button"
                     onClick={() => updateField('mobilitySupport', item.id)}
-                    className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                    className={`w-full p-3.5 rounded-2xl border text-left flex items-center justify-between transition-all ${
                       formData.mobilitySupport === item.id
                         ? 'bg-emerald-950/30 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
                         : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
                     }`}
                   >
                     <div>
-                      <h4 className="font-bold text-sm text-white">{item.title}</h4>
-                      <p className="text-xs text-slate-400">{item.desc}</p>
+                      <h4 className="font-bold text-xs text-white">{item.title}</h4>
+                      <p className="text-[11px] text-slate-400">{item.desc}</p>
                     </div>
                     <div className={`w-4 h-4 rounded-full border-2 ${formData.mobilitySupport === item.id ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'}`} />
                   </button>
@@ -568,19 +675,21 @@ function ServiceBookingWizard() {
               </div>
 
               <div className="space-y-1.5 text-xs">
-                <label className="text-slate-300 font-bold block">Notas o indicaciones importantes para el acompañante</label>
+                <label className="text-slate-300 font-bold block">
+                  Punto de encuentro específico o referencia de llegada en RD
+                </label>
                 <textarea
                   rows={2}
                   value={formData.specialInstructions}
                   onChange={(e) => updateField('specialInstructions', e.target.value)}
-                  placeholder="Ej: Avisar cuando el médico lo llame, paciente tímido, llevar botella de agua..."
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition resize-none"
+                  placeholder="Ej: Casa blanca con rejas negras frente al colmado; o en CEDIMAT en sala de espera Piso 2..."
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition resize-none"
                 />
               </div>
             </div>
           )}
 
-          {/* PASO 7: FAMILIAR SUPERVISOR / CONTACTO */}
+          {/* PASO 7 */}
           {step === 7 && (
             <div className="space-y-6">
               <div>
@@ -636,7 +745,7 @@ function ServiceBookingWizard() {
             </div>
           )}
 
-          {/* PASO 8: FACTURACIÓN Y COMPROBANTE FISCAL */}
+          {/* PASO 8 */}
           {step === 8 && (
             <div className="space-y-6">
               <div>
@@ -658,7 +767,7 @@ function ServiceBookingWizard() {
                   />
                   <div>
                     <h4 className="font-bold text-white text-xs">¿Requiere Factura con Crédito Fiscal (NCF tipo B01)?</h4>
-                    <p className="text-[11px] text-slate-400">Para empresas, profesionales o reembolso médico corporativo</p>
+                    <p className="text-[11px] text-slate-400">Para empresas o deducción fiscal autorizada</p>
                   </div>
                 </div>
 
@@ -691,7 +800,7 @@ function ServiceBookingWizard() {
             </div>
           )}
 
-          {/* PASO 9: RESUMEN Y ENVÍO A LA MESA DE OPERACIONES */}
+          {/* PASO 9 */}
           {step === 9 && (
             <div className="space-y-6">
               <div>
@@ -712,9 +821,20 @@ function ServiceBookingWizard() {
                 </div>
 
                 <div className="flex justify-between border-b border-slate-800/80 pb-2">
-                  <span className="text-slate-400">Ubicación:</span>
-                  <span className="font-bold text-white">{formData.facilityName} ({formData.city})</span>
+                  <span className="text-slate-400">Ubicación y Sector:</span>
+                  <span className="font-bold text-white text-right">
+                    {formData.facilityName || 'Domicilio'} ({formData.city})
+                  </span>
                 </div>
+
+                {formData.geoLat && (
+                  <div className="flex justify-between border-b border-slate-800/80 pb-2">
+                    <span className="text-slate-400">Punto GPS Fijado:</span>
+                    <span className="font-mono text-emerald-400 font-bold">
+                      {formData.geoLat}, {formData.geoLng}
+                    </span>
+                  </div>
+                )}
 
                 <div className="flex justify-between border-b border-slate-800/80 pb-2">
                   <span className="text-slate-400">Fecha y hora:</span>
@@ -744,17 +864,16 @@ function ServiceBookingWizard() {
                 </div>
               </div>
 
-              {/* AVISO LEGAL NO CLÍNICO */}
               <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex items-start gap-3 text-xs text-slate-400">
                 <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                 <p className="leading-relaxed text-[11px]">
-                  <strong>Garantía JUNTOS:</strong> Todos nuestros acompañantes cuentan con depuración penal PGR y carnet de identificación. El servicio es de asistencia y movilidad 100% no clínico.
+                  <strong>Garantía JUNTOS:</strong> Todos los acompañantes cuentan con depuración penal PGR y carnet de identificación. El servicio es de asistencia y movilidad 100% no clínico.
                 </p>
               </div>
             </div>
           )}
 
-          {/* BOTONERA DE NAVEGACIÓN ANTERIOR / SIGUIENTE */}
+          {/* BOTONERA NAVEGACIÓN */}
           <div className="flex items-center justify-between pt-6 border-t border-slate-800">
             {step > 1 ? (
               <button
@@ -790,7 +909,6 @@ function ServiceBookingWizard() {
 
         </div>
 
-        {/* PIE DISCRETO */}
         <div className="text-center text-[11px] text-slate-500 flex items-center justify-center gap-1.5">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
           <span>Mesa de Operaciones activa 24/7 en Santo Domingo y Santiago • JUNTOS ASISTENCIA RD</span>
