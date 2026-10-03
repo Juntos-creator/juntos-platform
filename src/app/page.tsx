@@ -39,7 +39,7 @@ export default function HomePage() {
               <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
                 <div className="inline-flex items-center gap-2 bg-emerald-950/70 border border-emerald-600/40 px-3.5 py-1.5 rounded-full text-emerald-400 text-xs font-bold tracking-wide">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  RED DE ACOMPAÑAMIENTO MÉDICO Y FAMILIAR 24/7 EN RD
+                  ASISTENCIA PERSONAL Y ACOMPAÑAMIENTO NO CLÍNICO 24/7 EN RD
                 </div>
 
                 <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight">
@@ -50,7 +50,7 @@ export default function HomePage() {
                 </h1>
 
                 <p className="text-base sm:text-lg text-slate-300 max-w-2xl mx-auto lg:mx-0 leading-relaxed font-normal">
-                  Asistencia personal, cálida y verificada para consultas médicas, estudios, altas clínicas o compañía en el hogar. Ideal para familiares que no pueden salir del trabajo.
+                  Asistencia logística, personal y de compañía para acudir a citas médicas, estudios diagnósticos o apoyo en el hogar. Ideal para familiares que están trabajando o fuera del país.
                 </p>
 
                 {/* BOTONERA CTA */}
@@ -64,7 +64,7 @@ export default function HomePage() {
                   </Link>
 
                   <a
-                    href="https://wa.me/18095550100?text=Hola,%20deseo%20información%20sobre%20el%20servicio%20de%20acompañamiento%20médico"
+                    href="https://wa.me/18095550100?text=Hola,%20deseo%20información%20sobre%20el%20servicio%20de%20acompañamiento%20no%20clínico"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-full sm:w-auto bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold px-6 py-4 rounded-2xl flex items-center justify-center gap-2 text-base transition"
@@ -101,7 +101,7 @@ export default function HomePage() {
                       </div>
                       <div>
                         <h3 className="font-bold text-white text-sm">Reserva Inmediata</h3>
-                        <p className="text-[11px] text-slate-400">Despacho garantizado en centros de RD</p>
+                        <p className="text-[11px] text-slate-400">Despacho en centros de salud y hogares de RD</p>
                       </div>
                     </div>
                     <span className="text-[11px] bg-slate-800 text-emerald-400 border border-emerald-800/40 px-2.5 py-1 rounded-full font-mono font-bold">
@@ -113,7 +113,7 @@ export default function HomePage() {
                     <div className="flex items-center gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
                       <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
                       <div>
-                        <p className="text-[10px] text-slate-400 uppercase font-bold">Centros de cobertura principal</p>
+                        <p className="text-[10px] text-slate-400 uppercase font-bold">Puntos de atención habituales</p>
                         <p className="text-white font-medium">CEDIMAT, HOMS, Clínica Abreu, Real o domicilio</p>
                       </div>
                     </div>
@@ -122,7 +122,7 @@ export default function HomePage() {
                       <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                       <div>
                         <p className="text-[10px] text-slate-400 uppercase font-bold">Seguridad del acompañante</p>
-                        <p className="text-white font-medium">Cédula, no antecedentes penales y entrevista presencial</p>
+                        <p className="text-white font-medium">Cédula, depuración PGR y entrevistas presenciales</p>
                       </div>
                     </div>
 
@@ -152,7 +152,7 @@ export default function HomePage() {
         <section className="py-16 border-b border-slate-800 bg-slate-950/40">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="text-center max-w-2xl mx-auto mb-12">
-              <h2 className="text-xs uppercase font-mono font-bold tracking-widest text-emerald-400">Seguridad primero</h2>
+              <h2 className="text-xs uppercase font-mono font-bold tracking-widest text-emerald-400">Seguridad y Claridad</h2>
               <p className="text-2xl sm:text-3xl font-black text-white mt-1">¿Por qué las familias confían en JUNTOS?</p>
             </div>
 
@@ -181,9 +181,9 @@ export default function HomePage() {
                 <div className="w-12 h-12 rounded-xl bg-amber-950 border border-amber-700/60 flex items-center justify-center text-amber-400">
                   <HeartHandshake className="w-6 h-6" />
                 </div>
-                <h3 className="text-lg font-bold text-white">Trato Humano y Puntual</h3>
+                <h3 className="text-lg font-bold text-white">Trato Humano No Clínico</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Personal vocacional entrenado en empatía para personas de la tercera edad, personas con movilidad reducida o pacientes en procesos de recuperación.
+                  Personal vocacional entrenado en empatía, asistencia práctica y paciencia para adultos mayores o convalecientes, sin involucrarse en actos médicos.
                 </p>
               </div>
             </div>
@@ -236,12 +236,13 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* TIPOS DE SERVICIO */}
+        {/* MODALIDADES DE SERVICIO */}
         <section className="py-20 border-b border-slate-800 bg-slate-950/30">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="text-center max-w-2xl mx-auto mb-14">
               <h2 className="text-xs uppercase font-mono font-bold tracking-widest text-emerald-400">Modalidades</h2>
               <p className="text-3xl font-black text-white mt-1">Servicios pensados para cada momento</p>
+              <p className="text-xs text-slate-400 mt-2">Apoyo logístico y de movilidad estrictamente no invasivo (no clínico)</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -250,7 +251,7 @@ export default function HomePage() {
                   <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
                     <Stethoscope className="w-6 h-6" />
                   </div>
-                  <h3 className="text-2xl font-bold text-white">Acompañamiento en Clínica / Hospital</h3>
+                  <h3 className="text-2xl font-bold text-white">Acompañamiento a Consultas y Centros Médicos</h3>
                   <p className="text-xs text-slate-400 leading-relaxed">
                     Soporte presencial no médico durante consultas con especialistas, realización de resonancias o análisis de laboratorio, internamientos y altas hospitalarias.
                   </p>
@@ -261,7 +262,7 @@ export default function HomePage() {
                   </ul>
                 </div>
                 <Link href="/services/new" className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 pt-4">
-                  Reservar en clínica →
+                  Reservar en centro médico →
                 </Link>
               </div>
 
@@ -270,14 +271,14 @@ export default function HomePage() {
                   <div className="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400">
                     <Home className="w-6 h-6" />
                   </div>
-                  <h3 className="text-2xl font-bold text-white">Asistencia Diaria en el Hogar</h3>
+                  <h3 className="text-2xl font-bold text-white">Asistencia y Compañía en el Hogar</h3>
                   <p className="text-xs text-slate-400 leading-relaxed">
-                    Acompañamiento en el hogar para adultos mayores o personas convalecientes. Apoyo en movilidad, compañía conversacional y supervisión general.
+                    Acompañamiento no médico en el hogar para adultos mayores o personas convalecientes. Apoyo en movilidad, compañía conversacional y supervisión general.
                   </p>
                   <ul className="text-xs text-slate-300 space-y-2 pt-2">
                     <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Apoyo en movilidad dentro del domicilio</li>
                     <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Compañía activa y estimulación diurna</li>
-                    <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Turnos flexibles de 2, 4, 8 o 12 horas</li>
+                    <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Turnos flexibles de 2, 4, 8 o nocturnos</li>
                   </ul>
                 </div>
                 <Link href="/services/new" className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 pt-4">
@@ -303,7 +304,7 @@ export default function HomePage() {
                   ¿El servicio incluye cuidados de enfermería o administración de medicamentos invasivos?
                 </h3>
                 <p className="text-slate-400 leading-relaxed pl-6">
-                  No. JUNTOS brinda asistencia personal, de movilidad, acompañamiento y soporte no clínico. No sustituye al médico ni al personal de enfermería especializado.
+                  <strong>No.</strong> JUNTOS brinda asistencia personal, de movilidad, acompañamiento y soporte estrictamente no clínico. No sustituye al médico ni al personal de enfermería especializado.
                 </p>
               </div>
 
@@ -359,8 +360,8 @@ export default function HomePage() {
             <div className="w-6 h-6 rounded-lg bg-emerald-500 flex items-center justify-center font-black text-slate-950 text-xs">
               J
             </div>
-            <span className="font-bold text-slate-300">JUNTOS SALUD RD</span>
-            <span>• Asistencia y Acompañamiento 24/7</span>
+            <span className="font-bold text-slate-300">JUNTOS ASISTENCIA RD</span>
+            <span>• Asistencia y Acompañamiento Personal No Clínico 24/7</span>
           </div>
           <p>© {new Date().getFullYear()} JUNTOS. Todos los derechos reservados. Santo Domingo, República Dominicana.</p>
         </div>
