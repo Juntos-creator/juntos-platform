@@ -22,22 +22,28 @@ import {
   CreditCard,
   Receipt,
   Send,
-  MessageCircle
+  MessageCircle,
+  ShieldAlert
 } from 'lucide-react';
 
 interface SolicitudServicio {
   id: string;
   client_id?: string;
+  customer_id?: string;
   companion_id?: string;
   client_name?: string;
+  for_who_name?: string;
   companion_name?: string;
   client_phone?: string;
   companion_phone?: string;
   status: string;
   created_at: string;
   scheduled_date?: string;
+  requested_date?: string;
   notes?: string;
+  observations?: string;
   address?: string;
+  center_address?: string;
   emergency_status?: 'NORMAL' | 'SOS_ACTIVE';
   payment_info?: {
     id?: string;
@@ -49,6 +55,13 @@ interface SolicitudServicio {
 
 export default function MesaOperacionesPage() {
   const router = useRouter();
+  const supabase = createClient();
+
+  // Estados de control de acceso y seguridad
+  const [authChecking, setAuthChecking] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+
+  // Estados operativos
   const [tab, setTab] = useState<'EN_CURSO' | 'POSTERIORES' | 'PREVIOS' | 'EXPEDIENTES'>('EN_CURSO');
   const [solicitudes, setSolicitudes] = useState<SolicitudServicio[]>([]);
   const [expedientes, setExpedientes] = useState<any[]>([]);
@@ -57,7 +70,7 @@ export default function MesaOperacionesPage() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
-  // Estados de interacción operativa
+  // Interacción operativa
   const [chatMensajes, setChatMensajes] = useState<any[]>([]);
   const [nuevoMensajeAdmin, setNuevoMensajeAdmin] = useState('');
   const [nuevaNota, setNuevaNota] = useState('');
@@ -71,10 +84,39 @@ export default function MesaOperacionesPage() {
     title: ''
   });
 
-  const supabase = createClient();
-
+  // 1. VERIFICACIÓN ESTRICTA DE ROL ADMINISTRADOR
   useEffect(() => {
-    cargarDatos();
+    async function verificarPermisosAdmin() {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile || profile.role !== 'ADMIN') {
+        alert('⛔ Acceso denegado: Esta consola es de uso exclusivo del Administrador Maestro.');
+        router.replace('/');
+        return;
+      }
+
+      setIsAuthorized(true);
+      setAuthChecking(false);
+      cargarDatos();
+    }
+
+    verificarPermisosAdmin();
+  }, [router, supabase]);
+
+  // 2. SINCRONIZACIÓN EN TIEMPO REAL
+  useEffect(() => {
+    if (!isAuthorized) return;
 
     const channelServices = supabase
       .channel('realtime_mesa_operaciones')
@@ -89,7 +131,7 @@ export default function MesaOperacionesPage() {
     return () => {
       supabase.removeChannel(channelServices);
     };
-  }, []);
+  }, [isAuthorized, supabase]);
 
   useEffect(() => {
     if (selectedItem && tab !== 'EXPEDIENTES') {
@@ -114,6 +156,10 @@ export default function MesaOperacionesPage() {
         const pago = payData?.find(p => p.service_request_id === srv.id);
         return {
           ...srv,
+          client_name: srv.client_name || srv.for_who_name,
+          address: srv.address || srv.center_address,
+          scheduled_date: srv.scheduled_date || srv.requested_date,
+          notes: srv.notes || srv.observations,
           payment_info: pago ? {
             id: pago.id,
             amount: pago.amount,
@@ -253,16 +299,23 @@ export default function MesaOperacionesPage() {
     e.preventDefault();
     if (!nuevaNota.trim() || !selectedItem) return;
 
-    const notasActuales = selectedItem.notes ? `${selectedItem.notes}\n` : '';
+    const notasActuales = selectedItem.notes || selectedItem.observations ? `${selectedItem.notes || selectedItem.observations}\n` : '';
     const notaFormateada = `${notasActuales}[${new Date().toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })} Admin]: ${nuevaNota.trim()}`;
 
     setUpdating(true);
     await supabase
       .from('service_requests')
-      .update({ notes: notaFormateada })
+      .update({ 
+        notes: notaFormateada,
+        observations: notaFormateada
+      })
       .eq('id', selectedItem.id);
 
-    setSelectedItem((prev: any) => ({ ...prev, notes: notaFormateada }));
+    setSelectedItem((prev: any) => ({ 
+      ...prev, 
+      notes: notaFormateada,
+      observations: notaFormateada
+    }));
     setNuevaNota('');
     setUpdating(false);
     cargarDatos();
@@ -291,25 +344,38 @@ export default function MesaOperacionesPage() {
     cargarDatos();
   }
 
-  // DISPARO DIRECTO DE WHATSAPP CON DATOS OFICIALES DE CITA
   function enviarWhatsAppConfirmacion(servicio: SolicitudServicio) {
-    if (!servicio.client_phone) {
+    const telefono = servicio.client_phone || servicio.companion_phone;
+    if (!telefono) {
       alert('Este servicio no cuenta con número de teléfono registrado.');
       return;
     }
 
-    let tel = servicio.client_phone.replace(/[^0-9]/g, '');
+    let tel = telefono.replace(/[^0-9]/g, '');
     if (tel.length === 10) {
-      tel = '1' + tel; // Formato internacional RD (+1)
+      tel = '1' + tel;
     }
 
-    const fechaTxt = servicio.scheduled_date ? new Date(servicio.scheduled_date).toLocaleDateString('es-DO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Fecha coordinada';
+    const fechaVal = servicio.scheduled_date || servicio.requested_date;
+    const fechaTxt = fechaVal ? new Date(fechaVal).toLocaleDateString('es-DO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Fecha coordinada';
     const acompananteTxt = servicio.companion_name ? `${servicio.companion_name} (Tel: ${servicio.companion_phone || 'En central'})` : 'Personal asignado por la Mesa Central';
 
     const mensaje = `🟢 *JUNTOS - Confirmación de Cita de Acompañamiento*\n\nHola *${servicio.client_name || 'Paciente'}*, te confirmamos tu servicio de asistencia programado:\n\n📅 *Fecha:* ${fechaTxt}\n📍 *Lugar:* ${servicio.address || 'Ubicación coordinada'}\n👤 *Acompañante:* ${acompananteTxt}\n📌 *Estado:* ${servicio.status}\n\nAnte cualquier novedad o consulta, nuestro centro de operaciones está disponible 24/7. ¡Estamos para servirte!`;
 
     window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`, '_blank');
   }
+
+  // PANTALLA DE CARGA MIENTRAS SE COMPRUEBA EL ROL
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">
+        <ShieldAlert className="w-10 h-10 text-emerald-400 animate-pulse" />
+        <p className="text-xs tracking-wider uppercase font-mono">Verificando credenciales de Administrador...</p>
+      </div>
+    );
+  }
+
+  if (!isAuthorized) return null;
 
   const serviciosFiltrados = solicitudes.filter(s => {
     const st = (s.status || '').toUpperCase();
@@ -448,7 +514,6 @@ export default function MesaOperacionesPage() {
               ))
             )
           ) : (
-            /* LISTA EXPEDIENTES RRHH */
             expedientes.map((exp, idx) => (
               <div
                 key={exp.id || idx}
@@ -498,7 +563,6 @@ export default function MesaOperacionesPage() {
                 {/* BOTONERA OPERATIVA DE SERVICIO */}
                 {tab !== 'EXPEDIENTES' && (
                   <div className="flex flex-wrap items-center gap-2">
-                    {/* Botón Pánico SOS */}
                     <button
                       onClick={() => toggleAlertaSOS(selectedItem)}
                       disabled={updating}
@@ -512,7 +576,6 @@ export default function MesaOperacionesPage() {
                       {selectedItem.emergency_status === 'SOS_ACTIVE' ? 'SOS ACTIVO (CANCELAR)' : 'BOTÓN SOS'}
                     </button>
 
-                    {/* Atajos Financieros */}
                     <button
                       onClick={() => router.push(`/admin/payments?service_id=${selectedItem.id}`)}
                       className="bg-indigo-950/60 border border-indigo-700 text-indigo-300 hover:bg-indigo-900/50 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition"
@@ -527,7 +590,6 @@ export default function MesaOperacionesPage() {
                       <Receipt className="w-3.5 h-3.5" /> Factura
                     </button>
 
-                    {/* Asignar Acompañante */}
                     <button
                       onClick={() => setAsignarModal(true)}
                       className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition"
@@ -535,7 +597,6 @@ export default function MesaOperacionesPage() {
                       <UserPlus className="w-3.5 h-3.5" /> Asignar Personal
                     </button>
 
-                    {/* Acciones de estado */}
                     {selectedItem.status !== 'IN_PROGRESS' && (
                       <button
                         onClick={() => cambiarEstadoServicio(selectedItem.id, 'IN_PROGRESS')}
@@ -555,7 +616,6 @@ export default function MesaOperacionesPage() {
                   </div>
                 )}
 
-                {/* Botonera si es expediente RRHH */}
                 {tab === 'EXPEDIENTES' && (
                   <div className="flex gap-2">
                     <button
@@ -573,9 +633,8 @@ export default function MesaOperacionesPage() {
               {tab !== 'EXPEDIENTES' ? (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
                   
-                  {/* COLUMNA 1: DATOS, CONTACTOS, WHATSAPP Y BITÁCORA */}
+                  {/* COLUMNA 1: CONTACTOS, WHATSAPP Y BITÁCORA */}
                   <div className="space-y-4">
-                    {/* Botones de Comunicación Rápida */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <a
                         href={`tel:${selectedItem.client_phone}`}
@@ -591,7 +650,6 @@ export default function MesaOperacionesPage() {
                         <PhoneCall className="w-3.5 h-3.5 shrink-0" /> Llamar Acompañante
                       </a>
 
-                      {/* DISPARO DE WHATSAPP DIRECTO */}
                       <button
                         onClick={() => enviarWhatsAppConfirmacion(selectedItem)}
                         className="bg-emerald-700/80 hover:bg-emerald-600 border border-emerald-600 p-2.5 rounded-xl flex items-center justify-center gap-1.5 font-bold text-white transition shadow text-center"
@@ -600,7 +658,6 @@ export default function MesaOperacionesPage() {
                       </button>
                     </div>
 
-                    {/* Resumen del Servicio con Estado de Pago */}
                     <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-2 text-slate-300">
                       <p><b>Dirección de Atención:</b> {selectedItem.address || 'No registrada'}</p>
                       <p><b>Acompañante Asignado:</b> {selectedItem.companion_name || 'Sin asignar'}</p>
@@ -612,13 +669,12 @@ export default function MesaOperacionesPage() {
                       </div>
                     </div>
 
-                    {/* Bitácora Operacional */}
                     <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 flex flex-col h-60">
                       <h4 className="font-bold text-slate-300 uppercase text-[10px] tracking-wider mb-2">
                         Bitácora y Novedades del Servicio
                       </h4>
                       <div className="flex-1 overflow-y-auto bg-slate-950 p-2.5 rounded-lg border border-slate-800/80 font-mono text-[11px] text-slate-300 whitespace-pre-wrap">
-                        {selectedItem.notes || 'No hay notas u órdenes registradas todavía.'}
+                        {selectedItem.notes || selectedItem.observations || 'No hay notas u órdenes registradas todavía.'}
                       </div>
                       <form onSubmit={handleAgregarNota} className="mt-2 flex gap-2">
                         <input
@@ -635,7 +691,7 @@ export default function MesaOperacionesPage() {
                     </div>
                   </div>
 
-                  {/* COLUMNA 2: CHAT AUDITADO EN VIVO */}
+                  {/* COLUMNA 2: CHAT AUDITADO */}
                   <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 flex flex-col h-[460px]">
                     <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-2">
                       <h4 className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
@@ -673,7 +729,6 @@ export default function MesaOperacionesPage() {
                       )}
                     </div>
 
-                    {/* Enviar mensaje desde la Mesa al chat */}
                     <form onSubmit={enviarMensajeAdmin} className="mt-2 flex gap-2">
                       <input
                         type="text"
@@ -690,7 +745,6 @@ export default function MesaOperacionesPage() {
 
                 </div>
               ) : (
-                /* VISTA EXPEDIENTES RRHH */
                 <div className="space-y-4 text-xs">
                   <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 grid grid-cols-2 gap-3 text-slate-300">
                     <div>
@@ -707,7 +761,6 @@ export default function MesaOperacionesPage() {
                     </div>
                   </div>
 
-                  {/* Documentos */}
                   <div className="grid grid-cols-3 gap-2">
                     <button
                       onClick={() => setDocModal({
