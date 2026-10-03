@@ -12,8 +12,7 @@ import {
   ArrowRight, 
   ShieldCheck, 
   FileText, 
-  Phone,
-  Briefcase
+  Phone 
 } from 'lucide-react';
 
 export default function RegisterB2BPage() {
@@ -64,7 +63,6 @@ export default function RegisterB2BPage() {
     }
 
     if (data.user) {
-      // 1. Crear perfil con rol INSTITUTION
       await supabase.from('profiles').upsert({
         id: data.user.id,
         email: email.trim(),
@@ -74,7 +72,6 @@ export default function RegisterB2BPage() {
         status: 'PENDING_APPROVAL',
       });
 
-      // 2. Registrar en la tabla de instituciones si existe
       await supabase.from('institutions').insert([{
         user_id: data.user.id,
         name: institutionName.trim(),
@@ -136,7 +133,7 @@ export default function RegisterB2BPage() {
                   required
                   value={institutionName}
                   onChange={(e) => setInstitutionName(e.target.value)}
-                  placeholder="Ej. ARS / Centro Médico / Empresa Dominicana"
+                  placeholder="Ej. Clínica o Empresa Dominicana"
                   className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
                 />
               </div>
