@@ -33,13 +33,10 @@ function ServiceBookingWizard() {
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [user, setUser] = useState<any>(null);
-
-  // Descuento red
   const [discountPercent, setDiscountPercent] = useState<number>(0);
 
-  // Form State
   const [formData, setFormData] = useState({
-    forWhom: 'FAMILY', // 'SELF' | 'FAMILY' | 'OTHER'
+    forWhom: 'FAMILY',
     recipientName: '',
     recipientPhone: '',
     serviceType: 'CLINIC_APPOINTMENT',
@@ -67,7 +64,7 @@ function ServiceBookingWizard() {
     async function checkAuth() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        router.push('/login?redirect=/services/new');
+        window.location.href = '/login?redirect=/services/new';
         return;
       }
       setUser(user);
@@ -76,7 +73,7 @@ function ServiceBookingWizard() {
         .from('profiles')
         .select('role, full_name, phone')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
       const hasUrlDiscount = searchParams.get('discount') === '5';
       if (profile?.role === 'COMPANION' || hasUrlDiscount) {
@@ -90,7 +87,7 @@ function ServiceBookingWizard() {
       }));
     }
     checkAuth();
-  }, [router, searchParams, supabase]);
+  }, [searchParams, supabase]);
 
   const RATE_PER_HOUR = 900;
   const subtotal = formData.hours * RATE_PER_HOUR;
@@ -133,16 +130,20 @@ function ServiceBookingWizard() {
   }
 
   async function handleSubmitService() {
+    if (!user) {
+      alert('Debes iniciar sesión para confirmar el servicio.');
+      window.location.href = '/login?redirect=/services/new';
+      return;
+    }
+
     setLoading(true);
     try {
-      // 1. Consolidación de ubicación completa (sin depender de columna city)
       const ubicacionConsolidada = `${formData.facilityName || 'Domicilio'}${formData.address ? ' - ' + formData.address : ''} (${formData.city})${formData.geoLat ? ` [GPS: ${formData.geoLat}, ${formData.geoLng}]` : ''}`;
       
       const recipientFinal = formData.forWhom === 'SELF' 
         ? (user.user_metadata?.full_name || user.email || 'Titular Solicitante') 
         : (formData.recipientName || 'Familiar');
 
-      // 2. Consolidación de contacto responsable, GPS y requerimientos en special_notes
       const notasConsolidadas = [
         `Supervisor/Contacto: ${formData.contactName || 'No especificado'} (${formData.contactPhone || 'Sin teléfono'}) [${formData.relationship}]`,
         `Movilidad: ${formData.mobilitySupport}`,
@@ -151,25 +152,27 @@ function ServiceBookingWizard() {
         formData.requiresNCF ? `NCF Solicitado: ${formData.fiscalName} (RNC: ${formData.rncOrCedula})` : ''
       ].filter(Boolean).join(' | ');
 
-      // 3. Payload seguro con columnas existentes en service_requests
       const payload: any = {
         user_id: user.id,
+        customer_id: user.id,
         recipient_name: recipientFinal,
         recipient_phone: formData.recipientPhone || formData.contactPhone || 'N/A',
         service_type: formData.serviceType,
         facility_or_location: ubicacionConsolidada,
+        city: formData.city,
         scheduled_date: formData.serviceDate,
+        requested_date: formData.serviceDate,
         scheduled_time: formData.serviceTime,
         duration_hours: formData.hours,
         rate_total: total,
+        discount_applied: discountAmount,
+        mobility_notes: formData.mobilitySupport,
         special_notes: notasConsolidadas,
+        contact_supervisor_name: formData.contactName,
+        contact_supervisor_phone: formData.contactPhone,
         status: 'PENDING_DISPATCH',
         emergency_status: 'NORMAL'
       };
-
-      if (discountAmount > 0) {
-        payload.discount_applied = discountAmount;
-      }
 
       const { error } = await supabase
         .from('service_requests')
@@ -180,16 +183,18 @@ function ServiceBookingWizard() {
         
         const fallbackPayload: any = {
           user_id: user.id,
+          customer_id: user.id,
           recipient_name: recipientFinal,
           recipient_phone: formData.recipientPhone || formData.contactPhone || 'N/A',
           service_type: formData.serviceType,
           facility_or_location: ubicacionConsolidada,
           scheduled_date: formData.serviceDate,
+          requested_date: formData.serviceDate,
           scheduled_time: formData.serviceTime,
           duration_hours: formData.hours,
           rate_total: total,
           special_notes: notasConsolidadas,
-          status: 'PENDING'
+          status: 'PENDING_DISPATCH'
         };
 
         const { error: fallbackError } = await supabase
