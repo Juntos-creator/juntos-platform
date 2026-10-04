@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Navbar } from '@/components/navbar';
 import { 
-  Calendar, 
+  Calendar as CalendarIcon, 
   Clock, 
   MapPin, 
   ShieldCheck, 
@@ -12,8 +12,30 @@ import {
   AlertCircle, 
   Tag, 
   Check, 
-  User 
+  User,
+  Navigation,
+  ExternalLink,
+  LocateFixed,
+  Compass,
+  Radio,
+  KeyRound,
+  X
 } from 'lucide-react';
+
+const DEFAULT_LAT = 18.486058;
+const DEFAULT_LNG = -69.931212;
+
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
 
 export default function CompanionDashboard() {
   const supabase = createClient();
@@ -23,7 +45,34 @@ export default function CompanionDashboard() {
   const [loading, setLoading] = useState(true);
   const [claimingId, setClaimingId] = useState<string | null>(null);
 
+  // Estados para el Check-Out con PIN
+  const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [selectedServiceForCheckout, setSelectedServiceForCheckout] = useState<any>(null);
+  const [inputPin, setInputPin] = useState('');
+  const [verifyingPin, setVerifyingPin] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+
+  // Ubicación del Acompañante
+  const [myLocation, setMyLocation] = useState<{ lat: number; lng: number }>({
+    lat: DEFAULT_LAT,
+    lng: DEFAULT_LNG
+  });
+  const [locationName, setLocationName] = useState('Distrito Nacional / Santo Domingo');
+
   useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setMyLocation({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude
+          });
+          setLocationName('Ubicación GPS Actual');
+        },
+        () => console.log('Ubicación referencial SD')
+      );
+    }
+
     async function loadCompanionData() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -32,16 +81,35 @@ export default function CompanionDashboard() {
       }
       setUser(user);
 
-      // 1. Cargar servicios pendientes en bolsa pública
+      // Servicios disponibles en bolsa
       const { data: pendings } = await supabase
         .from('service_requests')
         .select('*')
         .eq('status', 'PENDING_DISPATCH')
         .order('created_at', { ascending: false });
 
-      setAvailableServices(pendings || []);
+      const withDistance = (pendings || []).map((srv) => {
+        let srvLat = srv.geo_lat ? Number(srv.geo_lat) : 18.475;
+        let srvLng = srv.geo_lng ? Number(srv.geo_lng) : -69.935;
 
-      // 2. Cargar mi agenda de servicios asignados
+        if (!srv.geo_lat) {
+          if (srv.facility_or_location?.includes('CEDIMAT')) {
+            srvLat = 18.4872;
+            srvLng = -69.9248;
+          } else if (srv.facility_or_location?.includes('Santiago')) {
+            srvLat = 19.4517;
+            srvLng = -70.6970;
+          }
+        }
+
+        const dist = calculateDistance(myLocation.lat, myLocation.lng, srvLat, srvLng);
+        return { ...srv, distanceKm: dist, targetLat: srvLat, targetLng: srvLng };
+      });
+
+      withDistance.sort((a, b) => a.distanceKm - b.distanceKm);
+      setAvailableServices(withDistance);
+
+      // Mis servicios aceptados
       const { data: mine } = await supabase
         .from('service_requests')
         .select('*')
@@ -53,7 +121,7 @@ export default function CompanionDashboard() {
     }
 
     loadCompanionData();
-  }, [supabase]);
+  }, [supabase, myLocation.lat, myLocation.lng]);
 
   async function handleClaimService(serviceId: string) {
     setClaimingId(serviceId);
@@ -71,7 +139,7 @@ export default function CompanionDashboard() {
         return;
       }
 
-      alert('✓ ¡Servicio asignado a tu agenda exitosamente!');
+      alert('✓ ¡Servicio aceptado y agregado a tu agenda y mapa!');
       window.location.reload();
     } catch (err: any) {
       alert('Error de conexión: ' + err.message);
@@ -80,110 +148,434 @@ export default function CompanionDashboard() {
     }
   }
 
+  // Enviar y validar PIN de Check-Out
+  async function handleConfirmCheckout(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedServiceForCheckout || !inputPin) return;
+
+    setVerifyingPin(true);
+    setPinError(null);
+
+    try {
+      const res = await fetch('/api/services/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serviceId: selectedServiceForCheckout.id,
+          pin: inputPin.trim()
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setPinError(data.error || 'El PIN no es válido.');
+        setVerifyingPin(false);
+        return;
+      }
+
+      alert('✓ ¡Check-Out completado! El servicio ha sido marcado como FINALIZADO.');
+      setCheckoutModalOpen(false);
+      window.location.reload();
+    } catch (err: any) {
+      setPinError('Error de red al verificar el PIN.');
+      setVerifyingPin(false);
+    }
+  }
+
+  const closestService = availableServices.length > 0 ? availableServices[0] : null;
+
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white pb-20">
       <Navbar />
 
-      <main className="max-w-5xl mx-auto px-4 py-8 w-full space-y-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 w-full space-y-8">
         
         {/* HEADER */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-950/80 border border-slate-800 p-6 rounded-3xl">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-950/80 border border-slate-800 p-6 rounded-3xl shadow-xl">
           <div>
             <div className="inline-flex items-center gap-1.5 bg-emerald-950/80 border border-emerald-500/40 px-3 py-1 rounded-full text-emerald-400 font-mono text-xs font-bold mb-2">
               <ShieldCheck className="w-3.5 h-3.5" /> ACOMPAÑANTE CERTIFICADO PGR
             </div>
-            <h1 className="text-2xl font-black text-white">Mesa de Asignación y Agenda</h1>
-            <p className="text-xs text-slate-400">Regla activa: Mínimo 1 hora libre de traslado entre servicios.</p>
+            <h1 className="text-2xl sm:text-3xl font-black text-white">Mesa de Asignación y Agenda</h1>
+            <p className="text-xs text-slate-400 mt-1">
+              Geolocalización en tiempo real • Cierre de servicio protegido por PIN de cliente.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3.5 py-2 rounded-2xl text-xs font-mono">
+            <LocateFixed className="w-4 h-4 text-emerald-400 animate-pulse" />
+            <span className="text-slate-300">{locationName}</span>
           </div>
         </div>
 
-        {/* SERVICIOS EN ESPERA (BOLSA DE DISPATCH) */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-black text-white flex items-center gap-2">
-            <span>Servicios Solicitados en Vivo</span>
-            <span className="text-xs bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full font-mono">
-              {availableServices.length}
-            </span>
-          </h2>
-
-          {availableServices.length === 0 ? (
-            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-8 text-center text-xs text-slate-400">
-              No hay solicitudes pendientes en este momento. La mesa de despacho actualiza automáticamente.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {availableServices.map((srv) => (
-                <div key={srv.id} className="bg-slate-950 border border-slate-800 hover:border-emerald-500/40 rounded-2xl p-5 space-y-4 transition">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-[10px] bg-slate-900 border border-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded">
-                        {srv.service_type}
-                      </span>
-                      <h4 className="font-bold text-white text-sm mt-1">{srv.recipient_name}</h4>
-                    </div>
-                    <span className="font-mono font-bold text-emerald-400 text-sm">
-                      RD$ {Number(srv.rate_total || 0).toLocaleString()}
-                    </span>
-                  </div>
-
-                  <div className="text-xs space-y-1.5 text-slate-400">
-                    <p className="flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>{srv.scheduled_date || srv.requested_date} a las {srv.scheduled_time} ({srv.duration_hours}h)</span>
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span className="truncate">{srv.facility_or_location}</span>
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    disabled={claimingId === srv.id}
-                    onClick={() => handleClaimService(srv.id)}
-                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition disabled:opacity-50"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>{claimingId === srv.id ? 'Validando agenda...' : 'Tomar este Servicio'}</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* MI AGENDA CONFIRMADA */}
-        <div className="space-y-4 pt-4 border-t border-slate-800">
-          <h2 className="text-lg font-black text-white flex items-center gap-2">
-            <span>Mi Agenda de Servicios Asignados</span>
-            <span className="text-xs bg-slate-800 text-emerald-400 px-2 py-0.5 rounded-full font-mono">
-              {myServices.length}
-            </span>
-          </h2>
-
-          <div className="space-y-3">
-            {myServices.map((mine) => (
-              <div key={mine.id} className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-white">{mine.recipient_name}</span>
-                    <span className="bg-emerald-950 text-emerald-400 border border-emerald-800/40 px-2 py-0.5 rounded font-mono text-[10px]">
-                      {mine.status}
-                    </span>
-                  </div>
-                  <p className="text-slate-400 mt-1">{mine.facility_or_location}</p>
-                </div>
-
-                <div className="text-left sm:text-right font-mono">
-                  <p className="text-emerald-400 font-bold">{mine.scheduled_date} • {mine.scheduled_time}</p>
-                  <p className="text-[11px] text-slate-500">{mine.duration_hours} Horas (+1h traslado reservada)</p>
-                </div>
+        {/* ALERTA DE SERVICIO CERCANO */}
+        {closestService && (
+          <div className="bg-gradient-to-r from-emerald-950/80 to-slate-950 border border-emerald-500/50 rounded-3xl p-5 shadow-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center font-black shrink-0 shadow-lg shadow-emerald-500/30">
+                <Navigation className="w-6 h-6" />
               </div>
-            ))}
+              <div>
+                <span className="bg-emerald-900/60 text-emerald-400 border border-emerald-500/40 font-mono text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                  ¡SERVICIO MÁS CERCANO A TI!
+                </span>
+                <h3 className="text-base font-black text-white mt-1">
+                  {closestService.recipient_name} • A solo {closestService.distanceKm} km de tu posición
+                </h3>
+                <p className="text-xs text-slate-400 line-clamp-1">{closestService.facility_or_location}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${closestService.targetLat},${closestService.targetLng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 font-bold px-3 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition"
+              >
+                <Compass className="w-4 h-4 text-emerald-400" /> Ver Ruta
+              </a>
+
+              <button
+                type="button"
+                disabled={claimingId === closestService.id}
+                onClick={() => handleClaimService(closestService.id)}
+                className="flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/25 transition"
+              >
+                <Check className="w-4 h-4" />
+                <span>{claimingId === closestService.id ? 'Asignando...' : 'Tomar Inmediato'}</span>
+              </button>
+            </div>
           </div>
+        )}
+
+        {/* RADAR Y SERVICIOS / AGENDA */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          <div className="lg:col-span-2 space-y-6">
+            
+            {/* RADAR SATELITAL */}
+            <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl">
+              <div className="flex justify-between items-center border-b border-slate-800/80 pb-3">
+                <h3 className="text-xs font-black uppercase tracking-wider flex items-center gap-2 text-white">
+                  <Radio className="w-4 h-4 text-emerald-400 animate-pulse" /> Radar Satelital de Servicios Activos
+                </h3>
+                <span className="text-[11px] font-mono text-emerald-400">
+                  {availableServices.length} en espera de asignación
+                </span>
+              </div>
+
+              <div className="relative w-full h-56 bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 flex items-center justify-center">
+                <div className="absolute inset-0 bg-[radial-gradient(#10b981_1px,transparent_1px)] [background-size:20px_20px] opacity-15" />
+                <div className="absolute w-64 h-64 border border-emerald-500/10 rounded-full" />
+                <div className="absolute w-44 h-44 border border-emerald-500/20 rounded-full animate-pulse" />
+                <div className="absolute w-24 h-24 border border-emerald-500/30 rounded-full" />
+
+                <div className="relative z-10 flex flex-col items-center">
+                  <div className="w-9 h-9 bg-emerald-500 rounded-full flex items-center justify-center text-slate-950 font-black shadow-lg shadow-emerald-500/40">
+                    <User className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-900 bg-emerald-400 px-2 py-0.5 rounded-full mt-1">
+                    Mi Posición
+                  </span>
+                </div>
+
+                {availableServices.map((srv, idx) => {
+                  const offsets = [
+                    { top: '20%', left: '25%' },
+                    { top: '30%', right: '22%' },
+                    { bottom: '25%', left: '35%' },
+                    { bottom: '20%', right: '28%' }
+                  ];
+                  const pos = offsets[idx % offsets.length];
+
+                  return (
+                    <div 
+                      key={srv.id} 
+                      style={pos}
+                      className="absolute z-10 flex items-center gap-1.5 bg-slate-950/95 border border-emerald-500/60 px-2.5 py-1 rounded-xl text-[10px] shadow-lg cursor-pointer hover:scale-105 transition"
+                      onClick={() => handleClaimService(srv.id)}
+                    >
+                      <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span className="font-bold text-white truncate max-w-[120px]">{srv.recipient_name}</span>
+                      <span className="text-emerald-400 font-mono font-bold">({srv.distanceKm} km)</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* LISTADO DE SERVICIOS DISPONIBLES */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-black text-white flex items-center gap-2">
+                  <span>Bolsa de Servicios en Vivo</span>
+                  <span className="text-xs bg-emerald-500 text-slate-950 px-2.5 py-0.5 rounded-full font-mono font-bold">
+                    {availableServices.length}
+                  </span>
+                </h2>
+                <span className="text-xs text-slate-400">Ordenados por distancia</span>
+              </div>
+
+              {availableServices.length === 0 ? (
+                <div className="bg-slate-950/60 border border-slate-800 rounded-3xl p-8 text-center text-xs text-slate-400">
+                  No hay servicios pendientes en tu zona en este momento.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {availableServices.map((srv) => (
+                    <div 
+                      key={srv.id} 
+                      className="bg-slate-950 border border-slate-800 hover:border-emerald-500/50 rounded-3xl p-5 space-y-4 transition shadow-lg relative flex flex-col justify-between"
+                    >
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-[10px] bg-slate-900 border border-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded">
+                              {srv.service_type}
+                            </span>
+                            <h4 className="font-bold text-white text-sm mt-1">{srv.recipient_name}</h4>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="font-mono font-black text-emerald-400 text-sm block">
+                              RD$ {Number(srv.rate_total || 0).toLocaleString()}
+                            </span>
+                            <span className="text-[10px] bg-emerald-950 text-emerald-400 font-mono font-bold px-1.5 py-0.5 rounded border border-emerald-800/40">
+                              a {srv.distanceKm} km
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-xs space-y-1.5 text-slate-400">
+                          <p className="flex items-center gap-2 text-slate-300">
+                            <CalendarIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span>{srv.scheduled_date || srv.requested_date} • {srv.scheduled_time} ({srv.duration_hours}h)</span>
+                          </p>
+                          <p className="flex items-start gap-2">
+                            <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                            <span className="line-clamp-2">{srv.facility_or_location}</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 flex items-center gap-2 border-t border-slate-800/80 mt-2">
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${srv.targetLat},${srv.targetLng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 p-2.5 rounded-xl transition"
+                          title="Abrir ruta en Google Maps"
+                        >
+                          <Compass className="w-4 h-4 text-emerald-400" />
+                        </a>
+
+                        <button
+                          type="button"
+                          disabled={claimingId === srv.id}
+                          onClick={() => handleClaimService(srv.id)}
+                          className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition disabled:opacity-50"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>{claimingId === srv.id ? 'Validando agenda...' : 'Tomar este Servicio'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          </div>
+
+          {/* CALENDARIO Y GESTIÓN DE MIS SERVICIOS (CON BOTÓN DE CHECK-OUT) */}
+          <div className="space-y-6">
+            
+            {/* MINI CALENDARIO */}
+            <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                <h3 className="text-xs font-black uppercase tracking-wider flex items-center gap-2 text-white">
+                  <CalendarIcon className="w-4 h-4 text-emerald-400" /> Mi Calendario y Turnos
+                </h3>
+                <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded border border-emerald-800/40">
+                  {myServices.length} Agendados
+                </span>
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 text-center font-mono text-[11px] text-slate-400 pb-2">
+                <span>D</span><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span>
+              </div>
+              <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold">
+                {Array.from({ length: 14 }).map((_, i) => {
+                  const dayNum = i + 1;
+                  const hasService = myServices.some(s => s.scheduled_date?.endsWith(`-${dayNum < 10 ? '0' + dayNum : dayNum}`));
+                  return (
+                    <div 
+                      key={i} 
+                      className={`py-2 rounded-xl border text-[11px] font-mono transition ${
+                        hasService 
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black shadow-md shadow-emerald-500/20' 
+                          : 'bg-slate-900/60 border-slate-800/60 text-slate-400'
+                      }`}
+                    >
+                      {dayNum}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className="text-[10px] text-slate-500 leading-tight border-t border-slate-800/60 pt-3">
+                🔒 <strong>Regla de Traslado Automática:</strong> El sistema bloquea citas con menos de 1 hora de margen entre servicios.
+              </p>
+            </div>
+
+            {/* AGENDA DETALLADA CON ACCIÓN DE CHECK-OUT */}
+            <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-300">
+                Mis Servicios Aceptados
+              </h3>
+
+              {myServices.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-4">No has aceptado servicios todavía.</p>
+              ) : (
+                <div className="space-y-3">
+                  {myServices.map((mine) => {
+                    const isCompleted = mine.status === 'COMPLETED';
+
+                    return (
+                      <div 
+                        key={mine.id}
+                        className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-3 text-xs"
+                      >
+                        <div className="flex justify-between items-start">
+                          <span className="font-bold text-white text-sm">{mine.recipient_name}</span>
+                          <span className={`font-mono text-[9px] px-2 py-0.5 rounded font-bold border ${
+                            isCompleted 
+                              ? 'bg-slate-800 text-slate-400 border-slate-700' 
+                              : 'bg-emerald-950 text-emerald-400 border-emerald-800/40'
+                          }`}>
+                            {mine.status}
+                          </span>
+                        </div>
+
+                        <p className="text-slate-400 text-[11px] truncate">{mine.facility_or_location}</p>
+
+                        <div className="flex justify-between items-center font-mono text-[10px] text-slate-400 border-t border-slate-800/60 pt-2">
+                          <span className="text-emerald-400 font-bold">{mine.scheduled_date} • {mine.scheduled_time}</span>
+                          <span>{mine.duration_hours}h (+1h traslado)</span>
+                        </div>
+
+                        {/* BOTÓN PARA FINALIZAR CON PIN */}
+                        {!isCompleted ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedServiceForCheckout(mine);
+                              setInputPin('');
+                              setPinError(null);
+                              setCheckoutModalOpen(true);
+                            }}
+                            className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 transition mt-2"
+                          >
+                            <KeyRound className="w-3.5 h-3.5" />
+                            <span>Finalizar con PIN de Cliente</span>
+                          </button>
+                        ) : (
+                          <div className="w-full bg-slate-950/80 border border-slate-800 py-1.5 rounded-xl text-center text-[10px] font-mono text-emerald-400 font-bold flex items-center justify-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>SERVICIO COMPLETADO Y VALIDADO</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+          </div>
+
         </div>
 
       </main>
+
+      {/* VENTANA MODAL DE CHECK-OUT CON PIN */}
+      {checkoutModalOpen && selectedServiceForCheckout && (
+        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-950 border border-emerald-500/60 rounded-3xl max-w-sm w-full p-6 space-y-5 shadow-2xl relative animate-in fade-in zoom-in-95">
+            
+            <button
+              type="button"
+              onClick={() => setCheckoutModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-xl hover:bg-slate-900 transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="text-center space-y-1.5">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-950 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
+                <KeyRound className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-black text-white">Check-Out del Servicio</h3>
+              <p className="text-xs text-slate-400">
+                Pídele al cliente el <strong>PIN de 4 dígitos</strong> que aparece en su pantalla para validar el cierre.
+              </p>
+            </div>
+
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 text-xs space-y-1 text-center">
+              <p className="font-bold text-white">{selectedServiceForCheckout.recipient_name}</p>
+              <p className="text-[11px] text-slate-400 font-mono">
+                Orden #{selectedServiceForCheckout.id.slice(0, 8).toUpperCase()}
+              </p>
+            </div>
+
+            {pinError && (
+              <div className="bg-rose-950/70 border border-rose-800 text-rose-300 text-xs p-3 rounded-xl text-center font-medium">
+                {pinError}
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmCheckout} className="space-y-4">
+              <div className="space-y-1 text-center">
+                <label className="text-[11px] font-bold text-slate-300 block">
+                  Ingresa el código entregado por el cliente
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  required
+                  autoFocus
+                  placeholder="••••"
+                  value={inputPin}
+                  onChange={(e) => setInputPin(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-3 text-center text-2xl font-mono tracking-[0.5em] text-emerald-400 font-black outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCheckoutModalOpen(false)}
+                  className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold py-3 rounded-xl text-xs border border-slate-800 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={verifyingPin || !inputPin}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{verifyingPin ? 'Verificando...' : 'Validar y Cerrar'}</span>
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
