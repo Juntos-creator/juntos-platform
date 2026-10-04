@@ -29,26 +29,42 @@ export default function LoginPage() {
     setLoading(true);
     setErrorMsg(null);
 
+    // 1. Limpieza de correo obligatoria en minúsculas
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password
+        email: cleanEmail,
+        password: cleanPassword
       });
 
       if (error) {
-        throw new Error('Credenciales inválidas o correo no registrado.');
+        // Mostrar mensaje exacto si falta confirmación de correo
+        if (error.message.toLowerCase().includes('email not confirmed')) {
+          throw new Error('Tu correo aún no está confirmado. Ve a Supabase > Authentication > Users y confirma el usuario, o desactiva "Confirm email" en Providers.');
+        } else if (error.message.toLowerCase().includes('invalid login credentials')) {
+          throw new Error('Contraseña incorrecta o correo no registrado.');
+        } else {
+          throw new Error(error.message);
+        }
       }
 
-      // Redirección inteligente según el rol y cuenta maestra
-      if (email.trim().toLowerCase() === 'odel_kiss@hotmail.com') {
-        router.push('/profile');
-        return;
-      }
+      if (data?.user) {
+        const userEmail = data.user.email?.toLowerCase();
+        const userRole = data.user.user_metadata?.role;
 
-      if (role === 'COMPANION') {
-        router.push('/companion');
-      } else {
-        router.push('/profile');
+        // Redirección por tipo de usuario
+        if (userEmail === 'odel_kiss@hotmail.com' || userRole === 'ADMIN') {
+          router.push('/admin/operations');
+          return;
+        }
+
+        if (role === 'COMPANION' || userRole === 'COMPANION') {
+          router.push('/companion');
+        } else {
+          router.push('/services/new');
+        }
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Error al iniciar sesión');
@@ -86,11 +102,11 @@ export default function LoginPage() {
           <p className="text-xs text-slate-400">Selecciona tu categoría de usuario</p>
         </div>
 
-        {/* SELECTOR DE 2 COLUMNAS (CLIENTE Y ACOMPAÑANTE SOLAMENTE) */}
+        {/* SELECTOR DE 2 COLUMNAS */}
         <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-950 border border-slate-800 rounded-2xl">
           <button
             type="button"
-            onClick={() => setRole('CLIENT')}
+            onClick={() => { setRole('CLIENT'); setErrorMsg(null); }}
             className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ${
               role === 'CLIENT'
                 ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
@@ -103,7 +119,7 @@ export default function LoginPage() {
 
           <button
             type="button"
-            onClick={() => setRole('COMPANION')}
+            onClick={() => { setRole('COMPANION'); setErrorMsg(null); }}
             className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ${
               role === 'COMPANION'
                 ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
@@ -118,7 +134,7 @@ export default function LoginPage() {
         {errorMsg && (
           <div className="bg-rose-950/70 border border-rose-800 text-rose-300 text-xs p-3 rounded-xl flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorMsg}</span>
+            <span className="leading-snug">{errorMsg}</span>
           </div>
         )}
 
