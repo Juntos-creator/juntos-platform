@@ -12,47 +12,28 @@ export async function POST(req: Request) {
 
     const { serviceId } = await req.json();
 
-    // 1. Obtener detalles del servicio
-    const { data: service, error: sErr } = await supabase
-      .from('service_requests')
-      .select('*')
-      .eq('id', serviceId)
-      .single();
-
-    if (sErr || !service) {
-      return NextResponse.json({ error: 'Servicio no encontrado' }, { status: 404 });
+    if (!serviceId) {
+      return NextResponse.json({ error: 'Falta serviceId' }, { status: 400 });
     }
 
-    if (service.status !== 'PENDING_DISPATCH') {
-      return NextResponse.json({ error: 'Este servicio ya fue tomado por otro acompañante.' }, { status: 400 });
-    }
+    // 1. Obtener datos del acompañante que toma el servicio
+    const { data: companionProfile } = await supabase
+      .from('profiles')
+      .select('full_name, phone, email')
+      .eq('id', user.id)
+      .maybeSingle();
 
-    // 2. Verificar la regla de 1 hora de margen con la función de BD
-    const { data: hasConflict, error: cErr } = await supabase.rpc('check_companion_conflict', {
-      p_companion_id: user.id,
-      p_service_date: service.scheduled_date || service.requested_date,
-      p_service_time: service.scheduled_time || '08:00',
-      p_duration_hours: Number(service.duration_hours || 3)
-    });
+    const companionName = companionProfile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Acompañante Certificado';
+    const companionPhone = companionProfile?.phone || user.user_metadata?.phone || '809-555-0199';
 
-    if (cErr) {
-      console.error(cErr);
-      return NextResponse.json({ error: 'Error al verificar agenda' }, { status: 500 });
-    }
-
-    if (hasConflict) {
-      return NextResponse.json({ 
-        error: 'Conflicto en agenda: Debes contar con al menos 1 hora de margen entre servicios para traslado.' 
-      }, { status: 409 });
-    }
-
-    // 3. Asignar el servicio al acompañante
+    // 2. Asignar servicio
     const { error: updateError } = await supabase
       .from('service_requests')
       .update({
         companion_id: user.id,
-        status: 'ASSIGNED',
-        assigned_at: new Date().toISOString()
+        companion_name: companionName,
+        companion_phone: companionPhone,
+        status: 'ASSIGNED'
       })
       .eq('id', serviceId);
 
@@ -60,7 +41,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, message: 'Servicio asignado exitosamente.' });
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Servicio asignado correctamente.',
+      companionName,
+      companionPhone
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
