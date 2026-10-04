@@ -16,12 +16,12 @@ import {
   ArrowLeft, 
   CheckCircle2, 
   Tag, 
-  Stethoscope, 
-  Home, 
-  Activity, 
-  Navigation, 
-  ExternalLink, 
-  LocateFixed 
+  Stethoscope,
+  Home,
+  Activity,
+  Navigation,
+  ExternalLink,
+  LocateFixed
 } from 'lucide-react';
 
 function ServiceBookingWizard() {
@@ -31,63 +31,93 @@ function ServiceBookingWizard() {
 
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [locating, setLocating] = useState(false);
   const [user, setUser] = useState<any>(null);
+
+  // Beneficio de descuento
   const [discountPercent, setDiscountPercent] = useState<number>(0);
 
+  // Form Data State
   const [formData, setFormData] = useState({
-    forWhom: 'FAMILY',
+    // Paso 1: Beneficiario
+    forWhom: 'FAMILY', // 'SELF' | 'FAMILY' | 'OTHER'
     recipientName: '',
     recipientPhone: '',
+
+    // Paso 2: Tipo de Servicio
     serviceType: 'CLINIC_APPOINTMENT',
+    
+    // Paso 3: Ubicación y centro
     facilityName: 'CEDIMAT',
     city: 'Distrito Nacional (Santo Domingo)',
     address: '',
+
+    // Paso 4: Fecha y Hora
     serviceDate: '',
     serviceTime: '08:00',
+
+    // Paso 5: Duración
     hours: 3,
+
+    // Paso 6: Geolocalización GPS y Punto de Mapa (Google Maps / Diáspora)
     geoLat: '',
     geoLng: '',
     mapsUrl: '',
     mobilitySupport: 'NONE',
     specialInstructions: '',
+
+    // Paso 7: Contacto Familiar Responsable
     contactName: '',
     contactPhone: '',
     relationship: 'Hijo(a)',
+
+    // Paso 8: Facturación
     requiresNCF: false,
     rncOrCedula: '',
     fiscalName: '',
+
+    // Paso 9: Método
     paymentMethod: 'CARD_ONLINE'
   });
 
   useEffect(() => {
     async function checkAuth() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        window.location.href = '/login?redirect=/services/new';
-        return;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          // Si no hay usuario, redirigir limpiamente guardando el retorno
+          router.replace('/login?redirect=/services/new');
+          return;
+        }
+
+        setUser(user);
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, full_name, phone')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        const hasUrlDiscount = searchParams.get('discount') === '5';
+        if (profile?.role === 'COMPANION' || hasUrlDiscount) {
+          setDiscountPercent(5);
+        }
+
+        setFormData(prev => ({
+          ...prev,
+          contactName: profile?.full_name || prev.contactName,
+          contactPhone: profile?.phone || prev.contactPhone,
+        }));
+      } catch (err) {
+        console.warn('Error al verificar sesión:', err);
+      } finally {
+        setCheckingAuth(false);
       }
-      setUser(user);
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, full_name, phone')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      const hasUrlDiscount = searchParams.get('discount') === '5';
-      if (profile?.role === 'COMPANION' || hasUrlDiscount) {
-        setDiscountPercent(5);
-      }
-
-      setFormData(prev => ({
-        ...prev,
-        contactName: profile?.full_name || '',
-        contactPhone: profile?.phone || '',
-      }));
     }
+
     checkAuth();
-  }, [searchParams, supabase]);
+  }, [router, searchParams, supabase]);
 
   const RATE_PER_HOUR = 900;
   const subtotal = formData.hours * RATE_PER_HOUR;
@@ -111,6 +141,7 @@ function ServiceBookingWizard() {
       alert('Tu dispositivo no soporta geolocalización directa.');
       return;
     }
+
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -122,7 +153,7 @@ function ServiceBookingWizard() {
         setLocating(false);
       },
       () => {
-        alert('No se pudo obtener GPS. Puedes buscar en Google Maps RD y pegar el enlace.');
+        alert('No se pudo obtener la señal GPS. Puedes buscar el punto en Google Maps RD y pegar el enlace.');
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -131,12 +162,13 @@ function ServiceBookingWizard() {
 
   async function handleSubmitService() {
     if (!user) {
-      alert('Debes iniciar sesión para confirmar el servicio.');
+      alert('Debes iniciar sesión para confirmar y despachar el acompañante.');
       window.location.href = '/login?redirect=/services/new';
       return;
     }
 
     setLoading(true);
+
     try {
       const ubicacionConsolidada = `${formData.facilityName || 'Domicilio'}${formData.address ? ' - ' + formData.address : ''} (${formData.city})${formData.geoLat ? ` [GPS: ${formData.geoLat}, ${formData.geoLng}]` : ''}`;
       
@@ -144,44 +176,44 @@ function ServiceBookingWizard() {
         ? (user.user_metadata?.full_name || user.email || 'Titular Solicitante') 
         : (formData.recipientName || 'Familiar');
 
+      // Toda la información delicada va consolidada en special_notes para garantizar que nunca falte una columna
       const notasConsolidadas = [
         `Supervisor/Contacto: ${formData.contactName || 'No especificado'} (${formData.contactPhone || 'Sin teléfono'}) [${formData.relationship}]`,
         `Movilidad: ${formData.mobilitySupport}`,
         formData.specialInstructions ? `Instrucciones: ${formData.specialInstructions}` : '',
         formData.mapsUrl ? `Punto Google Maps: ${formData.mapsUrl}` : '',
-        formData.requiresNCF ? `NCF Solicitado: ${formData.fiscalName} (RNC: ${formData.rncOrCedula})` : ''
+        formData.requiresNCF ? `NCF Solicitado: ${formData.fiscalName} (RNC: ${formData.rncOrCedula})` : '',
+        discountAmount > 0 ? `Descuento Aplicado: RD$ ${discountAmount}` : ''
       ].filter(Boolean).join(' | ');
 
-      const payload: any = {
+      // Payload universal: incluye alias para que sea compatible con cualquier variante de la tabla
+      const universalPayload: any = {
         user_id: user.id,
         customer_id: user.id,
         recipient_name: recipientFinal,
         recipient_phone: formData.recipientPhone || formData.contactPhone || 'N/A',
         service_type: formData.serviceType,
         facility_or_location: ubicacionConsolidada,
-        city: formData.city,
         scheduled_date: formData.serviceDate,
         requested_date: formData.serviceDate,
         scheduled_time: formData.serviceTime,
         duration_hours: formData.hours,
         rate_total: total,
-        discount_applied: discountAmount,
-        mobility_notes: formData.mobilitySupport,
         special_notes: notasConsolidadas,
-        contact_supervisor_name: formData.contactName,
-        contact_supervisor_phone: formData.contactPhone,
+        mobility_notes: formData.mobilitySupport,
         status: 'PENDING_DISPATCH',
         emergency_status: 'NORMAL'
       };
 
       const { error } = await supabase
         .from('service_requests')
-        .insert([payload]);
+        .insert([universalPayload]);
 
       if (error) {
-        console.warn('Primer intento falló, ejecutando fallback estándar:', error.message);
+        console.warn('Primer intento con payload completo dio error, intentando inserción base:', error.message);
         
-        const fallbackPayload: any = {
+        // Segundo intento con las columnas estrictamente estándar de PostgreSQL
+        const corePayload: any = {
           user_id: user.id,
           customer_id: user.id,
           recipient_name: recipientFinal,
@@ -193,24 +225,32 @@ function ServiceBookingWizard() {
           scheduled_time: formData.serviceTime,
           duration_hours: formData.hours,
           rate_total: total,
-          special_notes: notasConsolidadas,
-          status: 'PENDING_DISPATCH'
+          special_notes: notasConsolidadas
         };
 
-        const { error: fallbackError } = await supabase
+        const { error: coreError } = await supabase
           .from('service_requests')
-          .insert([fallbackPayload]);
+          .insert([corePayload]);
 
-        if (fallbackError) throw fallbackError;
+        if (coreError) throw coreError;
       }
 
-      alert('✓ Solicitud confirmada exitosamente en la Mesa de Operaciones Central.');
+      alert('✓ Solicitud confirmada exitosamente. Tu requerimiento ha sido registrado en la Mesa de Operaciones Central.');
       window.location.href = '/profile';
     } catch (err: any) {
       alert(`Error al registrar el servicio: ${err.message || 'Intente nuevamente'}`);
     } finally {
       setLoading(false);
     }
+  }
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-slate-400 gap-3">
+        <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs font-mono">Verificando sesión segura...</p>
+      </div>
+    );
   }
 
   return (
@@ -252,7 +292,7 @@ function ServiceBookingWizard() {
           />
         </div>
 
-        {/* TARJETA PRINCIPAL OSCURA */}
+        {/* CONTENEDOR PRINCIPAL */}
         <div className="bg-slate-950/80 border border-slate-800 rounded-3xl p-6 sm:p-9 shadow-2xl backdrop-blur-xl space-y-6">
           
           {/* PASO 1 */}
@@ -571,7 +611,7 @@ function ServiceBookingWizard() {
             </div>
           )}
 
-          {/* PASO 6: MAPA Y GEOLOCALIZACIÓN */}
+          {/* PASO 6 */}
           {step === 6 && (
             <div className="space-y-6">
               <div>
@@ -622,7 +662,7 @@ function ServiceBookingWizard() {
                   </div>
 
                   <p className="text-[11px] text-slate-500 leading-relaxed">
-                    💡 Si solicitas desde el extranjero o tu oficina, busca en Google Maps RD y copia el enlace o punto exacto debajo.
+                    💡 Si estás solicitando desde el extranjero (EE. UU., Europa) o tu trabajo, busca el punto en Google Maps RD y copia el enlace o dirección exacta debajo.
                   </p>
                 </div>
 
