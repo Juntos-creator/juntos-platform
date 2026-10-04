@@ -25,8 +25,7 @@ import {
   ArrowUpRight,
   TrendingUp,
   Activity,
-  UserCheck,
-  MessageSquare
+  UserCheck
 } from 'lucide-react';
 
 export default function ProfilePage() {
@@ -88,11 +87,12 @@ export default function ProfilePage() {
     const esAdmin = prof?.role === 'ADMIN' || user.email === 'odel_kiss@hotmail.com';
 
     // 1. Cargar servicios del usuario (como solicitante o cliente)
-    const { data: srvsCliente } = await supabase
-      .from('service_requests')
-      .select('*')
-      .or(`customer_id.eq.${user.id},user_id.eq.${user.id}`)
-      .order('created_at', { ascending: false });
+    // Si es Administrador Maestro, cargamos todos los servicios para que pueda gestionarlos y probarlos
+    let query = supabase.from('service_requests').select('*');
+    if (!esAdmin) {
+      query = query.or(`customer_id.eq.${user.id},user_id.eq.${user.id}`);
+    }
+    const { data: srvsCliente } = await query.order('created_at', { ascending: false });
 
     setMyServices(srvsCliente || []);
 
@@ -332,7 +332,7 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* 2. SECCIÓN DEL CLIENTE / DIÁSPORA: SEGUIMIENTO, SALA EN VIVO, RECIBOS Y DOBLE PIN */}
+        {/* 2. SECCIÓN DEL CLIENTE / DIÁSPORA / SOLICITUDES: CONEXIÓN A SALA EN VIVO */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-black text-white flex items-center gap-2">
@@ -364,7 +364,6 @@ export default function ProfilePage() {
                 const isPending = srv.status === 'PENDING_DISPATCH';
                 const isCompleted = srv.status === 'COMPLETED';
 
-                // Doble PIN: Check-in y Check-out
                 const checkinPin = srv.checkin_pin || srv.id.replace(/\D/g, '').slice(0, 4) || '2491';
                 const checkoutPin = srv.checkout_pin || srv.id.replace(/\D/g, '').slice(2, 6) || '8421';
 
@@ -435,7 +434,7 @@ export default function ProfilePage() {
                         </p>
                       </div>
 
-                      {/* DOBLE PIN DE ENCUENTRO Y SALIDA */}
+                      {/* DOBLE PIN */}
                       <div className="bg-slate-900/80 border border-slate-800 p-3 rounded-2xl flex flex-col justify-between space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-bold text-white flex items-center gap-1.5">
@@ -468,7 +467,7 @@ export default function ProfilePage() {
                       </div>
                     </div>
 
-                    {/* BOTONERA DE ACCIÓN Y ENTRADA A SALA EN VIVO */}
+                    {/* BOTONERA: RUTA CORREGIDA A QUERY PARAMS */}
                     <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2 border-t border-slate-800/60">
                       <Link
                         href={`/services/receipt?id=${srv.id}`}
@@ -479,7 +478,7 @@ export default function ProfilePage() {
                       </Link>
 
                       <Link
-                        href={`/services/${srv.id}/live`}
+                        href={`/services/live?id=${srv.id}`}
                         className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition"
                       >
                         <Radio className="w-3.5 h-3.5" />
