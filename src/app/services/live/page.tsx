@@ -19,7 +19,10 @@ import {
   Send, 
   Radio, 
   Eye,
-  Check
+  Check,
+  Star,
+  Sparkles,
+  FileText
 } from 'lucide-react';
 
 function LiveRoomContent() {
@@ -41,6 +44,14 @@ function LiveRoomContent() {
   const [inputCheckoutPin, setInputCheckoutPin] = useState('');
   const [pinActionLoading, setPinActionLoading] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
+
+  // Estados de Valoración Mutua
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [reviewComment, setReviewComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
   // Chat interno
   const [chatMessages, setChatMessages] = useState<any[]>([]);
@@ -72,6 +83,22 @@ function LiveRoomContent() {
 
       if (srv) {
         setService(srv);
+
+        // Si ya está completado, verificar si ya se valoró
+        if (srv.status === 'COMPLETED') {
+          const { data: existingReview } = await supabase
+            .from('service_reviews')
+            .select('id')
+            .eq('service_id', serviceId)
+            .eq('reviewer_id', user.id)
+            .maybeSingle();
+
+          if (!existingReview) {
+            setShowReviewModal(true);
+          } else {
+            setReviewSubmitted(true);
+          }
+        }
 
         // Cargar Acompañante con búsqueda en profiles y respaldos
         let compInfo: any = null;
@@ -133,7 +160,12 @@ function LiveRoomContent() {
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'service_requests', filter: `id=eq.${serviceId}` },
-        (payload) => setService(payload.new)
+        (payload) => {
+          setService(payload.new);
+          if (payload.new.status === 'COMPLETED') {
+            setShowReviewModal(true);
+          }
+        }
       )
       .subscribe();
 
@@ -192,13 +224,58 @@ function LiveRoomContent() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'PIN incorrecto');
 
-      alert('✓ ¡Check-Out completado con éxito! El servicio ha sido finalizado.');
+      alert('✓ ¡Check-Out completado con éxito!');
       setInputCheckoutPin('');
-      window.location.reload();
+      setShowReviewModal(true);
     } catch (err: any) {
       setPinError(err.message);
     } finally {
       setPinActionLoading(false);
+    }
+  }
+
+  // Enviar Valoración
+  async function handleSubmitReview(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmittingReview(true);
+
+    try {
+      const reviewerRole = isCompanion ? 'COMPANION' : 'CLIENT';
+      const reviewedId = isCompanion 
+        ? (service.customer_id || service.user_id) 
+        : service.companion_id;
+
+      const res = await fetch('/api/services/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serviceId,
+          reviewedId,
+          reviewerRole,
+          rating,
+          tags: selectedTags,
+          comment: reviewComment
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al guardar valoración');
+
+      alert('✓ ¡Gracias por tu valoración! Tu reseña fortalece la seguridad de la comunidad.');
+      setReviewSubmitted(true);
+      setShowReviewModal(false);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSubmittingReview(false);
+    }
+  }
+
+  function toggleTag(tag: string) {
+    if (selectedTags.includes(tag)) {
+      setSelectedTags(selectedTags.filter((t) => t !== tag));
+    } else {
+      setSelectedTags([...selectedTags, tag]);
     }
   }
 
@@ -254,6 +331,11 @@ function LiveRoomContent() {
   const checkinPin = service.checkin_pin || service.id.replace(/\D/g, '').slice(0, 4) || '2491';
   const checkoutPin = service.checkout_pin || service.id.replace(/\D/g, '').slice(2, 6) || '8421';
 
+  // Etiquetas sugeridas según rol
+  const clientReviewTags = ['Muy Puntual', 'Trato Cálido y Humano', 'Excelente Manejo Médico', 'Empatía Total', '100% Recomendado'];
+  const companionReviewTags = ['Punto de Encuentro Claro', 'Trato Respetuoso', 'Excelente Comunicación', 'Puntualidad en Entrega'];
+  const tagsList = isClient ? clientReviewTags : companionReviewTags;
+
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 w-full space-y-6">
       
@@ -303,15 +385,28 @@ function LiveRoomContent() {
           </h1>
         </div>
 
-        <button
-          type="button"
-          onClick={handleTriggerSOS}
-          disabled={sosSent}
-          className="w-full sm:w-auto bg-rose-600 hover:bg-rose-500 text-white font-black px-4 py-2.5 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-600/30 transition animate-pulse"
-        >
-          <AlertTriangle className="w-4 h-4" />
-          <span>{sosSent ? 'SOS ACTIVO' : 'BOTÓN SOS EMERGENCIA'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {service.status === 'COMPLETED' && (
+            <button
+              type="button"
+              onClick={() => setShowReviewModal(true)}
+              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 transition shadow-lg shadow-emerald-500/20"
+            >
+              <Star className="w-4 h-4 fill-slate-950" />
+              <span>{reviewSubmitted ? 'Ver / Modificar Calificación' : 'Calificar Experiencia'}</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleTriggerSOS}
+            disabled={sosSent}
+            className="w-full sm:w-auto bg-rose-600 hover:bg-rose-500 text-white font-black px-4 py-2.5 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-600/30 transition animate-pulse"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            <span>{sosSent ? 'SOS ACTIVO' : 'BOTÓN SOS EMERGENCIA'}</span>
+          </button>
+        </div>
       </div>
 
       {/* RADAR DE ENCUENTRO EN VIVO */}
@@ -321,7 +416,11 @@ function LiveRoomContent() {
             <Radio className="w-4 h-4 text-emerald-400 animate-pulse" /> Radar de Encuentro Satelital
           </span>
           <span className="text-[11px] font-mono text-emerald-400 font-bold">
-            {service.status === 'IN_PROGRESS' ? '✓ EN EL MISMO PUNTO (REUNIDOS)' : 'LOCALIZANDO EN LA ZONA'}
+            {service.status === 'COMPLETED' 
+              ? '✓ SERVICIO FINALIZADO SATISFACTORIAMENTE' 
+              : service.status === 'IN_PROGRESS' 
+              ? '✓ EN EL MISMO PUNTO (REUNIDOS)' 
+              : 'LOCALIZANDO EN LA ZONA'}
           </span>
         </div>
 
@@ -425,18 +524,38 @@ function LiveRoomContent() {
 
             {/* VISTA CLIENTE: DICTA LOS PINS */}
             {isClient && (
-              <div className="grid grid-cols-2 gap-3 text-center">
-                <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
-                  <span className="text-[10px] font-bold text-slate-400 block">1. PIN CHECK-IN (Llegada)</span>
-                  <span className="font-mono text-2xl font-black text-emerald-400 tracking-widest">{checkinPin}</span>
-                  <p className="text-[9px] text-slate-500">Dictar al verse en persona</p>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 block">1. PIN CHECK-IN (Llegada)</span>
+                    <span className="font-mono text-2xl font-black text-emerald-400 tracking-widest">{checkinPin}</span>
+                    <p className="text-[9px] text-slate-500">Dictar al verse en persona</p>
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 block">2. PIN CHECK-OUT (Salida)</span>
+                    <span className="font-mono text-2xl font-black text-amber-400 tracking-widest">{checkoutPin}</span>
+                    <p className="text-[9px] text-slate-500">Dictar al terminar el servicio</p>
+                  </div>
                 </div>
 
-                <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
-                  <span className="text-[10px] font-bold text-slate-400 block">2. PIN CHECK-OUT (Salida)</span>
-                  <span className="font-mono text-2xl font-black text-amber-400 tracking-widest">{checkoutPin}</span>
-                  <p className="text-[9px] text-slate-500">Dictar al terminar el servicio</p>
-                </div>
+                {service.status === 'COMPLETED' && (
+                  <div className="bg-emerald-950/70 border border-emerald-500/40 p-4 rounded-2xl text-center space-y-2">
+                    <div className="flex items-center justify-center gap-2 text-emerald-400 font-bold text-xs">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>¡SERVICIO CONCLUIDO SATISFACTORIAMENTE!</span>
+                    </div>
+                    <div className="flex gap-2 justify-center pt-1">
+                      <Link
+                        href={`/services/receipt?id=${service.id}`}
+                        className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Descargar Recibo Digital</span>
+                      </Link>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -496,8 +615,14 @@ function LiveRoomContent() {
                 )}
 
                 {service.status === 'COMPLETED' && (
-                  <div className="bg-emerald-950/60 border border-emerald-500/40 p-3 rounded-2xl text-center text-xs font-mono text-emerald-400 font-bold">
-                    ✓ SERVICIO COMPLETADO Y FINALIZADO
+                  <div className="bg-emerald-950/60 border border-emerald-500/40 p-3 rounded-2xl text-center space-y-2 text-xs font-mono text-emerald-400 font-bold">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>SERVICIO COMPLETADO Y FINALIZADO</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 font-sans font-normal">
+                      Tu turno concluyó exitosamente. Se ha desbloqueado la hora libre de traslado.
+                    </p>
                   </div>
                 )}
               </div>
@@ -557,6 +682,103 @@ function LiveRoomContent() {
         </div>
 
       </div>
+
+      {/* VENTANA MODAL DE VALORACIÓN MUTUA (RATING & REVIEW) */}
+      {showReviewModal && (
+        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-950 border border-emerald-500/50 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl relative animate-in fade-in zoom-in-95">
+            
+            <div className="text-center space-y-1.5">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-950 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-black text-white">
+                {isClient ? '¿Cómo fue tu experiencia con el Acompañante?' : '¿Cómo fue tu experiencia con el Beneficiario?'}
+              </h3>
+              <p className="text-xs text-slate-400">
+                Tu retroalimentación califica la credibilidad y seguridad de la red JUNTOS ASISTENCIA RD.
+              </p>
+            </div>
+
+            {/* SELECTOR DE ESTRELLAS */}
+            <div className="flex justify-center items-center gap-2 py-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setRating(star)}
+                  className="p-1 hover:scale-125 transition-transform"
+                >
+                  <Star 
+                    className={`w-8 h-8 ${
+                      star <= rating 
+                        ? 'text-amber-400 fill-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]' 
+                        : 'text-slate-700'
+                    }`} 
+                  />
+                </button>
+              ))}
+            </div>
+
+            {/* ETIQUETAS RÁPIDAS */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-300 block">Aspectos a destacar:</label>
+              <div className="flex flex-wrap gap-1.5">
+                {tagsList.map((tag) => {
+                  const isSelected = selectedTags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => toggleTag(tag)}
+                      className={`text-xs px-3 py-1.5 rounded-xl border transition ${
+                        isSelected 
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-bold' 
+                          : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* COMENTARIO */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-300 block">Comentarios adicionales (opcional):</label>
+              <textarea
+                rows={3}
+                placeholder="Escribe una breve reseña de tu servicio..."
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-2xl p-3 text-xs text-white outline-none focus:border-emerald-500 resize-none"
+              />
+            </div>
+
+            {/* BOTONES */}
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowReviewModal(false)}
+                className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-400 font-bold py-3 rounded-xl text-xs border border-slate-800 transition"
+              >
+                Omitir
+              </button>
+              <button
+                type="button"
+                disabled={submittingReview}
+                onClick={handleSubmitReview}
+                className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                <Check className="w-4 h-4" />
+                <span>{submittingReview ? 'Enviando...' : 'Enviar Valoración'}</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </main>
   );
