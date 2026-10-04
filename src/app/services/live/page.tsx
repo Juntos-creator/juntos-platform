@@ -22,12 +22,13 @@ import {
   Check,
   Star,
   Sparkles,
-  FileText
+  FileText,
+  CalendarPlus
 } from 'lucide-react';
 
 function LiveRoomContent() {
   const searchParams = useSearchParams();
-  const serviceId = searchParams.get('id');
+  const rawId = searchParams.get('id');
   const supabase = createClient();
 
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -35,6 +36,7 @@ function LiveRoomContent() {
   const [companion, setCompanion] = useState<any>(null);
   const [clientProfile, setClientProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
   // Selector para cambiar vista en pruebas
   const [viewRole, setViewRole] = useState<'AUTO' | 'COMPANION' | 'CLIENT'>('AUTO');
@@ -62,90 +64,125 @@ function LiveRoomContent() {
 
   useEffect(() => {
     async function loadData() {
-      if (!serviceId) {
-        setLoading(false);
-        return;
-      }
+      setLoading(true);
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        window.location.href = `/login?redirect=/services/live?id=${serviceId}`;
+        window.location.href = `/login?redirect=/services/live${rawId ? `?id=${rawId}` : ''}`;
         return;
       }
       setCurrentUser(user);
+
+      let targetId = rawId?.trim();
+
+      // Fallback 1: Si no vino ID en la URL, buscar la orden más reciente del usuario
+      if (!targetId) {
+        const { data: userLatest } = await supabase
+          .from('service_requests')
+          .select('id')
+          .eq('client_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (userLatest) targetId = userLatest.id;
+      }
+
+      // Fallback 2: Buscar el servicio más reciente en el sistema
+      if (!targetId) {
+        const { data: globalLatest } = await supabase
+          .from('service_requests')
+          .select('id')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (globalLatest) targetId = globalLatest.id;
+      }
+
+      // Si no existe ningún servicio registrado
+      if (!targetId) {
+        setNotFound(true);
+        setLoading(false);
+        return;
+      }
 
       // Cargar Servicio
       const { data: srv } = await supabase
         .from('service_requests')
         .select('*')
-        .eq('id', serviceId)
+        .eq('id', targetId)
         .maybeSingle();
 
-      if (srv) {
-        setService(srv);
+      if (!srv) {
+        setNotFound(true);
+        setLoading(false);
+        return;
+      }
 
-        // Si ya está completado, verificar si ya se valoró
-        if (srv.status === 'COMPLETED') {
-          const { data: existingReview } = await supabase
-            .from('service_reviews')
-            .select('id')
-            .eq('service_id', serviceId)
-            .eq('reviewer_id', user.id)
-            .maybeSingle();
+      setService(srv);
 
-          if (!existingReview) {
-            setShowReviewModal(true);
-          } else {
-            setReviewSubmitted(true);
-          }
+      // Si ya está completado, verificar si ya se valoró
+      if (srv.status === 'COMPLETED') {
+        const { data: existingReview } = await supabase
+          .from('service_reviews')
+          .select('id')
+          .eq('service_id', targetId)
+          .eq('reviewer_id', user.id)
+          .maybeSingle();
+
+        if (!existingReview) {
+          setShowReviewModal(true);
+        } else {
+          setReviewSubmitted(true);
         }
+      }
 
-        // Cargar Acompañante con búsqueda en profiles y respaldos
-        let compInfo: any = null;
-        if (srv.companion_id) {
-          const { data: comp } = await supabase
-            .from('profiles')
-            .select('id, full_name, phone, role, email')
-            .eq('id', srv.companion_id)
-            .maybeSingle();
-          compInfo = comp;
-        }
+      // Cargar Acompañante con búsqueda en profiles y respaldos
+      let compInfo: any = null;
+      if (srv.companion_id) {
+        const { data: comp } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone, role, email')
+          .eq('id', srv.companion_id)
+          .maybeSingle();
+        compInfo = comp;
+      }
 
-        const nombreAcompanante = 
-          compInfo?.full_name || 
-          srv.companion_name || 
-          (srv.companion_id === user.id ? (user.user_metadata?.full_name || user.email?.split('@')[0]) : null) ||
-          'Lic. Carlos Manuel Rosario';
+      const nombreAcompanante = 
+        compInfo?.full_name || 
+        srv.companion_name || 
+        (srv.companion_id === user.id ? (user.user_metadata?.full_name || user.email?.split('@')[0]) : null) ||
+        'Lic. Carlos Manuel Rosario';
 
-        const telefonoAcompanante = 
-          compInfo?.phone || 
-          srv.companion_phone || 
-          (srv.companion_id === user.id ? user.phone : null) ||
-          '809-541-2000';
+      const telefonoAcompanante = 
+        compInfo?.phone || 
+        srv.companion_phone || 
+        (srv.companion_id === user.id ? user.phone : null) ||
+        '809-541-2000';
 
-        setCompanion({
-          ...compInfo,
-          full_name: nombreAcompanante,
-          phone: telefonoAcompanante
-        });
+      setCompanion({
+        ...compInfo,
+        full_name: nombreAcompanante,
+        phone: telefonoAcompanante
+      });
 
-        // Cargar Solicitante
-        const customerId = srv.customer_id || srv.user_id;
-        if (customerId) {
-          const { data: cli } = await supabase
-            .from('profiles')
-            .select('id, full_name, phone, email')
-            .eq('id', customerId)
-            .maybeSingle();
-          setClientProfile(cli);
-        }
+      // Cargar Solicitante
+      const customerId = srv.customer_id || srv.user_id || srv.client_id;
+      if (customerId) {
+        const { data: cli } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone, email')
+          .eq('id', customerId)
+          .maybeSingle();
+        setClientProfile(cli);
       }
 
       // Cargar Chat
       const { data: msgs } = await supabase
         .from('service_chat_messages')
         .select('*')
-        .eq('service_id', serviceId)
+        .eq('service_id', targetId)
         .order('created_at', { ascending: true });
 
       setChatMessages(msgs || []);
@@ -153,13 +190,17 @@ function LiveRoomContent() {
     }
 
     loadData();
+  }, [rawId, supabase]);
 
-    // Tiempo real
+  // Suscripciones Realtime
+  useEffect(() => {
+    if (!service?.id) return;
+
     const channelService = supabase
-      .channel(`live_srv_${serviceId}`)
+      .channel(`live_srv_${service.id}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'service_requests', filter: `id=eq.${serviceId}` },
+        { event: 'UPDATE', schema: 'public', table: 'service_requests', filter: `id=eq.${service.id}` },
         (payload) => {
           setService(payload.new);
           if (payload.new.status === 'COMPLETED') {
@@ -170,10 +211,10 @@ function LiveRoomContent() {
       .subscribe();
 
     const channelChat = supabase
-      .channel(`live_chat_${serviceId}`)
+      .channel(`live_chat_${service.id}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'service_chat_messages', filter: `service_id=eq.${serviceId}` },
+        { event: 'INSERT', schema: 'public', table: 'service_chat_messages', filter: `service_id=eq.${service.id}` },
         (payload) => setChatMessages((prev) => [...prev, payload.new])
       )
       .subscribe();
@@ -182,11 +223,12 @@ function LiveRoomContent() {
       supabase.removeChannel(channelService);
       supabase.removeChannel(channelChat);
     };
-  }, [serviceId, supabase]);
+  }, [service?.id, supabase]);
 
   // Validar Check-In (Encuentro presencial)
   async function handleVerifyCheckin(e: React.FormEvent) {
     e.preventDefault();
+    if (!service) return;
     setPinActionLoading(true);
     setPinError(null);
 
@@ -194,7 +236,7 @@ function LiveRoomContent() {
       const res = await fetch('/api/services/checkin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serviceId, pin: inputCheckinPin.trim() })
+        body: JSON.stringify({ serviceId: service.id, pin: inputCheckinPin.trim() })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'PIN incorrecto');
@@ -212,6 +254,7 @@ function LiveRoomContent() {
   // Validar Check-Out (Cierre de jornada)
   async function handleVerifyCheckout(e: React.FormEvent) {
     e.preventDefault();
+    if (!service) return;
     setPinActionLoading(true);
     setPinError(null);
 
@@ -219,7 +262,7 @@ function LiveRoomContent() {
       const res = await fetch('/api/services/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serviceId, pin: inputCheckoutPin.trim() })
+        body: JSON.stringify({ serviceId: service.id, pin: inputCheckoutPin.trim() })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'PIN incorrecto');
@@ -237,19 +280,20 @@ function LiveRoomContent() {
   // Enviar Valoración
   async function handleSubmitReview(e: React.FormEvent) {
     e.preventDefault();
+    if (!service) return;
     setSubmittingReview(true);
 
     try {
       const reviewerRole = isCompanion ? 'COMPANION' : 'CLIENT';
       const reviewedId = isCompanion 
-        ? (service.customer_id || service.user_id) 
+        ? (service.customer_id || service.user_id || service.client_id) 
         : service.companion_id;
 
       const res = await fetch('/api/services/review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          serviceId,
+          serviceId: service.id,
           reviewedId,
           reviewerRole,
           rating,
@@ -282,7 +326,7 @@ function LiveRoomContent() {
   // Enviar mensaje al chat interno
   async function handleSendMessage(e: React.FormEvent) {
     e.preventDefault();
-    if (!newMessage.trim() || !currentUser) return;
+    if (!newMessage.trim() || !currentUser || !service) return;
 
     const senderName = currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'Usuario';
     const text = newMessage.trim();
@@ -290,7 +334,7 @@ function LiveRoomContent() {
 
     await supabase.from('service_chat_messages').insert([
       {
-        service_id: serviceId,
+        service_id: service.id,
         sender_id: currentUser.id,
         sender_name: senderName,
         message: text
@@ -300,19 +344,45 @@ function LiveRoomContent() {
 
   // Emitir alerta SOS
   async function handleTriggerSOS() {
+    if (!service) return;
     const confirmSOS = confirm('¿Deseas emitir una ALERTA SOS a la Mesa de Operaciones Central?');
     if (!confirmSOS) return;
 
-    await supabase.from('service_requests').update({ emergency_status: 'SOS_ACTIVE' }).eq('id', serviceId);
+    await supabase.from('service_requests').update({ emergency_status: 'SOS_ACTIVE' }).eq('id', service.id);
     setSosSent(true);
     alert('🚨 ALERTA SOS EMITIDA a la Mesa Central de Operaciones.');
   }
 
-  if (loading || !service) {
+  // 1. PANTALLA DE CARGA INICIAL
+  if (loading) {
     return (
       <div className="py-24 text-center text-xs text-slate-400 space-y-3">
         <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
         <p className="font-mono">Cargando sala operativa en vivo...</p>
+      </div>
+    );
+  }
+
+  // 2. CASO: NO HAY ORDEN ACTIVA
+  if (notFound || !service) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-20 text-center space-y-4">
+        <div className="w-16 h-16 rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 mx-auto">
+          <Radio className="w-8 h-8 text-emerald-400" />
+        </div>
+        <h2 className="text-xl font-black text-white">No hay órdenes en curso</h2>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          No se encontró ningún servicio activo asociado a esta cuenta. Puedes coordinar una nueva cita ahora mismo con la Mesa Central.
+        </p>
+        <div className="pt-2">
+          <Link
+            href="/services/new"
+            className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-3 rounded-2xl text-xs shadow-lg shadow-emerald-500/20 transition"
+          >
+            <CalendarPlus className="w-4 h-4" />
+            <span>Solicitar Nuevo Acompañante</span>
+          </Link>
+        </div>
       </div>
     );
   }
@@ -382,6 +452,7 @@ function LiveRoomContent() {
             {service.status === 'IN_PROGRESS' && 'Servicio en Curso (Check-In Validado)'}
             {service.status === 'COMPLETED' && 'Servicio Finalizado y Liquidado'}
             {service.status === 'PENDING_DISPATCH' && 'Esperando Aceptación de Acompañante'}
+            {!['ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'PENDING_DISPATCH'].includes(service.status) && 'Servicio Coordinado en Mesa Central'}
           </h1>
         </div>
 
@@ -461,12 +532,12 @@ function LiveRoomContent() {
                 Datos de la Persona a Acompañar y Contacto Familiar
               </h3>
               <div className="space-y-2 text-xs">
-                <p><strong className="text-white">Beneficiario:</strong> {service.recipient_name}</p>
-                <p><strong className="text-white">Teléfono en sitio:</strong> {service.recipient_phone}</p>
-                <p><strong className="text-white">Punto de encuentro:</strong> {service.facility_or_location}</p>
+                <p><strong className="text-white">Beneficiario:</strong> {service.recipient_name || service.client_name}</p>
+                <p><strong className="text-white">Teléfono en sitio:</strong> {service.recipient_phone || service.client_phone || 'S/N'}</p>
+                <p><strong className="text-white">Punto de encuentro:</strong> {service.facility_or_location || service.address}</p>
                 <p><strong className="text-white">Familiar / Contacto:</strong> {clientProfile?.full_name || 'Titular'} ({clientProfile?.phone || 'Registrado'})</p>
                 <p className="border-t border-slate-800/80 pt-2 text-slate-400">
-                  <strong className="text-amber-400">Instrucciones:</strong> {service.special_notes || 'Sin observaciones'}
+                  <strong className="text-amber-400">Instrucciones:</strong> {service.special_notes || service.notes || 'Sin observaciones'}
                 </p>
               </div>
             </div>
