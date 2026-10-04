@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -21,9 +21,61 @@ export function AdminQuickNav() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+
+  const [isAdmin, setIsAdmin] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
-  // Orden lógico operacional
+  useEffect(() => {
+    async function checkAdminSession() {
+      // 1. Obtener la sesión activa actual
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.user) {
+        setIsAdmin(false);
+        return;
+      }
+
+      const user = session.user;
+
+      // 2. Verificar rol en el perfil público
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const tienePrivilegio = 
+        profile?.role === 'ADMIN' || 
+        user.user_metadata?.role === 'ADMIN' || 
+        user.email?.toLowerCase() === 'odel_kiss@hotmail.com';
+
+      setIsAdmin(!!tienePrivilegio);
+    }
+
+    checkAdminSession();
+
+    // Escuchar cambios de autenticación en tiempo real (login / logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user) {
+        setIsAdmin(false);
+      } else {
+        const email = session.user.email?.toLowerCase();
+        if (email === 'odel_kiss@hotmail.com' || session.user.user_metadata?.role === 'ADMIN') {
+          setIsAdmin(true);
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
+
+  // Si no ha iniciado sesión o no es la administradora, NO RENDERIZA NADA
+  if (!isAdmin) {
+    return null;
+  }
+
   const navItems = [
     { href: '/', label: 'Inicio', icon: Home },
     { href: '/admin/operations', label: 'Mesa de Operaciones', icon: Radio },
@@ -35,6 +87,7 @@ export function AdminQuickNav() {
 
   async function handleLogout() {
     await supabase.auth.signOut();
+    setIsAdmin(false);
     router.push('/login');
   }
 
