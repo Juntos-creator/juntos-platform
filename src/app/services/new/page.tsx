@@ -86,7 +86,6 @@ function ServiceBookingWizard() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
-          // Si no hay usuario, redirigir limpiamente guardando el retorno
           router.replace('/login?redirect=/services/new');
           return;
         }
@@ -129,6 +128,11 @@ function ServiceBookingWizard() {
   }
 
   function handleNext() {
+    // Si está en el Paso 4 y la fecha está vacía, asignar la fecha de hoy por defecto
+    if (step === 4 && (!formData.serviceDate || formData.serviceDate.trim() === '')) {
+      const today = new Date().toISOString().split('T')[0];
+      updateField('serviceDate', today);
+    }
     if (step < 9) setStep(step + 1);
   }
 
@@ -167,6 +171,13 @@ function ServiceBookingWizard() {
       return;
     }
 
+    // 1. Asegurar fecha válida en formato YYYY-MM-DD
+    let validDate = formData.serviceDate;
+    if (!validDate || validDate.trim() === '') {
+      const today = new Date();
+      validDate = today.toISOString().split('T')[0];
+    }
+
     setLoading(true);
 
     try {
@@ -176,7 +187,6 @@ function ServiceBookingWizard() {
         ? (user.user_metadata?.full_name || user.email || 'Titular Solicitante') 
         : (formData.recipientName || 'Familiar');
 
-      // Toda la información delicada va consolidada en special_notes para garantizar que nunca falte una columna
       const notasConsolidadas = [
         `Supervisor/Contacto: ${formData.contactName || 'No especificado'} (${formData.contactPhone || 'Sin teléfono'}) [${formData.relationship}]`,
         `Movilidad: ${formData.mobilitySupport}`,
@@ -186,7 +196,6 @@ function ServiceBookingWizard() {
         discountAmount > 0 ? `Descuento Aplicado: RD$ ${discountAmount}` : ''
       ].filter(Boolean).join(' | ');
 
-      // Payload universal: incluye alias para que sea compatible con cualquier variante de la tabla
       const universalPayload: any = {
         user_id: user.id,
         customer_id: user.id,
@@ -194,9 +203,9 @@ function ServiceBookingWizard() {
         recipient_phone: formData.recipientPhone || formData.contactPhone || 'N/A',
         service_type: formData.serviceType,
         facility_or_location: ubicacionConsolidada,
-        scheduled_date: formData.serviceDate,
-        requested_date: formData.serviceDate,
-        scheduled_time: formData.serviceTime,
+        scheduled_date: validDate,
+        requested_date: validDate,
+        scheduled_time: formData.serviceTime || '08:00',
         duration_hours: formData.hours,
         rate_total: total,
         special_notes: notasConsolidadas,
@@ -205,14 +214,17 @@ function ServiceBookingWizard() {
         emergency_status: 'NORMAL'
       };
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('service_requests')
-        .insert([universalPayload]);
+        .insert([universalPayload])
+        .select('id')
+        .single();
+
+      let serviceId = data?.id;
 
       if (error) {
-        console.warn('Primer intento con payload completo dio error, intentando inserción base:', error.message);
+        console.warn('Primer intento falló, ejecutando inserción base:', error.message);
         
-        // Segundo intento con las columnas estrictamente estándar de PostgreSQL
         const corePayload: any = {
           user_id: user.id,
           customer_id: user.id,
@@ -220,23 +232,30 @@ function ServiceBookingWizard() {
           recipient_phone: formData.recipientPhone || formData.contactPhone || 'N/A',
           service_type: formData.serviceType,
           facility_or_location: ubicacionConsolidada,
-          scheduled_date: formData.serviceDate,
-          requested_date: formData.serviceDate,
-          scheduled_time: formData.serviceTime,
+          scheduled_date: validDate,
+          requested_date: validDate,
+          scheduled_time: formData.serviceTime || '08:00',
           duration_hours: formData.hours,
           rate_total: total,
           special_notes: notasConsolidadas
         };
 
-        const { error: coreError } = await supabase
+        const { data: fallbackData, error: coreError } = await supabase
           .from('service_requests')
-          .insert([corePayload]);
+          .insert([corePayload])
+          .select('id')
+          .single();
 
         if (coreError) throw coreError;
+        serviceId = fallbackData?.id;
       }
 
-      alert('✓ Solicitud confirmada exitosamente. Tu requerimiento ha sido registrado en la Mesa de Operaciones Central.');
-      window.location.href = '/profile';
+      // Redirección a la pantalla de éxito con los detalles del servicio
+      if (serviceId) {
+        window.location.href = `/services/success?id=${serviceId}`;
+      } else {
+        window.location.href = '/profile';
+      }
     } catch (err: any) {
       alert(`Error al registrar el servicio: ${err.message || 'Intente nuevamente'}`);
     } finally {
@@ -888,7 +907,9 @@ function ServiceBookingWizard() {
 
                 <div className="flex justify-between border-b border-slate-800/80 pb-2">
                   <span className="text-slate-400">Fecha y hora:</span>
-                  <span className="font-bold text-white">{formData.serviceDate} a las {formData.serviceTime}</span>
+                  <span className="font-bold text-white">
+                    {formData.serviceDate || new Date().toISOString().split('T')[0]} a las {formData.serviceTime}
+                  </span>
                 </div>
 
                 <div className="flex justify-between border-b border-slate-800/80 pb-2">
