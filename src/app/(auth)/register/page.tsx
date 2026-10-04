@@ -8,7 +8,6 @@ import { Logo } from '@/components/brand/Logo';
 import { 
   User, 
   HeartHandshake, 
-  Building2, 
   Mail, 
   Phone, 
   Lock, 
@@ -19,7 +18,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 
-type RegisterCategory = 'CLIENT' | 'COMPANION' | 'B2B';
+type RegisterCategory = 'CLIENT' | 'COMPANION';
 
 export default function UnifiedRegisterPage() {
   const router = useRouter();
@@ -38,10 +37,6 @@ export default function UnifiedRegisterPage() {
   const [cedula, setCedula] = useState('');
   const [zone, setZone] = useState('Distrito Nacional (Santo Domingo)');
   const [experience, setExperience] = useState('');
-
-  // Campos específicos de B2B
-  const [companyName, setCompanyName] = useState('');
-  const [rnc, setRnc] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -62,8 +57,8 @@ export default function UnifiedRegisterPage() {
 
     setLoading(true);
 
-    const displayName = category === 'B2B' ? companyName.trim() : fullName.trim();
-    const role = category === 'CLIENT' ? 'CLIENT' : category === 'COMPANION' ? 'COMPANION' : 'INSTITUTION';
+    const displayName = fullName.trim();
+    const role = category === 'CLIENT' ? 'CLIENT' : 'COMPANION';
 
     // 1. Registro en Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -120,20 +115,6 @@ export default function UnifiedRegisterPage() {
         return;
       }
 
-      if (category === 'B2B') {
-        await supabase.from('institutions').insert([{
-          user_id: authData.user.id,
-          name: displayName,
-          rnc: rnc.trim(),
-          email: email.trim(),
-          phone: phone.trim(),
-          status: 'PENDING_REVIEW'
-        }]);
-
-        router.push('/profile');
-        return;
-      }
-
       // Rol Solicitante / Cliente
       router.push('/services/new');
       return;
@@ -168,12 +149,12 @@ export default function UnifiedRegisterPage() {
             <p className="text-xs text-slate-400">Selecciona el tipo de registro que necesitas</p>
           </div>
 
-          {/* 3 BOTONES DE SELECCIÓN */}
-          <div className="grid grid-cols-3 gap-2 p-1.5 bg-slate-900/90 border border-slate-800 rounded-2xl">
+          {/* 2 BOTONES DE SELECCIÓN (SOLICITANTE Y ACOMPAÑANTE) */}
+          <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-900/90 border border-slate-800 rounded-2xl">
             <button
               type="button"
               onClick={() => { setCategory('CLIENT'); setErrorMsg(null); }}
-              className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-xl text-[11px] font-bold transition-all ${
+              className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-xl text-xs font-bold transition-all ${
                 category === 'CLIENT'
                   ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
@@ -186,7 +167,7 @@ export default function UnifiedRegisterPage() {
             <button
               type="button"
               onClick={() => { setCategory('COMPANION'); setErrorMsg(null); }}
-              className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-xl text-[11px] font-bold transition-all ${
+              className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-xl text-xs font-bold transition-all ${
                 category === 'COMPANION'
                   ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
@@ -195,28 +176,15 @@ export default function UnifiedRegisterPage() {
               <HeartHandshake className="w-4 h-4 mb-1" />
               <span>Acompañante</span>
             </button>
-
-            <button
-              type="button"
-              onClick={() => { setCategory('B2B'); setErrorMsg(null); }}
-              className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-xl text-[11px] font-bold transition-all ${
-                category === 'B2B'
-                  ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              <Building2 className="w-4 h-4 mb-1" />
-              <span>Institución B2B</span>
-            </button>
           </div>
 
           {/* BADGE DE ORIENTACIÓN */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 text-[11px] text-slate-300 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>
-              {category === 'CLIENT' && 'Registro para coordinar asistencia no médica para ti o tus familiares.'}
-              {category === 'COMPANION' && 'Postulación de acompañante con acceso inmediato y 5% de descuento familiar.'}
-              {category === 'B2B' && 'Acceso corporativo para centros de salud, empresas y facturación con NCF.'}
+              {category === 'CLIENT' 
+                ? 'Registro para coordinar asistencia no médica para ti o tus familiares.'
+                : 'Postulación de acompañante con acceso inmediato y acreditación PGR.'}
             </span>
           </div>
 
@@ -228,95 +196,60 @@ export default function UnifiedRegisterPage() {
 
           <form onSubmit={handleRegister} className="space-y-3.5 text-xs">
             
-            {/* SECCIÓN 1: NOMBRE O RAZÓN SOCIAL */}
-            {category === 'B2B' ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-slate-300 font-bold block">Nombre de la Institución / Empresa *</label>
-                  <div className="relative flex items-center">
-                    <Building2 className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
-                    <input
-                      type="text"
-                      required
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      placeholder="Ej. Clínica o Centro Médico"
-                      className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                    />
-                  </div>
+            {/* SECCIÓN 1: NOMBRE Y CÉDULA/TELÉFONO */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">Nombre completo *</label>
+                <div className="relative flex items-center">
+                  <User className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                  <input
+                    type="text"
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Ej. Juan Pérez"
+                    className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  />
                 </div>
+              </div>
 
+              {category === 'COMPANION' ? (
                 <div className="space-y-1">
-                  <label className="text-slate-300 font-bold block">RNC Institucional</label>
+                  <label className="text-slate-300 font-bold block">Cédula de Identidad *</label>
                   <div className="relative flex items-center">
                     <FileText className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
                     <input
                       type="text"
-                      value={rnc}
-                      onChange={(e) => setRnc(e.target.value)}
-                      placeholder="1-01-00000-0"
-                      className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-slate-300 font-bold block">Nombre completo *</label>
-                  <div className="relative flex items-center">
-                    <User className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
-                    <input
-                      type="text"
                       required
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      placeholder="Ej. Juan Pérez"
+                      value={cedula}
+                      onChange={(e) => setCedula(e.target.value)}
+                      placeholder="001-0000000-0"
                       className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
                     />
                   </div>
                 </div>
-
-                {category === 'COMPANION' ? (
-                  <div className="space-y-1">
-                    <label className="text-slate-300 font-bold block">Cédula de Identidad *</label>
-                    <div className="relative flex items-center">
-                      <FileText className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
-                      <input
-                        type="text"
-                        required
-                        value={cedula}
-                        onChange={(e) => setCedula(e.target.value)}
-                        placeholder="001-0000000-0"
-                        className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                      />
-                    </div>
+              ) : (
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-bold block">Teléfono / WhatsApp *</label>
+                  <div className="relative flex items-center">
+                    <Phone className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                    <input
+                      type="tel"
+                      required
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+1 809..."
+                      className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                    />
                   </div>
-                ) : (
-                  <div className="space-y-1">
-                    <label className="text-slate-300 font-bold block">Teléfono / WhatsApp *</label>
-                    <div className="relative flex items-center">
-                      <Phone className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
-                      <input
-                        type="tel"
-                        required
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="+1 809..."
-                        className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
 
-            {/* SECCIÓN 2: CORREO Y TELÉFONO */}
+            {/* SECCIÓN 2: CORREO Y TELÉFONO (CUANDO ES ACOMPAÑANTE) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-slate-300 font-bold block">
-                  {category === 'B2B' ? 'Correo institucional *' : 'Correo electrónico *'}
-                </label>
+                <label className="text-slate-300 font-bold block">Correo electrónico *</label>
                 <div className="relative flex items-center">
                   <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
                   <input
@@ -324,17 +257,15 @@ export default function UnifiedRegisterPage() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder={category === 'B2B' ? 'contacto@empresa.com' : 'correo@ejemplo.com'}
+                    placeholder="correo@ejemplo.com"
                     className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
                   />
                 </div>
               </div>
 
-              {category !== 'CLIENT' && (
+              {category === 'COMPANION' && (
                 <div className="space-y-1">
-                  <label className="text-slate-300 font-bold block">
-                    {category === 'B2B' ? 'Teléfono de contacto / Flota *' : 'Teléfono / WhatsApp *'}
-                  </label>
+                  <label className="text-slate-300 font-bold block">Teléfono / WhatsApp *</label>
                   <div className="relative flex items-center">
                     <Phone className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
                     <input
@@ -429,9 +360,7 @@ export default function UnifiedRegisterPage() {
                   ? 'Registrando...' 
                   : category === 'CLIENT'
                   ? 'Crear cuenta de Solicitante'
-                  : category === 'COMPANION'
-                  ? 'Registrarme e Ingresar como Acompañante'
-                  : 'Registrar Institución B2B'}
+                  : 'Registrarme e Ingresar como Acompañante'}
               </span>
               <ArrowRight className="w-4 h-4" />
             </button>
