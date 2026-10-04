@@ -118,7 +118,7 @@ export default function CompanionDashboard() {
     loadCompanionData();
   }, [supabase, myLocation.lat, myLocation.lng]);
 
-  // Al tomar el servicio: redirección directa a la Sala en Vivo
+  // Al tomar el servicio: redirección directa a /services/live?id=... (Query Param seguro)
   async function handleClaimService(serviceId: string) {
     setClaimingId(serviceId);
     try {
@@ -135,8 +135,8 @@ export default function CompanionDashboard() {
         return;
       }
 
-      // Redirección inmediata a la sala en vivo
-      router.push(`/services/${serviceId}/live`);
+      // Redirección inmediata a la sala en vivo con query param
+      window.location.href = `/services/live?id=${serviceId}`;
     } catch (err: any) {
       alert('Error de conexión: ' + err.message);
     } finally {
@@ -431,9 +431,9 @@ export default function CompanionDashboard() {
                           <span>{mine.duration_hours}h (+1h traslado)</span>
                         </div>
 
-                        {/* BOTÓN CLAVE: LLEVA DIRECTO A LA SALA DE CONTROL Y CHECK-IN */}
+                        {/* ENLACE DIRECTO A LA SALA CON QUERY PARAM (SIN 404) */}
                         <Link
-                          href={`/services/${mine.id}/live`}
+                          href={`/services/live?id=${mine.id}`}
                           className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 transition mt-2"
                         >
                           <Radio className="w-3.5 h-3.5" />
