@@ -84,7 +84,7 @@ function ServiceBookingWizard() {
     async function checkAuth() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        router.push('/login?redirect=/services/new');
+        window.location.href = '/login?redirect=/services/new';
         return;
       }
       setUser(user);
@@ -93,7 +93,7 @@ function ServiceBookingWizard() {
         .from('profiles')
         .select('role, full_name, phone')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
       const hasUrlDiscount = searchParams.get('discount') === '5';
       if (profile?.role === 'COMPANION' || hasUrlDiscount) {
@@ -108,7 +108,7 @@ function ServiceBookingWizard() {
     }
 
     checkAuth();
-  }, [router, searchParams, supabase]);
+  }, [searchParams, supabase]);
 
   const RATE_PER_HOUR = 900;
   const subtotal = formData.hours * RATE_PER_HOUR;
@@ -156,44 +156,76 @@ function ServiceBookingWizard() {
     setLoading(true);
 
     try {
-      // Consolidación de dirección para evitar error de columnas no existentes en BD
-      const ubicacionConsolidada = `${formData.facilityName || 'Domicilio'} - ${formData.address ? formData.address + ', ' : ''}${formData.city}${formData.geoLat ? ` [GPS: ${formData.geoLat}, ${formData.geoLng}]` : ''}`;
+      const ubicacionConsolidada = `${formData.facilityName || 'Domicilio'}${formData.address ? ' - ' + formData.address : ''} (${formData.city})${formData.geoLat ? ` [GPS: ${formData.geoLat}, ${formData.geoLng}]` : ''}`;
       
       const recipientFinal = formData.forWhom === 'SELF' 
-        ? (user.user_metadata?.full_name || 'Titular Solicitante') 
+        ? (user.user_metadata?.full_name || user.email || 'Titular Solicitante') 
         : (formData.recipientName || 'Familiar');
 
       const notasConsolidadas = [
+        `Supervisor/Contacto: ${formData.contactName || 'No especificado'} (${formData.contactPhone || 'Sin teléfono'}) [${formData.relationship}]`,
         `Movilidad: ${formData.mobilitySupport}`,
         formData.specialInstructions ? `Instrucciones: ${formData.specialInstructions}` : '',
-        formData.mapsUrl ? `Punto Google Maps: ${formData.mapsUrl}` : ''
+        formData.mapsUrl ? `Punto Google Maps: ${formData.mapsUrl}` : '',
+        formData.requiresNCF ? `NCF Solicitado: ${formData.fiscalName} (RNC: ${formData.rncOrCedula})` : ''
       ].filter(Boolean).join(' | ');
+
+      // Payload con compatibilidad dual para esquemas antiguos y nuevos
+      const payload: any = {
+        user_id: user.id,
+        customer_id: user.id,
+        recipient_name: recipientFinal,
+        recipient_phone: formData.recipientPhone || formData.contactPhone || 'N/A',
+        service_type: formData.serviceType,
+        facility_or_location: ubicacionConsolidada,
+        city: formData.city,
+        scheduled_date: formData.serviceDate,
+        requested_date: formData.serviceDate,
+        scheduled_time: formData.serviceTime,
+        duration_hours: formData.hours,
+        rate_total: total,
+        discount_applied: discountAmount,
+        mobility_notes: formData.mobilitySupport,
+        special_notes: notasConsolidadas,
+        contact_supervisor_name: formData.contactName,
+        contact_supervisor_phone: formData.contactPhone,
+        status: 'PENDING_DISPATCH',
+        emergency_status: 'NORMAL'
+      };
 
       const { error } = await supabase
         .from('service_requests')
-        .insert([{
+        .insert([payload]);
+
+      if (error) {
+        console.warn('Inserción principal falló, intentando con carga base limpia:', error.message);
+        
+        // Fallback mínimo universal
+        const fallbackPayload: any = {
           user_id: user.id,
+          customer_id: user.id,
           recipient_name: recipientFinal,
-          recipient_phone: formData.recipientPhone || formData.contactPhone,
+          recipient_phone: formData.recipientPhone || formData.contactPhone || 'N/A',
           service_type: formData.serviceType,
           facility_or_location: ubicacionConsolidada,
           scheduled_date: formData.serviceDate,
+          requested_date: formData.serviceDate,
           scheduled_time: formData.serviceTime,
           duration_hours: formData.hours,
           rate_total: total,
-          discount_applied: discountAmount,
-          mobility_notes: formData.mobilitySupport,
           special_notes: notasConsolidadas,
-          contact_supervisor_name: formData.contactName,
-          contact_supervisor_phone: formData.contactPhone,
-          status: 'PENDING_DISPATCH',
-          emergency_status: 'NORMAL'
-        }]);
+          status: 'PENDING_DISPATCH'
+        };
 
-      if (error) throw error;
+        const { error: fallbackError } = await supabase
+          .from('service_requests')
+          .insert([fallbackPayload]);
 
-      alert('✓ Solicitud confirmada exitosamente. Tu requerimiento ha sido registrado en la Mesa de Operaciones Central.');
-      router.push('/profile');
+        if (fallbackError) throw fallbackError;
+      }
+
+      alert('✓ Solicitud confirmada exitosamente en la Mesa de Operaciones Central.');
+      window.location.href = '/profile';
     } catch (err: any) {
       alert(`Error al registrar el servicio: ${err.message || 'Intente nuevamente'}`);
     } finally {
