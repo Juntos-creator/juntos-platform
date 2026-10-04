@@ -126,14 +126,14 @@ function LiveRoomContent() {
 
       setService(srv);
 
-      // Cargar lista completa de acompañantes para que puedas seleccionarlos
+      // Cargar lista completa de acompañantes disponibles
       const { data: compList } = await supabase
         .from('profiles')
         .select('id, full_name, phone, role')
         .eq('role', 'COMPANION');
       setAllCompanions(compList || []);
 
-      // Cargar acompañante asignado
+      // Cargar Acompañante asignado
       let compInfo: any = null;
       if (srv.companion_id) {
         const { data: comp } = await supabase
@@ -164,7 +164,7 @@ function LiveRoomContent() {
       });
       setSelectedCompanionId(srv.companion_id || '');
 
-      // Cargar solicitante
+      // Cargar Solicitante
       const customerId = srv.customer_id || srv.user_id || srv.client_id;
       if (customerId) {
         const { data: cli } = await supabase
@@ -175,7 +175,7 @@ function LiveRoomContent() {
         setClientProfile(cli);
       }
 
-      // Cargar chat
+      // Cargar Chat
       const { data: msgs } = await supabase
         .from('service_chat_messages')
         .select('*')
@@ -189,7 +189,7 @@ function LiveRoomContent() {
     loadData();
   }, [rawId, supabase]);
 
-  // Validar PIN directamente en la base de datos sin restricciones
+  // Validar PIN directamente contra la base de datos
   async function handleVerifyPin(e: React.FormEvent) {
     e.preventDefault();
     if (!service) return;
@@ -203,7 +203,7 @@ function LiveRoomContent() {
     try {
       if (pinType === 'CHECKIN') {
         if (enteredPin !== checkinExpected) {
-          throw new Error(`PIN de Encuentro incorrecto. (PIN esperado: ${checkinExpected})`);
+          throw new Error(`PIN de Encuentro inválido. (Esperado para pruebas: ${checkinExpected})`);
         }
 
         await supabase
@@ -217,7 +217,7 @@ function LiveRoomContent() {
         setPinType('CHECKOUT');
       } else {
         if (enteredPin !== checkoutExpected) {
-          throw new Error(`PIN de Salida incorrecto. (PIN esperado: ${checkoutExpected})`);
+          throw new Error(`PIN de Salida inválido. (Esperado para pruebas: ${checkoutExpected})`);
         }
 
         await supabase
@@ -237,7 +237,7 @@ function LiveRoomContent() {
     }
   }
 
-  // Guardar cambio o asignación de acompañante
+  // Guardar asignación / cambio de acompañante
   async function handleUpdateCompanion() {
     if (!selectedCompanionId || !service) return;
 
@@ -337,13 +337,13 @@ function LiveRoomContent() {
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 w-full space-y-6">
       
-      {/* BARRA SUPERIOR DE PRUEBAS PARA EL ADMINISTRADOR */}
+      {/* BARRA DE PRUEBAS / CONTROL ADMINISTRADOR */}
       {isMasterAdmin && (
         <div className="bg-slate-950 border border-emerald-500/50 p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-lg">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-emerald-400 font-mono font-bold flex items-center gap-1.5">
-              <Eye className="w-4 h-4" /> CONSOLA DE CONTROL ADMINISTRADOR:
+              <Eye className="w-4 h-4" /> MODO ADMINISTRADOR ACTIVO:
             </span>
           </div>
 
@@ -355,7 +355,7 @@ function LiveRoomContent() {
                 isClient ? 'bg-emerald-500 text-slate-950 shadow-md' : 'bg-slate-900 text-slate-300 hover:text-white'
               }`}
             >
-              Ver como Solicitante (PINs)
+              Ver como Solicitante (Ver Claves)
             </button>
             <button
               type="button"
@@ -364,7 +364,7 @@ function LiveRoomContent() {
                 isCompanion ? 'bg-emerald-500 text-slate-950 shadow-md' : 'bg-slate-900 text-slate-300 hover:text-white'
               }`}
             >
-              Ver como Acompañante
+              Ver como Acompañante (Ingresar PIN)
             </button>
             <button
               type="button"
@@ -408,10 +408,10 @@ function LiveRoomContent() {
       {/* CUERPO PRINCIPAL */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* COLUMNA 1: DETALLES, ACOMPAÑANTE Y PINS */}
+        {/* COLUMNA 1: DATOS Y PINS */}
         <div className="space-y-6">
           
-          {/* TARJETA DE INFORMACIÓN DEL PACIENTE Y ACOMPAÑANTE */}
+          {/* TARJETA DE DATOS DEL PACIENTE Y ACOMPAÑANTE */}
           <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
             <div className="flex justify-between items-center border-b border-slate-800 pb-2">
               <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400">
@@ -421,7 +421,7 @@ function LiveRoomContent() {
                 onClick={() => setShowEditCompanionModal(true)}
                 className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1 font-bold"
               >
-                <Edit3 className="w-3.5 h-3.5" /> Asignar / Cambiar
+                <Edit3 className="w-3 h-3" /> Cambiar Personal
               </button>
             </div>
 
@@ -429,16 +429,15 @@ function LiveRoomContent() {
               <p><strong className="text-white">Beneficiario / Paciente:</strong> {service.recipient_name || service.client_name}</p>
               <p><strong className="text-white">Punto de Asistencia:</strong> {service.facility_or_location || service.address}</p>
               <p><strong className="text-white">Teléfono en Sitio:</strong> {service.recipient_phone || service.client_phone || '809-541-2000'}</p>
-              <p><strong className="text-white">Familiar Responsable:</strong> {clientProfile?.full_name || 'Titular'} ({clientProfile?.phone || 'Registrado'})</p>
-
-              <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+              
+              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
                 <div>
                   <span className="text-slate-500 block text-[10px] font-mono">ACOMPAÑANTE ASIGNADO:</span>
                   <span className="font-bold text-white text-sm">{companion?.full_name}</span>
                   <span className="text-emerald-400 block font-mono text-[11px]">Tel: {companion?.phone}</span>
                 </div>
                 <span className="bg-emerald-950 text-emerald-400 border border-emerald-500/40 text-[9px] font-mono px-2 py-0.5 rounded font-bold">
-                  ✓ VERIFICADO PGR
+                  ✓ PGR VERIFICADO
                 </span>
               </div>
             </div>
@@ -461,7 +460,7 @@ function LiveRoomContent() {
               </div>
             )}
 
-            {/* SECCIÓN 1: NÚMEROS DE PIN PARA EL SOLICITANTE */}
+            {/* SECCIÓN 1: NÚMEROS DE PIN PARA EL SOLICITANTE / PACIENTE */}
             <div className="space-y-2">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
                 PINs Oficiales (Dictar en persona):
@@ -470,7 +469,7 @@ function LiveRoomContent() {
                 <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl">
                   <span className="text-[10px] font-bold text-slate-400 block uppercase">1. PIN Check-In</span>
                   <span className="font-mono text-2xl font-black text-emerald-400 tracking-widest">{checkinPin}</span>
-                  <span className="text-[9px] text-slate-500 block mt-0.5">Al verse en sitio</span>
+                  <span className="text-[9px] text-slate-500 block mt-0.5">Al encontrarse</span>
                 </div>
                 <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl">
                   <span className="text-[10px] font-bold text-slate-400 block uppercase">2. PIN Check-Out</span>
@@ -480,11 +479,11 @@ function LiveRoomContent() {
               </div>
             </div>
 
-            {/* SECCIÓN 2: FORMULARIO DE INGRESO DEL PIN */}
+            {/* SECCIÓN 2: FORMULARIO DE INGRESO DEL PIN (PARA EL ACOMPAÑANTE O ADMINISTRADORA) */}
             <div className="pt-3 border-t border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-white block">
-                  Ingresar PIN de Validación:
+                  Ingresar PIN de Validación Presencial:
                 </label>
                 <div className="flex gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-[10px]">
                   <button
@@ -542,7 +541,7 @@ function LiveRoomContent() {
                   href={`/services/receipt?id=${service.id}`}
                   className="text-xs text-white underline font-bold inline-block mt-1"
                 >
-                  Ver Comprobante Digital
+                  Ver Comprobante & Recibo Fiscal Digital
                 </Link>
               </div>
             )}
@@ -556,7 +555,7 @@ function LiveRoomContent() {
             <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
               <MessageSquare className="w-4 h-4 text-emerald-400" /> Chat Operativo del Servicio
             </span>
-            <span className="text-[10px] text-slate-500 font-mono">EN VIVO</span>
+            <span className="text-[10px] text-slate-500 font-mono">CANAL EN VIVO</span>
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs">
@@ -602,7 +601,7 @@ function LiveRoomContent() {
 
       </div>
 
-      {/* MODAL PARA CAMBIAR O ASIGNAR ACOMPAÑANTE */}
+      {/* MODAL PARA CAMBIAR / ASIGNAR ACOMPAÑANTE DIRECTAMENTE */}
       {showEditCompanionModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-950 border border-emerald-500/40 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
