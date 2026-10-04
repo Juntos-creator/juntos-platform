@@ -9,20 +9,20 @@ import {
   User, 
   HeartHandshake, 
   Building2, 
-  ShieldAlert,
   Mail, 
   Lock, 
   ArrowRight, 
   ShieldCheck 
 } from 'lucide-react';
 
-type UserCategory = 'CLIENT' | 'COMPANION' | 'INSTITUTION' | 'ADMIN';
+type UserCategory = 'CLIENT' | 'COMPANION' | 'INSTITUTION';
 
 function LoginForm() {
   const searchParams = useSearchParams();
   const redirectParam = searchParams.get('redirect');
   const supabase = createClient();
 
+  // Solo roles públicos visibles
   const [category, setCategory] = useState<UserCategory>('CLIENT');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -54,10 +54,10 @@ function LoginForm() {
       }
 
       if (data?.user) {
-        // 2. Determinar destino
-        let destination = redirectParam || '/services/new';
+        // 2. Comprobación silenciosa de Administrador (Totalmente oculta del público)
+        const isMasterAdmin = data.user.email === 'odel_kiss@hotmail.com';
 
-        // Consultar rol en la base de datos de forma segura
+        let userRole = null;
         try {
           const { data: profile } = await supabase
             .from('profiles')
@@ -65,36 +65,36 @@ function LoginForm() {
             .eq('id', data.user.id)
             .maybeSingle();
 
-          const userRole = profile?.role;
-          const isAdminAccount = userRole === 'ADMIN' || data.user.email === 'odel_kiss@hotmail.com';
+          userRole = profile?.role;
+        } catch {
+          // Continuar con fallback
+        }
 
-          if (category === 'ADMIN') {
-            if (!isAdminAccount) {
-              setErrorMsg('Tu cuenta no tiene privilegios de Administrador Central.');
-              setLoading(false);
-              return;
-            }
-            destination = '/profile';
-          } else if (category === 'COMPANION' || userRole === 'COMPANION') {
+        // Si es Admin, redirigir a la Mesa / Perfil Central de inmediato
+        if (isMasterAdmin || userRole === 'ADMIN') {
+          window.location.href = redirectParam || '/profile';
+          return;
+        }
+
+        // Destinos para usuarios normales según su rol
+        let destination = redirectParam;
+        if (!destination) {
+          if (category === 'COMPANION' || userRole === 'COMPANION') {
             destination = '/companion';
           } else if (category === 'INSTITUTION' || userRole === 'INSTITUTION') {
             destination = '/profile';
           } else {
-            destination = redirectParam || '/services/new';
+            destination = '/services/new';
           }
-        } catch {
-          // Si falla la consulta a profiles, continuar al destino por defecto
-          destination = category === 'COMPANION' ? '/companion' : (redirectParam || '/services/new');
         }
 
-        // 3. Forzar redirección limpia actualizando cookies de sesión del navegador
+        // 3. Forzar redirección segura
         window.location.href = destination;
         return;
       }
     } catch (err: any) {
       setErrorMsg(err?.message || 'Error de conexión. Inténtalo nuevamente.');
     } finally {
-      // Evita que el botón quede atascado si no hubo redirección
       setTimeout(() => setLoading(false), 2000);
     }
   }
@@ -118,8 +118,8 @@ function LoginForm() {
           <p className="text-xs text-slate-400">Selecciona tu categoría de usuario</p>
         </div>
 
-        {/* SELECTOR DE 4 BOTONES */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-1.5 bg-slate-900/90 border border-slate-800 rounded-2xl">
+        {/* SELECTOR SEGURO: SOLO 3 BOTONES PÚBLICOS (SIN BOTÓN ADMIN) */}
+        <div className="grid grid-cols-3 gap-2 p-1.5 bg-slate-900/90 border border-slate-800 rounded-2xl">
           <button
             type="button"
             onClick={() => { setCategory('CLIENT'); setErrorMsg(null); }}
@@ -158,19 +158,6 @@ function LoginForm() {
             <Building2 className="w-4 h-4 mb-1" />
             <span>B2B / Empresa</span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => { setCategory('ADMIN'); setErrorMsg(null); }}
-            className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-xl text-[11px] font-bold transition-all ${
-              category === 'ADMIN'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-            }`}
-          >
-            <ShieldAlert className="w-4 h-4 mb-1" />
-            <span>Admin</span>
-          </button>
         </div>
 
         {errorMsg && (
@@ -182,11 +169,7 @@ function LoginForm() {
         <form onSubmit={handleLogin} className="space-y-4 text-xs">
           <div className="space-y-1.5">
             <label className="text-slate-300 font-bold block">
-              {category === 'INSTITUTION' 
-                ? 'Correo institucional *' 
-                : category === 'ADMIN' 
-                ? 'Correo de Administrador *' 
-                : 'Correo electrónico *'}
+              {category === 'INSTITUTION' ? 'Correo institucional *' : 'Correo electrónico *'}
             </label>
             <div className="relative flex items-center">
               <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
@@ -233,9 +216,7 @@ function LoginForm() {
                 ? 'Ingresar como Cliente'
                 : category === 'COMPANION'
                 ? 'Ingresar como Acompañante'
-                : category === 'INSTITUTION'
-                ? 'Ingresar Portal B2B'
-                : 'Ingresar a Consola Admin'}
+                : 'Ingresar Portal B2B'}
             </span>
             <ArrowRight className="w-4 h-4" />
           </button>
@@ -266,12 +247,6 @@ function LoginForm() {
               <Link href="/register-b2b" className="text-emerald-400 font-bold hover:underline">
                 Registrar Convenio B2B
               </Link>
-            </p>
-          )}
-
-          {category === 'ADMIN' && (
-            <p className="text-slate-500 text-[11px]">
-              Acceso restringido únicamente para personal autorizado y mesa de despacho central.
             </p>
           )}
         </div>
