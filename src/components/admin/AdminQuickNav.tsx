@@ -8,7 +8,6 @@ import {
   Home, 
   CalendarPlus, 
   HeartHandshake, 
-  Activity, 
   Radio, 
   Receipt, 
   LogOut, 
@@ -27,7 +26,6 @@ export function AdminQuickNav() {
 
   useEffect(() => {
     async function checkAdminSession() {
-      // 1. Obtener la sesión activa actual
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session?.user) {
@@ -36,8 +34,6 @@ export function AdminQuickNav() {
       }
 
       const user = session.user;
-
-      // 2. Verificar rol en el perfil público
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
@@ -54,7 +50,6 @@ export function AdminQuickNav() {
 
     checkAdminSession();
 
-    // Escuchar cambios de autenticación en tiempo real (login / logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session?.user) {
         setIsAdmin(false);
@@ -71,15 +66,14 @@ export function AdminQuickNav() {
     };
   }, [supabase]);
 
-  // Si no ha iniciado sesión o no es la administradora, NO RENDERIZA NADA
   if (!isAdmin) {
     return null;
   }
 
+  // Lista limpia y lógica sin el botón de Mesa / Perfil Central
   const navItems = [
     { href: '/', label: 'Inicio', icon: Home },
     { href: '/admin/operations', label: 'Mesa de Operaciones', icon: Radio },
-    { href: '/profile', label: 'Mesa / Perfil Central', icon: Activity },
     { href: '/services/new', label: 'Wizard Solicitud', icon: CalendarPlus },
     { href: '/companion', label: 'Portal Acompañante', icon: HeartHandshake },
     { href: '/services/checkout', label: 'Pasarela & NCF', icon: Receipt },
@@ -97,7 +91,6 @@ export function AdminQuickNav() {
         collapsed ? 'w-16' : 'w-56'
       }`}
     >
-      {/* CABECERA ADMIN */}
       <div className="flex items-center justify-between px-2 py-1 mb-2 border-b border-slate-800/80">
         <div className="flex items-center gap-2 overflow-hidden">
           <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -110,13 +103,12 @@ export function AdminQuickNav() {
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="text-slate-500 hover:text-white p-1 rounded-lg transition"
-          title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+          title={collapsed ? 'Expandir' : 'Colapsar'}
         >
           {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
         </button>
       </div>
 
-      {/* LISTADO DE ACCESOS EN ORDEN LÓGICO */}
       <nav className="space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -140,7 +132,6 @@ export function AdminQuickNav() {
         })}
       </nav>
 
-      {/* BOTÓN SALIR */}
       <div className="pt-2 mt-2 border-t border-slate-800/80">
         <button
           onClick={handleLogout}
