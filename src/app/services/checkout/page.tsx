@@ -6,16 +6,14 @@ import Link from 'next/link';
 import { Navbar } from '@/components/navbar';
 import { createClient } from '@/lib/supabase/client';
 import { 
-  CreditCard, 
-  Receipt, 
-  ShieldCheck, 
   Building2, 
+  Banknote, 
+  MessageCircle, 
   CheckCircle2, 
-  Lock, 
   ArrowRight,
-  AlertCircle,
-  FileText,
-  DollarSign
+  Receipt,
+  ShieldCheck,
+  Clock
 } from 'lucide-react';
 
 function CheckoutContent() {
@@ -26,18 +24,10 @@ function CheckoutContent() {
 
   const [loading, setLoading] = useState(true);
   const [service, setService] = useState<any>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'CARD' | 'TRANSFER'>('CARD');
-
-  // Facturación Fiscal DGII
+  const [metodo, setMetodo] = useState<'TRANSFER' | 'CASH'>('TRANSFER');
   const [needsNCF, setNeedsNCF] = useState(false);
   const [rncCedula, setRncCedula] = useState('');
   const [razonSocial, setRazonSocial] = useState('');
-  const [ncfType, setNcfType] = useState('B01'); // B01: Crédito Fiscal, B02: Consumo Final
-
-  // Datos Tarjeta
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExp, setCardExp] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
@@ -59,62 +49,56 @@ function CheckoutContent() {
   }, [serviceId, supabase]);
 
   const subtotal = Number(service?.rate_total || 2700);
-  const itbis = Math.round(subtotal * 0.18);
-  const totalPagar = subtotal + (needsNCF ? itbis : 0);
-
-  // Generador oficial de secuencia NCF DGII
   const ncfGenerado = needsNCF 
-    ? `${ncfType}0000${Math.floor(1000 + Math.random() * 9000)}`
+    ? `B010000${Math.floor(1000 + Math.random() * 9000)}` 
     : `B020000${Math.floor(1000 + Math.random() * 9000)}`;
 
-  async function handlePay(e: React.FormEvent) {
+  async function handleConfirmar(e: React.FormEvent) {
     e.preventDefault();
     setProcessing(true);
 
     try {
-      // 1. Registrar o actualizar pago en Supabase
-      const { data: payRecord, error: payError } = await supabase
+      // Registrar pago como PENDIENTE DE CONCILIACIÓN
+      await supabase
         .from('payments')
         .upsert({
           service_request_id: serviceId,
-          amount: totalPagar,
+          amount: subtotal,
           currency: 'DOP',
-          status: paymentMethod === 'CARD' ? 'COMPLETED' : 'PENDING_VERIFICATION',
-          payment_method: paymentMethod,
+          status: 'PENDIENTE_CONCILIACION',
+          payment_method: metodo,
           ncf: ncfGenerado,
           rnc_cedula: needsNCF ? rncCedula : null,
           razon_social: needsNCF ? razonSocial : null,
-        })
-        .select()
-        .single();
+        });
 
-      // 2. Actualizar estado del servicio
+      // Actualizar estado del servicio a AGENDADO / PAGO POR COORDINAR
       await supabase
         .from('service_requests')
         .update({
-          payment_status: paymentMethod === 'CARD' ? 'PAID' : 'PENDING_AUDIT',
-          status: paymentMethod === 'CARD' ? 'SCHEDULED' : 'PENDING_PAYMENT'
+          payment_status: 'COORDINADO_CENTRAL',
+          status: 'SCHEDULED'
         })
         .eq('id', serviceId);
 
-      alert(
-        paymentMethod === 'CARD'
-          ? `✓ Pago procesado exitosamente por RD$ ${totalPagar.toLocaleString()} con Comprobante NCF: ${ncfGenerado}`
-          : `✓ Transferencia registrada. La Mesa de Operaciones validará el comprobante.`
-      );
-
       router.push(`/services/receipt?id=${serviceId}`);
     } catch (err: any) {
-      alert(`Error al procesar: ${err.message}`);
+      alert(`Error al registrar: ${err.message}`);
     } finally {
       setProcessing(false);
     }
   }
 
+  function handleEnviarWhatsApp() {
+    const tel = '18095550188'; // El número oficial de tu Mesa Central
+    const msg = `🟢 *Comprobante de Pago - JUNTOS*\n\nHola Mesa Central, confirmo la coordinación de la orden *#${serviceId ? serviceId.slice(0, 8).toUpperCase() : ''}* por valor de *RD$ ${subtotal.toLocaleString()}*.\n\nAdjunto comprobante de transferencia / coordinaré el pago al llegar el acompañante.`;
+    window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center text-slate-400 font-mono text-xs">
-        Cargando orden de pago...
+        Cargando coordinación de pago...
       </div>
     );
   }
@@ -123,221 +107,142 @@ function CheckoutContent() {
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans pb-24 selection:bg-emerald-500 selection:text-white">
       <Navbar />
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8 w-full space-y-6">
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8 w-full space-y-6">
         
         <div className="bg-slate-950 border border-slate-800 p-6 rounded-3xl space-y-2">
           <div className="inline-flex items-center gap-1.5 bg-emerald-950 border border-emerald-500/30 text-emerald-400 px-3 py-0.5 rounded-full text-[11px] font-mono font-bold">
-            <Lock className="w-3.5 h-3.5" /> PAGO SEGURO CIFRADO SSL
+            <Clock className="w-3.5 h-3.5" /> PAGO COORDINADO CON MESA CENTRAL
           </div>
-          <h1 className="text-2xl font-black text-white">Pasarela de Pago y Comprobante Fiscal</h1>
+          <h1 className="text-2xl font-black text-white">Coordinación de Pago y Comprobante</h1>
           <p className="text-xs text-slate-400">
-            Orden #{serviceId ? serviceId.slice(0, 8).toUpperCase() : 'PENDIENTE'} • República Dominicana
+            Orden #{serviceId ? serviceId.slice(0, 8).toUpperCase() : 'PENDIENTE'} • Paga al momento del servicio o vía transferencia.
           </p>
         </div>
 
-        <form onSubmit={handlePay} className="grid grid-cols-1 md:grid-cols-12 gap-6">
+        <form onSubmit={handleConfirmar} className="space-y-6">
           
-          {/* COLUMNA IZQUIERDA: MÉTODO Y DGII (7 COLS) */}
-          <div className="md:col-span-7 space-y-5">
-            
-            {/* SELECTOR MÉTODO */}
-            <div className="bg-slate-950 border border-slate-800 p-5 rounded-3xl space-y-3">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                1. Selecciona Método de Pago
-              </h2>
+          {/* SELECCIÓN DE MODALIDAD */}
+          <div className="bg-slate-950 border border-slate-800 p-6 rounded-3xl space-y-4">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Selecciona cómo deseas liquidar el servicio:
+            </h2>
 
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('CARD')}
-                  className={`p-3.5 rounded-2xl border flex flex-col items-center gap-2 transition ${
-                    paymentMethod === 'CARD'
-                      ? 'bg-emerald-500/10 border-emerald-500 text-white shadow-md'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <CreditCard className="w-5 h-5 text-emerald-400" />
-                  <span className="text-xs font-bold">Tarjeta de Crédito / Débito</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('TRANSFER')}
-                  className={`p-3.5 rounded-2xl border flex flex-col items-center gap-2 transition ${
-                    paymentMethod === 'TRANSFER'
-                      ? 'bg-emerald-500/10 border-emerald-500 text-white shadow-md'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Building2 className="w-5 h-5 text-blue-400" />
-                  <span className="text-xs font-bold">Transferencia Bancaria</span>
-                </button>
-              </div>
-
-              {/* CAMPOS TARJETA */}
-              {paymentMethod === 'CARD' ? (
-                <div className="space-y-3 pt-2 text-xs">
-                  <div>
-                    <label className="text-slate-300 font-bold block mb-1">Número de Tarjeta</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="4000 1234 5678 9010"
-                      maxLength={19}
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 font-mono"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-slate-300 font-bold block mb-1">Vencimiento (MM/AA)</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="MM/AA"
-                        maxLength={5}
-                        value={cardExp}
-                        onChange={(e) => setCardExp(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-slate-300 font-bold block mb-1">CVV</label>
-                      <input
-                        type="password"
-                        required
-                        placeholder="123"
-                        maxLength={4}
-                        value={cardCvv}
-                        onChange={(e) => setCardCvv(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 font-mono"
-                      />
-                    </div>
-                  </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setMetodo('TRANSFER')}
+                className={`p-4 rounded-2xl border text-left transition flex items-start gap-3 ${
+                  metodo === 'TRANSFER'
+                    ? 'bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500/50'
+                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Building2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-xs font-bold text-white">Transferencia Bancaria</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Vía Banco Popular o Banreservas (ACH / SIPARD).</p>
                 </div>
-              ) : (
-                /* CUENTAS BANCARIAS RD */
-                <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl text-xs space-y-2 text-slate-300">
-                  <p className="font-bold text-white">Cuentas Corrientes Autorizadas (DOP):</p>
-                  <p className="font-mono text-[11px]">• <strong>Banco Popular:</strong> 8023-XXXX-XX</p>
-                  <p className="font-mono text-[11px]">• <strong>Banreservas:</strong> 240-XXXXXX-X</p>
-                  <p className="text-[10px] text-slate-400">
-                    A nombre de: <strong>JUNTOS ASISTENCIA SRL</strong> (RNC: 1-32-XXXXX-X)
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* FACTURACIÓN FISCAL NCF */}
-            <div className="bg-slate-950 border border-slate-800 p-5 rounded-3xl space-y-3 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-white flex items-center gap-1.5">
-                  <Receipt className="w-4 h-4 text-emerald-400" /> ¿Requieres Comprobante Fiscal (DGII)?
-                </span>
-                <input
-                  type="checkbox"
-                  checked={needsNCF}
-                  onChange={(e) => setNeedsNCF(e.target.checked)}
-                  className="rounded border-slate-700 bg-slate-900 text-emerald-500 h-4 w-4"
-                />
-              </div>
-
-              {needsNCF && (
-                <div className="space-y-3 pt-2 border-t border-slate-800/80">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-slate-400 font-bold block mb-1">Tipo de Comprobante</label>
-                      <select
-                        value={ncfType}
-                        onChange={(e) => setNcfType(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500"
-                      >
-                        <option value="B01">Crédito Fiscal (B01)</option>
-                        <option value="B02">Consumo Final (B02)</option>
-                        <option value="B14">Gubernamental (B14)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-slate-400 font-bold block mb-1">RNC o Cédula *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ej. 101000000"
-                        value={rncCedula}
-                        onChange={(e) => setRncCedula(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-slate-400 font-bold block mb-1">Razón Social o Nombre Legal *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Nombre registrado en DGII"
-                      value={razonSocial}
-                      onChange={(e) => setRazonSocial(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-          </div>
-
-          {/* COLUMNA DERECHA: RESUMEN DE ORDEN (5 COLS) */}
-          <div className="md:col-span-5 space-y-4">
-            <div className="bg-slate-950 border border-slate-800 p-6 rounded-3xl space-y-4">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800 pb-2">
-                Resumen de la Liquidación
-              </h2>
-
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between text-slate-300">
-                  <span>Servicio de Acompañamiento</span>
-                  <span className="font-mono">RD$ {subtotal.toLocaleString()}</span>
-                </div>
-
-                {needsNCF && (
-                  <div className="flex justify-between text-slate-400">
-                    <span>ITBIS (18%)</span>
-                    <span className="font-mono">RD$ {itbis.toLocaleString()}</span>
-                  </div>
-                )}
-
-                <div className="border-t border-slate-800 pt-3 flex justify-between items-center text-sm font-bold text-white">
-                  <span>Total a Pagar:</span>
-                  <span className="font-mono text-xl font-black text-emerald-400">
-                    RD$ {totalPagar.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-slate-900 p-3 rounded-2xl border border-slate-800 text-[11px] text-slate-400 space-y-1">
-                <span className="font-mono text-emerald-400 font-bold block">
-                  NCF Asignado: {ncfGenerado}
-                </span>
-                <p>Secuencia autorizada por la DGII para fines de declaración fiscal.</p>
-              </div>
+              </button>
 
               <button
-                type="submit"
-                disabled={processing}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition disabled:opacity-50"
+                type="button"
+                onClick={() => setMetodo('CASH')}
+                className={`p-4 rounded-2xl border text-left transition flex items-start gap-3 ${
+                  metodo === 'CASH'
+                    ? 'bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500/50'
+                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                }`}
               >
-                <span>{processing ? 'Liquidando Transacción...' : `Pagar RD$ ${totalPagar.toLocaleString()}`}</span>
-                <ArrowRight className="w-4 h-4" />
+                <Banknote className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-xs font-bold text-white">Al Llegar el Acompañante</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Paga en efectivo o transferencia contra entrega.</p>
+                </div>
               </button>
             </div>
 
-            <div className="text-center text-[10px] text-slate-500 font-mono">
-              Comprobantes válidos para crédito fiscal en República Dominicana (Decreto 254-06).
+            {/* CUENTAS DE TRANSFERENCIA */}
+            {metodo === 'TRANSFER' && (
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl text-xs space-y-3">
+                <span className="font-bold text-white block">Cuentas Corrientes Autorizadas:</span>
+                <div className="space-y-1 font-mono text-[11px] text-slate-300">
+                  <p>• <strong>Banco Popular:</strong> 8023-XXXX-XX (Corriente DOP)</p>
+                  <p>• <strong>Banreservas:</strong> 240-XXXXXX-X (Corriente DOP)</p>
+                  <p className="text-slate-400 text-[10px]">Beneficiario: <strong>JUNTOS ASISTENCIA SRL</strong></p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleEnviarWhatsApp}
+                  className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Notificar comprobante por WhatsApp a Despacho</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* COMPROBANTE DGII OPCIONAL */}
+          <div className="bg-slate-950 border border-slate-800 p-6 rounded-3xl space-y-3 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-white flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-emerald-400" />
+                ¿Deseas Comprobante con Valor Fiscal (DGII)?
+              </span>
+              <input
+                type="checkbox"
+                checked={needsNCF}
+                onChange={(e) => setNeedsNCF(e.target.checked)}
+                className="rounded border-slate-700 bg-slate-900 text-emerald-500 h-4 w-4"
+              />
             </div>
+
+            {needsNCF && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800/80">
+                <div>
+                  <label className="text-slate-400 font-bold block mb-1">RNC o Cédula *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="101000000"
+                    value={rncCedula}
+                    onChange={(e) => setRncCedula(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 font-bold block mb-1">Razón Social *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Nombre registrado en DGII"
+                    value={razonSocial}
+                    onChange={(e) => setRazonSocial(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* RESUMEN Y BOTÓN FINAL */}
+          <div className="bg-slate-950 border border-slate-800 p-6 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <span className="text-[11px] text-slate-400 block font-mono">Total Liquidación:</span>
+              <span className="text-2xl font-black text-emerald-400 font-mono">
+                RD$ {subtotal.toLocaleString()}
+              </span>
+            </div>
+
+            <button
+              type="submit"
+              disabled={processing}
+              className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-8 py-3.5 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition disabled:opacity-50"
+            >
+              <span>{processing ? 'Confirmando...' : 'Confirmar y Obtener PINs de Servicio'}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
 
         </form>
