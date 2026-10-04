@@ -25,7 +25,8 @@ import {
   ArrowUpRight,
   TrendingUp,
   Activity,
-  UserCheck
+  UserCheck,
+  MessageSquare
 } from 'lucide-react';
 
 export default function ProfilePage() {
@@ -176,7 +177,7 @@ export default function ProfilePage() {
             <p className="text-sm text-slate-400 mt-1">
               {esAdmin 
                 ? 'Consola Central del Administrador Maestro • JUNTOS ASISTENCIA RD' 
-                : 'Gestiona tus solicitudes de acompañamiento, recibos y datos personales.'}
+                : 'Gestiona tus solicitudes de acompañamiento, recibos y sala operativa en vivo.'}
             </p>
           </div>
 
@@ -331,7 +332,7 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* 2. SECCIÓN DEL CLIENTE: SEGUIMIENTO, RECIBOS Y PIN DE CHECK-OUT */}
+        {/* 2. SECCIÓN DEL CLIENTE / DIÁSPORA: SEGUIMIENTO, SALA EN VIVO, RECIBOS Y DOBLE PIN */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-black text-white flex items-center gap-2">
@@ -358,10 +359,14 @@ export default function ProfilePage() {
           ) : (
             <div className="space-y-4">
               {myServices.map((srv) => {
-                const isAssigned = srv.status === 'ASSIGNED' || srv.status === 'CONFIRMED';
+                const isAssigned = srv.status === 'ASSIGNED';
+                const isInProgress = srv.status === 'IN_PROGRESS';
                 const isPending = srv.status === 'PENDING_DISPATCH';
                 const isCompleted = srv.status === 'COMPLETED';
-                const pinCode = srv.checkout_pin || srv.id.replace(/\D/g, '').slice(0, 4) || '8421';
+
+                // Doble PIN: Check-in y Check-out
+                const checkinPin = srv.checkin_pin || srv.id.replace(/\D/g, '').slice(0, 4) || '2491';
+                const checkoutPin = srv.checkout_pin || srv.id.replace(/\D/g, '').slice(2, 6) || '8421';
 
                 return (
                   <div 
@@ -386,8 +391,13 @@ export default function ProfilePage() {
                           </span>
                         )}
                         {isAssigned && (
-                          <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-500/40 text-[10px] font-mono px-2.5 py-1 rounded-full font-bold">
-                            ✓ ACOMPAÑANTE ASIGNADO
+                          <span className="bg-blue-950/80 text-blue-400 border border-blue-500/40 text-[10px] font-mono px-2.5 py-1 rounded-full font-bold">
+                            ✓ EN CAMINO AL ENCUENTRO
+                          </span>
+                        )}
+                        {isInProgress && (
+                          <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-500/40 text-[10px] font-mono px-2.5 py-1 rounded-full font-bold animate-pulse">
+                            ● SERVICIO EN CURSO (REUNIDOS)
                           </span>
                         )}
                         {isCompleted && (
@@ -399,6 +409,7 @@ export default function ProfilePage() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                      {/* DETALLES */}
                       <div className="space-y-1.5 text-slate-300">
                         <p className="flex items-center gap-2 text-white font-bold">
                           <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -413,7 +424,8 @@ export default function ProfilePage() {
                         </p>
                       </div>
 
-                      <div className="space-y-1 bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800/80">
+                      {/* TOTAL */}
+                      <div className="space-y-1 bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800/80 flex flex-col justify-center">
                         <span className="text-[11px] text-slate-400">Total Liquidado</span>
                         <p className="text-lg font-black text-emerald-400 font-mono">
                           RD$ {Number(srv.rate_total || 0).toLocaleString()}
@@ -423,30 +435,40 @@ export default function ProfilePage() {
                         </p>
                       </div>
 
-                      {/* TARJETA DEL PIN DE CHECKOUT */}
-                      <div className="bg-emerald-950/30 border border-emerald-500/40 p-3.5 rounded-2xl flex flex-col justify-between space-y-1.5">
+                      {/* DOBLE PIN DE ENCUENTRO Y SALIDA */}
+                      <div className="bg-slate-900/80 border border-slate-800 p-3 rounded-2xl flex flex-col justify-between space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-emerald-300 flex items-center gap-1.5">
+                          <span className="text-[11px] font-bold text-white flex items-center gap-1.5">
                             <KeyRound className="w-3.5 h-3.5 text-emerald-400" />
-                            PIN de Check-Out
+                            PINs de Validación
                           </span>
-                          <span className="text-[9px] bg-emerald-900/60 text-emerald-400 font-mono px-1.5 py-0.5 rounded font-bold">
-                            CIERRE SEGURO
-                          </span>
-                        </div>
-
-                        <div className="text-center py-1">
-                          <span className="font-mono text-2xl font-black text-white tracking-widest bg-slate-950 px-4 py-1 rounded-xl border border-emerald-500/50 inline-block">
-                            {pinCode}
+                          <span className="text-[9px] bg-slate-950 text-emerald-400 font-mono px-1.5 py-0.5 rounded border border-slate-800">
+                            ANTIFRAUDE
                           </span>
                         </div>
 
-                        <p className="text-[10px] text-slate-400 leading-tight">
-                          💡 Entrega este PIN al acompañante <strong>al finalizar</strong> el tiempo.
+                        <div className="grid grid-cols-2 gap-2 text-center">
+                          <div className="bg-slate-950 p-2 rounded-xl border border-slate-800/80">
+                            <span className="text-[9px] text-slate-400 font-bold block">1. LLEGADA (IN)</span>
+                            <span className="font-mono text-base font-black text-emerald-400 tracking-wider">
+                              {checkinPin}
+                            </span>
+                          </div>
+                          <div className="bg-slate-950 p-2 rounded-xl border border-slate-800/80">
+                            <span className="text-[9px] text-slate-400 font-bold block">2. SALIDA (OUT)</span>
+                            <span className="font-mono text-base font-black text-amber-400 tracking-wider">
+                              {checkoutPin}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className="text-[9px] text-slate-400 leading-tight">
+                          Dictar PIN 1 al verse y PIN 2 al concluir las horas.
                         </p>
                       </div>
                     </div>
 
+                    {/* BOTONERA DE ACCIÓN Y ENTRADA A SALA EN VIVO */}
                     <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2 border-t border-slate-800/60">
                       <Link
                         href={`/services/receipt?id=${srv.id}`}
@@ -457,11 +479,11 @@ export default function ProfilePage() {
                       </Link>
 
                       <Link
-                        href={`/services/success?id=${srv.id}`}
+                        href={`/services/${srv.id}/live`}
                         className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition"
                       >
-                        <Activity className="w-3.5 h-3.5" />
-                        <span>Ver Radar en Vivo</span>
+                        <Radio className="w-3.5 h-3.5" />
+                        <span>Abrir Sala en Vivo (Chat & Radar)</span>
                       </Link>
                     </div>
                   </div>
