@@ -24,7 +24,7 @@ import {
   ExternalLink,
   LocateFixed,
   AlertCircle,
-  FileText
+  RotateCcw
 } from 'lucide-react';
 
 function ServiceBookingWizard() {
@@ -38,7 +38,7 @@ function ServiceBookingWizard() {
   const [locating, setLocating] = useState(false);
   const [user, setUser] = useState<any>(null);
 
-  // Beneficio de descuento y consentimiento Ley 172-13
+  // Descuento y consentimiento Ley 172-13
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [acceptedTerms, setAcceptedTerms] = useState<boolean>(true);
 
@@ -61,10 +61,10 @@ function ServiceBookingWizard() {
     serviceDate: '',
     serviceTime: '08:00',
 
-    // Paso 5: Duración
-    hours: 3,
+    // Paso 5: Duración (por defecto 2h mínimo, o capturado de la calculadora)
+    hours: 2,
 
-    // Paso 6: Geolocalización GPS y Punto de Mapa (Google Maps / Diáspora)
+    // Paso 6: Geolocalización GPS y Punto de Mapa
     geoLat: '',
     geoLng: '',
     mapsUrl: '',
@@ -88,6 +88,16 @@ function ServiceBookingWizard() {
   useEffect(() => {
     let isMounted = true;
 
+    // 1. Sincronizar horas desde la calculadora de la portada (?hours=X)
+    const hoursParam = searchParams.get('hours');
+    if (hoursParam) {
+      const parsedHours = parseInt(hoursParam, 10);
+      if (!isNaN(parsedHours) && parsedHours >= 2) {
+        setFormData(prev => ({ ...prev, hours: parsedHours }));
+      }
+    }
+
+    // 2. Verificar autenticación con fallback rápido
     async function checkAuth() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -118,10 +128,10 @@ function ServiceBookingWizard() {
       }
     }
 
-    // Timeout de seguridad de 800ms para evitar que la pantalla quede colgada
+    // Límite de 600ms para no bloquear usuarios con conexión móvil inestable
     const timer = setTimeout(() => {
       if (isMounted) setCheckingAuth(false);
-    }, 800);
+    }, 600);
 
     checkAuth();
 
@@ -169,7 +179,7 @@ function ServiceBookingWizard() {
         setLocating(false);
       },
       () => {
-        alert('No se pudo obtener la señal GPS directa. Puedes pegar la dirección o enlace de Google Maps RD debajo.');
+        alert('No se pudo obtener la señal GPS directa. Puedes escribir la dirección o pegar el enlace de Google Maps debajo.');
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 8000 }
@@ -185,14 +195,13 @@ function ServiceBookingWizard() {
     setLoading(true);
 
     try {
-      // 1. Verificar si hay usuario activo o crear sesión anónima/de paso
       let activeUser = user;
       if (!activeUser) {
         const { data: authData } = await supabase.auth.getUser();
         activeUser = authData?.user;
       }
 
-      // Si aún no hay usuario, redirigir guardando el borrador o pedir login
+      // Si no ha iniciado sesión, guardamos el borrador para que no pierda lo llenado
       if (!activeUser) {
         if (typeof window !== 'undefined') {
           sessionStorage.setItem('juntos_pending_booking', JSON.stringify(formData));
@@ -213,16 +222,15 @@ function ServiceBookingWizard() {
         : (formData.recipientName || 'Familiar Acompañado');
 
       const notasConsolidadas = [
-        `Supervisor/Contacto: ${formData.contactName || 'No especificado'} (${formData.contactPhone || 'Sin teléfono'}) [${formData.relationship}]`,
-        `Movilidad: ${formData.mobilitySupport}`,
-        formData.specialInstructions ? `Instrucciones: ${formData.specialInstructions}` : '',
-        formData.mapsUrl ? `Punto Maps: ${formData.mapsUrl}` : '',
+        `Contacto: ${formData.contactName || 'No especificado'} (${formData.contactPhone || 'Sin teléfono'}) [${formData.relationship}]`,
+        `Condición de Movilidad: ${formData.mobilitySupport}`,
+        formData.specialInstructions ? `Punto de encuentro: ${formData.specialInstructions}` : '',
+        formData.mapsUrl ? `Maps: ${formData.mapsUrl}` : '',
         formData.requiresNCF ? `NCF: ${formData.fiscalName} (RNC: ${formData.rncOrCedula})` : '',
         discountAmount > 0 ? `Descuento: RD$ ${discountAmount}` : '',
         `Consentimiento Ley 172-13: ACEPTADO`
       ].filter(Boolean).join(' | ');
 
-      // Generar PINs de seguridad aleatorios de 4 dígitos
       const randomCheckinPin = Math.floor(1000 + Math.random() * 9000).toString();
       const randomCheckoutPin = Math.floor(1000 + Math.random() * 9000).toString();
 
@@ -255,7 +263,7 @@ function ServiceBookingWizard() {
       let serviceId = data?.id;
 
       if (error) {
-        console.warn('Intento con esquema completo falló, aplicando payload base:', error.message);
+        console.warn('Esquema extendido no disponible, aplicando payload core:', error.message);
         
         const corePayload: any = {
           user_id: activeUser.id,
@@ -294,9 +302,20 @@ function ServiceBookingWizard() {
 
   if (checkingAuth) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-slate-400 gap-3">
-        <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-xs font-mono">Iniciando asistente de reserva segura...</p>
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-slate-400 gap-4 p-4 text-center">
+        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <div className="space-y-1">
+          <p className="text-sm font-bold text-white">Iniciando asistente de reserva segura...</p>
+          <p className="text-xs text-slate-500">Conectando con la plataforma JUNTOS Asistencia RD</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setCheckingAuth(false)}
+          className="mt-2 text-xs text-emerald-400 font-bold hover:underline flex items-center gap-1.5"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Continuar sin esperar autenticación</span>
+        </button>
       </div>
     );
   }
@@ -327,7 +346,7 @@ function ServiceBookingWizard() {
               </span>
             )}
             <span className="bg-slate-950/90 border border-slate-800 text-amber-400 font-mono text-xs px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-sm">
-              <span>RD$ 900/h (~$15 USD)</span>
+              <span>RD$ 900 / Hora</span>
             </span>
           </div>
         </div>
@@ -351,7 +370,7 @@ function ServiceBookingWizard() {
                   ¿Para quién es el acompañamiento?
                 </h1>
                 <p className="text-xs text-slate-400 mt-1">
-                  Elige la persona que recibirá el apoyo humano presencial:
+                  Elige a la persona que recibirá el apoyo humano presencial:
                 </p>
               </div>
 
@@ -359,7 +378,7 @@ function ServiceBookingWizard() {
                 <button
                   type="button"
                   onClick={() => updateField('forWhom', 'SELF')}
-                  className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                  className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                     formData.forWhom === 'SELF'
                       ? 'bg-emerald-950/30 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
                       : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
@@ -370,8 +389,8 @@ function ServiceBookingWizard() {
                       <User className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-white">Para mí (Yo mismo)</h4>
-                      <p className="text-xs text-slate-400">Necesito que un acompañante me asista</p>
+                      <h4 className="font-bold text-sm text-white">Para mí (Titular)</h4>
+                      <p className="text-xs text-slate-400">Yo mismo asistiré a la cita o actividad</p>
                     </div>
                   </div>
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${formData.forWhom === 'SELF' ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'}`}>
@@ -382,7 +401,7 @@ function ServiceBookingWizard() {
                 <button
                   type="button"
                   onClick={() => updateField('forWhom', 'FAMILY')}
-                  className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                  className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                     formData.forWhom === 'FAMILY'
                       ? 'bg-emerald-950/30 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
                       : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
@@ -394,7 +413,7 @@ function ServiceBookingWizard() {
                     </div>
                     <div>
                       <h4 className="font-bold text-sm text-white">Para un familiar (Padres / Diáspora)</h4>
-                      <p className="text-xs text-slate-400">Mamá, Papá, Pareja o pariente en República Dominicana</p>
+                      <p className="text-xs text-slate-400">Madre, padre, abuelos o parientes en República Dominicana</p>
                     </div>
                   </div>
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${formData.forWhom === 'FAMILY' ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'}`}>
@@ -405,7 +424,7 @@ function ServiceBookingWizard() {
                 <button
                   type="button"
                   onClick={() => updateField('forWhom', 'OTHER')}
-                  className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                  className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                     formData.forWhom === 'OTHER'
                       ? 'bg-emerald-950/30 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
                       : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
@@ -417,7 +436,7 @@ function ServiceBookingWizard() {
                     </div>
                     <div>
                       <h4 className="font-bold text-sm text-white">Para otra persona</h4>
-                      <p className="text-xs text-slate-400">Amigo, allegado, vecino o colaborador</p>
+                      <p className="text-xs text-slate-400">Amigo, colaborador, vecino o conocido</p>
                     </div>
                   </div>
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${formData.forWhom === 'OTHER' ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'}`}>
@@ -430,7 +449,7 @@ function ServiceBookingWizard() {
                 <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                     <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 text-emerald-400" /> Datos de la persona que recibirá el apoyo
+                      <User className="w-3.5 h-3.5 text-emerald-400" /> Persona que recibirá el acompañamiento
                     </span>
                     <span className="text-[10px] bg-emerald-950 text-emerald-400 font-mono px-2 py-0.5 rounded border border-emerald-800/40">
                       Requerido
@@ -445,13 +464,13 @@ function ServiceBookingWizard() {
                         required
                         value={formData.recipientName}
                         onChange={(e) => updateField('recipientName', e.target.value)}
-                        placeholder="Ej: Doña Mercedes Altagracia"
+                        placeholder="Ej: Doña Mercedes Morales"
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
                       />
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-slate-300 font-bold block">WhatsApp / Teléfono en RD *</label>
+                      <label className="text-slate-300 font-bold block">Teléfono / WhatsApp en RD *</label>
                       <input
                         type="tel"
                         required
@@ -475,16 +494,16 @@ function ServiceBookingWizard() {
                   Modalidad del Acompañamiento
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Soporte personal y logístico estrictamente no clínico (Ley General de Salud 42-01):
+                  Soporte personal y logístico estrictamente no clínico (Ley 42-01):
                 </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 {[
-                  { id: 'CLINIC_APPOINTMENT', title: 'Consultas o Estudios Médicos', desc: 'Espera en sala, asistencia de movilidad y soporte en farmacia.', icon: Stethoscope },
-                  { id: 'HOME_CARE', title: 'Asistencia y Compañía en Hogar', desc: 'Compañía activa, apoyo en movilidad dentro de casa y supervisión diurna.', icon: Home },
-                  { id: 'HOSPITAL_DISCHARGE', title: 'Alta Médica o Procedimiento', desc: 'Soporte presencial en trámites de egreso y traslado de retorno.', icon: Activity },
-                  { id: 'ERRANDS', title: 'Diligencias y Gestión Personal', desc: 'Acompañamiento a banco, compras o trámites cotidianos.', icon: HeartHandshake }
+                  { id: 'CLINIC_APPOINTMENT', title: 'Consultas o Estudios Médicos', desc: 'Espera en sala, asistencia en movilidad y soporte en farmacia.', icon: Stethoscope },
+                  { id: 'HOME_CARE', title: 'Asistencia y Compañía en Hogar', desc: 'Compañía activa, apoyo en movilidad y supervisión diurna dentro de casa.', icon: Home },
+                  { id: 'HOSPITAL_DISCHARGE', title: 'Alta Médica o Procedimiento', desc: 'Soporte presencial en egreso hospitalario y retorno seguro al hogar.', icon: Activity },
+                  { id: 'ERRANDS', title: 'Diligencias y Gestión Personal', desc: 'Acompañamiento a banco, compras o gestiones cotidianas.', icon: HeartHandshake }
                 ].map((item) => {
                   const Icon = item.icon;
                   const active = formData.serviceType === item.id;
@@ -493,7 +512,7 @@ function ServiceBookingWizard() {
                       key={item.id}
                       type="button"
                       onClick={() => updateField('serviceType', item.id)}
-                      className={`p-4 rounded-2xl border text-left flex flex-col justify-between space-y-3 transition-all ${
+                      className={`p-4 rounded-2xl border text-left flex flex-col justify-between space-y-3 transition-all cursor-pointer ${
                         active 
                           ? 'bg-emerald-950/30 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
                           : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
@@ -524,7 +543,7 @@ function ServiceBookingWizard() {
                   ¿Dónde se brindará el servicio?
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Indica la ciudad y el centro médico o sector de encuentro:
+                  Indica la ciudad y el centro médico o dirección de encuentro:
                 </p>
               </div>
 
@@ -534,7 +553,7 @@ function ServiceBookingWizard() {
                   <select
                     value={formData.city}
                     onChange={(e) => updateField('city', e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition cursor-pointer"
                   >
                     <option value="Distrito Nacional (Santo Domingo)">Distrito Nacional (Santo Domingo)</option>
                     <option value="Santo Domingo Este">Santo Domingo Este</option>
@@ -550,7 +569,7 @@ function ServiceBookingWizard() {
                     type="text"
                     value={formData.facilityName}
                     onChange={(e) => updateField('facilityName', e.target.value)}
-                    placeholder="Ej: CEDIMAT, HOMS, Clínica Abreu o Domicilio"
+                    placeholder="Ej: CEDIMAT, HOMS, Clínica Abreu o Domicilio particular"
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition"
                   />
                 </div>
@@ -597,7 +616,7 @@ function ServiceBookingWizard() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-slate-300 font-bold block">Hora de inicio *</label>
+                  <label className="text-slate-300 font-bold block">Hora de inicio (7:00 AM – 7:00 PM) *</label>
                   <div className="relative flex items-center">
                     <Clock className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
                     <input
@@ -621,7 +640,7 @@ function ServiceBookingWizard() {
                   Duración del Servicio
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Selecciona la cantidad de horas estimadas (mínimo 2 horas para cobertura de traslado):
+                  Selecciona las horas estimadas (mínimo 2 horas por traslado):
                 </p>
               </div>
 
@@ -631,7 +650,7 @@ function ServiceBookingWizard() {
                     key={h}
                     type="button"
                     onClick={() => updateField('hours', h)}
-                    className={`p-4 rounded-2xl border text-center transition-all ${
+                    className={`p-4 rounded-2xl border text-center transition-all cursor-pointer ${
                       formData.hours === h
                         ? 'bg-emerald-950/40 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
                         : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
@@ -652,7 +671,7 @@ function ServiceBookingWizard() {
                 </div>
                 {discountPercent > 0 && (
                   <span className="text-emerald-400 font-bold bg-emerald-950/80 border border-emerald-600/40 px-3 py-1 rounded-xl text-xs">
-                    Incluye 5% de descuento familiar
+                    Incluye 5% de descuento
                   </span>
                 )}
               </div>
@@ -664,13 +683,13 @@ function ServiceBookingWizard() {
             <div className="space-y-6">
               <div>
                 <div className="inline-flex items-center gap-1.5 bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 px-3 py-1 rounded-full text-[11px] font-mono font-bold mb-2">
-                  <Navigation className="w-3.5 h-3.5" /> MAPA Y LOCALIZACIÓN EN REPÚBLICA DOMINICANA
+                  <Navigation className="w-3.5 h-3.5" /> MAPA Y LOCALIZACIÓN EN RD
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
                   Punto de Encuentro y Movilidad
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Especifica dónde esperará la persona que recibirá el servicio en RD:
+                  Especifica el punto de recepción y las condiciones físicas del asistido:
                 </p>
               </div>
 
@@ -692,38 +711,38 @@ function ServiceBookingWizard() {
                       type="button"
                       onClick={handleGetDeviceLocation}
                       disabled={locating}
-                      className="flex-1 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 font-bold py-2.5 px-3.5 rounded-xl text-xs flex items-center justify-center gap-2 transition disabled:opacity-50"
+                      className="flex-1 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 font-bold py-2.5 px-3.5 rounded-xl text-xs flex items-center justify-center gap-2 transition disabled:opacity-50 cursor-pointer"
                     >
                       <LocateFixed className="w-4 h-4 text-emerald-400" />
-                      <span>{locating ? 'Leyendo GPS...' : 'Usar GPS de este teléfono (si estoy en RD)'}</span>
+                      <span>{locating ? 'Leyendo GPS...' : 'Usar GPS de este teléfono'}</span>
                     </button>
 
                     <a
                       href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formData.address || formData.facilityName || 'Santo Domingo, Republica Dominicana')}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition shrink-0"
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition shrink-0 cursor-pointer"
                     >
-                      <span>Buscar en Google Maps RD</span>
+                      <span>Abrir Google Maps</span>
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   </div>
 
                   <p className="text-[11px] text-slate-500 leading-relaxed">
-                    💡 Si estás solicitando desde el extranjero (EE. UU., Europa), copia el enlace del centro o vivienda en Google Maps RD y pégalo debajo.
+                    💡 Si estás coordinando desde el extranjero, puedes pegar el enlace compartido de Google Maps de la ubicación en RD debajo.
                   </p>
                 </div>
 
                 <div className="space-y-3 pt-2 text-xs">
                   <div className="space-y-1">
                     <label className="text-slate-300 font-bold block">
-                      Enlace compartido de Google Maps o Coordenadas (Opcional)
+                      Enlace de Google Maps o Coordenadas (Opcional)
                     </label>
                     <input
                       type="url"
                       value={formData.mapsUrl}
                       onChange={(e) => updateField('mapsUrl', e.target.value)}
-                      placeholder="Ej: https://maps.app.goo.gl/... o https://google.com/maps?q=18.486,-69.931"
+                      placeholder="Ej: https://maps.app.goo.gl/... o coordenadas"
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white placeholder-slate-600 outline-none focus:border-emerald-500 font-mono transition"
                     />
                   </div>
@@ -734,7 +753,7 @@ function ServiceBookingWizard() {
                       <button
                         type="button"
                         onClick={() => { updateField('geoLat', ''); updateField('geoLng', ''); updateField('mapsUrl', ''); }}
-                        className="text-rose-400 hover:underline ml-2"
+                        className="text-rose-400 hover:underline ml-2 cursor-pointer"
                       >
                         Limpiar
                       </button>
@@ -745,7 +764,7 @@ function ServiceBookingWizard() {
 
               <div className="space-y-3">
                 <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  Requerimientos de movilidad de la persona a acompañar
+                  Condición de movilidad de la persona a acompañar *
                 </h4>
                 {[
                   { id: 'NONE', title: 'Movilidad independiente', desc: 'Camina por sí mismo sin apoyo técnico.' },
@@ -757,7 +776,7 @@ function ServiceBookingWizard() {
                     key={item.id}
                     type="button"
                     onClick={() => updateField('mobilitySupport', item.id)}
-                    className={`w-full p-3.5 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                    className={`w-full p-3.5 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                       formData.mobilitySupport === item.id
                         ? 'bg-emerald-950/30 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
                         : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
@@ -780,7 +799,7 @@ function ServiceBookingWizard() {
                   rows={2}
                   value={formData.specialInstructions}
                   onChange={(e) => updateField('specialInstructions', e.target.value)}
-                  placeholder="Ej: En CEDIMAT en sala de espera Piso 2; o casa de rejas blancas..."
+                  placeholder="Ej: Sala de espera 2do piso de CEDIMAT, o lobby del edificio..."
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition resize-none"
                 />
               </div>
@@ -795,7 +814,7 @@ function ServiceBookingWizard() {
                   Contacto de Emergencia y Reportes
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Persona que recibirá reportes de la Mesa de Operaciones por WhatsApp durante el servicio:
+                  Persona responsable que recibirá reportes de inicio y finalización del servicio:
                 </p>
               </div>
 
@@ -830,12 +849,12 @@ function ServiceBookingWizard() {
                     <select
                       value={formData.relationship}
                       onChange={(e) => updateField('relationship', e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 transition cursor-pointer"
                     >
                       <option value="Hijo(a)">Hijo(a)</option>
                       <option value="Cónyuge">Cónyuge / Pareja</option>
                       <option value="Hermano(a)">Hermano(a)</option>
-                      <option value="Otro">Otro familiar / Amigo</option>
+                      <option value="Otro">Otro familiar / Allegado</option>
                     </select>
                   </div>
                 </div>
@@ -851,7 +870,7 @@ function ServiceBookingWizard() {
                   Comprobante Fiscal Dominicano
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Emisión oficial de recibo digital o factura con valor fiscal (NCF):
+                  Emisión de recibo digital estándar o factura con valor fiscal (NCF):
                 </p>
               </div>
 
@@ -868,7 +887,7 @@ function ServiceBookingWizard() {
                   />
                   <div>
                     <h4 className="font-bold text-white text-xs">¿Requiere Factura con Crédito Fiscal (NCF tipo B01)?</h4>
-                    <p className="text-[11px] text-slate-400">Para empresas o deducción fiscal autorizada ante DGII</p>
+                    <p className="text-[11px] text-slate-400">Para deducción de gastos autorizada ante la DGII</p>
                   </div>
                 </div>
 
@@ -909,7 +928,7 @@ function ServiceBookingWizard() {
                   Resumen de tu Solicitud
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Verifica los detalles antes de enviar a la Mesa de Operaciones Central:
+                  Verifica los detalles antes de remitir la reserva:
                 </p>
               </div>
 
@@ -963,11 +982,11 @@ function ServiceBookingWizard() {
 
                 <div className="flex justify-between pt-1 text-sm font-black text-white">
                   <span>Total a Pagar:</span>
-                  <span className="text-emerald-400 font-mono text-base">RD${total.toLocaleString()} (~${Math.round(total / 60)} USD)</span>
+                  <span className="text-emerald-400 font-mono text-base">RD$ {total.toLocaleString()}</span>
                 </div>
               </div>
 
-              {/* CLÁUSULA LEY 172-13 DE PROTECCIÓN DE DATOS */}
+              {/* CONSENTIMIENTO LEY 172-13 */}
               <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-3">
                 <label className="flex items-start gap-3 cursor-pointer text-xs">
                   <input
@@ -977,16 +996,16 @@ function ServiceBookingWizard() {
                     className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500 bg-slate-950 border-slate-700 shrink-0 mt-0.5"
                   />
                   <span className="text-slate-300 leading-relaxed text-[11px]">
-                    Autorizo el tratamiento de los datos de contacto, ubicación y condición de movilidad exclusivamente para fines de coordinación operativa del servicio, conforme a lo establecido en la <strong>Ley No. 172-13 sobre Protección de Datos de Carácter Personal en República Dominicana</strong>.
+                    Autorizo el tratamiento de los datos de contacto, ubicación y condición de movilidad exclusivamente para fines de coordinación operativa del servicio, conforme a la <strong>Ley No. 172-13 sobre Protección de Datos de Carácter Personal en República Dominicana</strong>.
                   </span>
                 </label>
               </div>
 
-              {/* GARANTÍA Y POLÍTICA DE CANCELACIÓN */}
+              {/* POLÍTICA DE CANCELACIÓN Y GARANTÍA */}
               <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex items-start gap-3 text-xs text-slate-400">
                 <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                 <p className="leading-relaxed text-[11px]">
-                  <strong>Protocolo de Seguridad JUNTOS:</strong> Acompañantes acreditados con Certificado de No Antecedentes Penales PGR verificado. Asistencia humana no clínica (Ley 42-01). Cancelación gratuita hasta 2 horas antes de la cita; tolerancia de espera de 15 minutos en punto de encuentro.
+                  <strong>Protocolo y Cancelación:</strong> Acompañantes verificados. Asistencia estrictamente no clínica (Ley 42-01). Cancelación sin costo hasta 12 horas antes de la cita conforme a nuestra política oficial de servicio.
                 </p>
               </div>
             </div>
@@ -998,7 +1017,7 @@ function ServiceBookingWizard() {
               <button
                 type="button"
                 onClick={handlePrev}
-                className="bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold px-5 py-3 rounded-xl flex items-center gap-2 text-xs border border-slate-800 transition"
+                className="bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold px-5 py-3 rounded-xl flex items-center gap-2 text-xs border border-slate-800 transition cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4" /> Anterior
               </button>
@@ -1008,7 +1027,7 @@ function ServiceBookingWizard() {
               <button
                 type="button"
                 onClick={handleNext}
-                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-3 rounded-xl flex items-center gap-2 text-xs shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02]"
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-3 rounded-xl flex items-center gap-2 text-xs shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02] cursor-pointer"
               >
                 <span>Continuar</span>
                 <ArrowRight className="w-4 h-4" />
@@ -1018,7 +1037,7 @@ function ServiceBookingWizard() {
                 type="button"
                 disabled={loading || !acceptedTerms}
                 onClick={handleSubmitService}
-                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-8 py-3.5 rounded-xl flex items-center gap-2 text-xs shadow-xl shadow-emerald-500/25 transition-all hover:scale-[1.02] disabled:opacity-50"
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-8 py-3.5 rounded-xl flex items-center gap-2 text-xs shadow-xl shadow-emerald-500/25 transition-all hover:scale-[1.02] disabled:opacity-50 cursor-pointer"
               >
                 <span>{loading ? 'Asignando en Mesa de Operaciones...' : 'Confirmar e Iniciar Operación en Vivo'}</span>
                 <CheckCircle2 className="w-4 h-4" />
@@ -1030,7 +1049,7 @@ function ServiceBookingWizard() {
 
         <div className="text-center text-[11px] text-slate-500 flex items-center justify-center gap-1.5">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-          <span>Mesa de Operaciones activa 24/7 en Santo Domingo y Santiago • JUNTOS ASISTENCIA RD</span>
+          <span>Mesa Operativa activa en Gran Santo Domingo y Santiago • JUNTOS ASISTENCIA RD</span>
         </div>
 
       </main>
