@@ -24,17 +24,22 @@ function RegisterForm() {
   const searchParams = useSearchParams();
   const supabase = createClient();
 
+  // Siempre inicia por defecto en SOLICITANTE
   const [category, setCategory] = useState<RegisterCategory>('CLIENT');
 
   useEffect(() => {
     const roleParam = searchParams.get('role');
+    // Solo cambia si la URL explícitamente dice role=companion
     if (roleParam?.toLowerCase() === 'companion') {
       setCategory('COMPANION');
+    } else {
+      setCategory('CLIENT');
     }
   }, [searchParams]);
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [confirmEmail, setConfirmEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -45,6 +50,11 @@ function RegisterForm() {
   async function handleRegisterClient(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg(null);
+
+    if (email.trim().toLowerCase() !== confirmEmail.trim().toLowerCase()) {
+      setErrorMsg('Los correos electrónicos no coinciden.');
+      return;
+    }
 
     if (password !== confirmPassword) {
       setErrorMsg('Las contraseñas no coinciden.');
@@ -114,7 +124,7 @@ function RegisterForm() {
       </div>
 
       {/* SELECTOR SUPERIOR DE ROL */}
-      <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-950/80 border border-slate-800 rounded-2xl">
+      <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-950/90 border border-slate-800 rounded-2xl backdrop-blur-md">
         <button
           type="button"
           onClick={() => { setCategory('CLIENT'); setErrorMsg(null); }}
@@ -142,9 +152,10 @@ function RegisterForm() {
         </button>
       </div>
 
-      {/* CONDICIONAL: RRHH KYC O REGISTRO CLIENTE */}
+      {/* CONDICIONAL: ACOMPAÑANTE O SOLICITANTE */}
       {category === 'COMPANION' ? (
-        <div className="bg-slate-50 rounded-3xl p-3 sm:p-5 shadow-2xl border border-slate-200">
+        /* Tarjeta oscura que combina con toda la plataforma */
+        <div className="bg-slate-950/80 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
           <RegistroAcompanante />
         </div>
       ) : (
@@ -166,6 +177,7 @@ function RegisterForm() {
           )}
 
           <form onSubmit={handleRegisterClient} className="space-y-3.5 text-xs">
+            {/* NOMBRE Y TELÉFONO */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-slate-300 font-bold block">Nombre completo *</label>
@@ -198,21 +210,40 @@ function RegisterForm() {
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-slate-300 font-bold block">Correo electrónico *</label>
-              <div className="relative flex items-center">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="correo@ejemplo.com"
-                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                />
+            {/* CORREO Y CONFIRMAR CORREO */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">Correo electrónico *</label>
+                <div className="relative flex items-center">
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="correo@ejemplo.com"
+                    className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">Confirmar correo electrónico *</label>
+                <div className="relative flex items-center">
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                  <input
+                    type="email"
+                    required
+                    value={confirmEmail}
+                    onChange={(e) => setConfirmEmail(e.target.value)}
+                    placeholder="Repite tu correo"
+                    className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  />
+                </div>
               </div>
             </div>
 
+            {/* CONTRASEÑA Y CONFIRMAR CONTRASEÑA */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-slate-300 font-bold block">Contraseña *</label>
@@ -248,7 +279,7 @@ function RegisterForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.01] disabled:opacity-50 mt-4"
+              className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.01] disabled:opacity-50 mt-4 cursor-pointer"
             >
               <span>{clientSubmitText}</span>
               <ArrowRight className="w-4 h-4" />
