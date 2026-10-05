@@ -117,7 +117,7 @@ export default function LoginPage() {
           return;
         }
 
-        // 3. Cliente / Solicitante: verificar cita activa
+        // 3. Cliente / Solicitante (CUSTOMER o CLIENT): verificar cita activa
         const { data: activeService } = await supabase
           .from('service_requests')
           .select('id')
