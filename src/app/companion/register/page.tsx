@@ -88,7 +88,7 @@ export default function CompanionRegisterPage() {
           role: 'COMPANION'
         });
 
-        // 3. Crear solicitud de acreditación en companion_applications
+        // 3. Crear solicitud inicial de acreditación en companion_applications
         await supabase.from('companion_applications').insert([{
           user_id: userId,
           nombre: fullName.trim(),
@@ -103,8 +103,9 @@ export default function CompanionRegisterPage() {
 
       setSuccess(true);
       setTimeout(() => {
-        router.push('/companion');
-      }, 1500);
+        // Redirige directamente al formulario de Acreditación y KYC de RRHH (no a la sala situacional)
+        window.location.href = '/register?role=companion';
+      }, 1200);
 
     } catch (err: any) {
       setErrorMsg(err.message || 'Ocurrió un error al procesar el registro.');
@@ -143,7 +144,7 @@ export default function CompanionRegisterPage() {
           {success && (
             <div className="bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 text-xs p-4 rounded-2xl flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />
-              <span>¡Cuenta creada con éxito! Entrando a tu portal de asignación...</span>
+              <span>¡Cuenta creada con éxito! Pasando al formulario de KYC y RRHH...</span>
             </div>
           )}
 
