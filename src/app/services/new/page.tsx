@@ -23,7 +23,6 @@ import {
   Navigation,
   ExternalLink,
   LocateFixed,
-  AlertCircle,
   RotateCcw
 } from 'lucide-react';
 
@@ -61,7 +60,7 @@ function ServiceBookingWizard() {
     serviceDate: '',
     serviceTime: '08:00',
 
-    // Paso 5: Duración (por defecto 2h mínimo, o capturado de la calculadora)
+    // Paso 5: Duración
     hours: 2,
 
     // Paso 6: Geolocalización GPS y Punto de Mapa
@@ -88,7 +87,7 @@ function ServiceBookingWizard() {
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Sincronizar horas desde la calculadora de la portada (?hours=X)
+    // 1. Sincronizar horas desde URL (?hours=X)
     const hoursParam = searchParams.get('hours');
     if (hoursParam) {
       const parsedHours = parseInt(hoursParam, 10);
@@ -97,12 +96,27 @@ function ServiceBookingWizard() {
       }
     }
 
-    // 2. Verificar autenticación con fallback rápido
-    async function checkAuth() {
+    // 2. Verificar autenticación y si ya tiene cita activa
+    async function checkAuthAndActiveService() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (isMounted && user) {
           setUser(user);
+
+          // COMPROBACIÓN CRÍTICA: ¿Tiene ya una cita activa?
+          const { data: activeOrder } = await supabase
+            .from('service_requests')
+            .select('id, status')
+            .or(`client_id.eq.${user.id},customer_id.eq.${user.id},user_id.eq.${user.id}`)
+            .in('status', ['PENDING', 'PENDING_DISPATCH', 'ASSIGNED', 'IN_PROGRESS'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (activeOrder) {
+            window.location.replace(`/services/live?id=${activeOrder.id}`);
+            return;
+          }
 
           const { data: profile } = await supabase
             .from('profiles')
@@ -122,22 +136,16 @@ function ServiceBookingWizard() {
           }));
         }
       } catch (err) {
-        console.warn('Accediendo como cliente sin sesion previa o invitado:', err);
+        console.warn('Error verificando sesión o cita previa:', err);
       } finally {
         if (isMounted) setCheckingAuth(false);
       }
     }
 
-    // Límite de 600ms para no bloquear usuarios con conexión móvil inestable
-    const timer = setTimeout(() => {
-      if (isMounted) setCheckingAuth(false);
-    }, 600);
-
-    checkAuth();
+    checkAuthAndActiveService();
 
     return () => {
       isMounted = false;
-      clearTimeout(timer);
     };
   }, [searchParams, supabase]);
 
@@ -201,7 +209,6 @@ function ServiceBookingWizard() {
         activeUser = authData?.user;
       }
 
-      // Si no ha iniciado sesión, guardamos el borrador para que no pierda lo llenado
       if (!activeUser) {
         if (typeof window !== 'undefined') {
           sessionStorage.setItem('juntos_pending_booking', JSON.stringify(formData));
@@ -234,7 +241,9 @@ function ServiceBookingWizard() {
       const randomCheckinPin = Math.floor(1000 + Math.random() * 9000).toString();
       const randomCheckoutPin = Math.floor(1000 + Math.random() * 9000).toString();
 
+      // INCLUYE EXPRESAMENTE client_id PARA EVITAR VALORES NULL
       const universalPayload: any = {
+        client_id: activeUser.id,
         user_id: activeUser.id,
         customer_id: activeUser.id,
         recipient_name: recipientFinal,
@@ -263,9 +272,10 @@ function ServiceBookingWizard() {
       let serviceId = data?.id;
 
       if (error) {
-        console.warn('Esquema extendido no disponible, aplicando payload core:', error.message);
+        console.warn('Esquema extendido falló, aplicando payload simplificado:', error.message);
         
         const corePayload: any = {
+          client_id: activeUser.id,
           user_id: activeUser.id,
           recipient_name: recipientFinal,
           service_type: formData.serviceType,
@@ -305,17 +315,9 @@ function ServiceBookingWizard() {
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-slate-400 gap-4 p-4 text-center">
         <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
         <div className="space-y-1">
-          <p className="text-sm font-bold text-white">Iniciando asistente de reserva segura...</p>
+          <p className="text-sm font-bold text-white">Verificando estado de tu cuenta...</p>
           <p className="text-xs text-slate-500">Conectando con la plataforma JUNTOS Asistencia RD</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCheckingAuth(false)}
-          className="mt-2 text-xs text-emerald-400 font-bold hover:underline flex items-center gap-1.5"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Continuar sin esperar autenticación</span>
-        </button>
       </div>
     );
   }
