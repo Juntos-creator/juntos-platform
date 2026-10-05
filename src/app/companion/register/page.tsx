@@ -1,55 +1,58 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Navbar } from '@/components/navbar';
+import { Logo } from '@/components/brand/Logo';
 import { 
-  ShieldCheck, 
   User, 
+  HeartHandshake, 
   Mail, 
-  Lock, 
   Phone, 
-  FileText, 
-  MapPin, 
-  CheckCircle2, 
-  AlertCircle,
-  ArrowRight
+  Lock, 
+  ShieldCheck, 
+  ArrowRight,
+  CheckCircle2
 } from 'lucide-react';
 
-export default function CompanionRegisterPage() {
+type RegisterCategory = 'CLIENT' | 'COMPANION';
+
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
+
+  const [category, setCategory] = useState<RegisterCategory>('CLIENT');
+
+  useEffect(() => {
+    const roleParam = searchParams.get('role');
+    if (roleParam?.toLowerCase() === 'companion') {
+      setCategory('COMPANION');
+    }
+  }, [searchParams]);
+
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [confirmEmail, setConfirmEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-
-  // Campos del formulario
-  const [fullName, setFullName] = useState('');
-  const [cedula, setCedula] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [confirmEmail, setConfirmEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [city, setCity] = useState('Santo Domingo / Distrito Nacional');
-  const [experience, setExperience] = useState('EXPERIENCIA_BASICA');
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg(null);
 
-    // Validación de coincidencia de correo electrónico
     if (email.trim().toLowerCase() !== confirmEmail.trim().toLowerCase()) {
-      setErrorMsg('Los correos electrónicos ingresados no coinciden.');
+      setErrorMsg('Los correos electrónicos no coinciden.');
       return;
     }
 
-    // Validación de coincidencia de contraseña
     if (password !== confirmPassword) {
-      setErrorMsg('Las contraseñas ingresadas no coinciden.');
+      setErrorMsg('Las contraseñas no coinciden.');
       return;
     }
 
@@ -59,272 +62,266 @@ export default function CompanionRegisterPage() {
     }
 
     setLoading(true);
+    const displayName = fullName.trim();
+    const role = category === 'COMPANION' ? 'COMPANION' : 'CLIENT';
 
-    try {
-      // 1. Registro en Supabase Auth con metadatos de acompañante
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        data: {
+          full_name: displayName,
+          phone: phone.trim(),
+          role: role,
+        },
+      },
+    });
+
+    if (authError) {
+      setErrorMsg(authError.message);
+      setLoading(false);
+      return;
+    }
+
+    if (authData.user) {
+      await supabase.from('profiles').upsert({
+        id: authData.user.id,
         email: email.trim(),
-        password: password.trim(),
-        options: {
-          data: {
-            full_name: fullName.trim(),
-            role: 'COMPANION',
-            phone: phone.trim()
-          }
-        }
+        full_name: displayName,
+        phone: phone.trim(),
+        role: role,
+        status: category === 'COMPANION' ? 'PENDIENTE_REVISION' : 'ACTIVE',
       });
 
-      if (authError) throw authError;
-
-      const userId = authData.user?.id;
-
-      if (userId) {
-        // 2. Crear o actualizar perfil en la tabla profiles
-        await supabase.from('profiles').upsert({
-          id: userId,
+      if (!authData.session) {
+        await supabase.auth.signInWithPassword({
           email: email.trim(),
-          full_name: fullName.trim(),
-          phone: phone.trim(),
-          role: 'COMPANION'
+          password,
         });
-
-        // 3. Crear solicitud inicial de acreditación en companion_applications
-        await supabase.from('companion_applications').insert([{
-          user_id: userId,
-          nombre: fullName.trim(),
-          numero_documento: cedula.trim(),
-          telefono: phone.trim(),
-          correo: email.trim(),
-          ciudad: city,
-          estado: 'PENDIENTE',
-          notas_rrhh: `Postulación web directa. Experiencia: ${experience}. Depuración PGR en proceso.`
-        }]);
       }
 
-      setSuccess(true);
-      setTimeout(() => {
-        // Redirige directamente al formulario de Acreditación y KYC de RRHH (no a la sala situacional)
-        window.location.href = '/register?role=companion';
-      }, 1200);
-
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Ocurrió un error al procesar el registro.');
-    } finally {
-      setLoading(false);
+      // REDIRECCIÓN DIFERENCIADA:
+      if (category === 'COMPANION') {
+        window.location.href = '/companion/kyc';
+      } else {
+        window.location.href = '/services/new';
+      }
+      return;
     }
+
+    setLoading(false);
   }
 
+  const submitText = loading 
+    ? 'Procesando registro...' 
+    : category === 'COMPANION' 
+      ? 'Crear cuenta y pasar a Validación KYC' 
+      : 'Crear cuenta de Solicitante';
+
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans pb-20 selection:bg-emerald-500 selection:text-white">
-      <Navbar />
+    <div className="relative z-10 w-full max-w-xl space-y-5 my-8">
+      {/* ENCABEZADO */}
+      <div className="flex flex-col items-center justify-center space-y-2 text-center">
+        <Logo size="lg" variant="dark" href="/" />
+        <p className="text-xs text-slate-400 font-medium">
+          Plataforma de Acompañamiento y Asistencia No Clínica
+        </p>
+      </div>
 
-      <main className="max-w-xl mx-auto px-4 py-10 w-full">
-        <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
-          
-          {/* CABECERA */}
-          <div className="text-center space-y-2">
-            <div className="inline-flex items-center gap-1.5 bg-emerald-950/80 border border-emerald-500/40 px-3.5 py-1 rounded-full text-emerald-400 font-mono text-xs font-bold">
-              <ShieldCheck className="w-4 h-4" /> POSTULACIÓN Y REGISTRO OFICIAL
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white">
-              Únete a la Red de Acompañantes
-            </h1>
-            <p className="text-xs text-slate-400">
-              JUNTOS Asistencia RD • Genera ingresos brindando acompañamiento a citas médicas y gestiones presenciales.
-            </p>
+      {/* SELECTOR SUPERIOR DE ROL */}
+      <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-950/80 border border-slate-800 rounded-2xl">
+        <button
+          type="button"
+          onClick={() => { setCategory('CLIENT'); setErrorMsg(null); }}
+          className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-xl text-xs font-bold transition-all ${
+            category === 'CLIENT'
+              ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+          }`}
+        >
+          <User className="w-4 h-4 mb-1" />
+          <span>Solicitante</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setCategory('COMPANION'); setErrorMsg(null); }}
+          className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-xl text-xs font-bold transition-all ${
+            category === 'COMPANION'
+              ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+          }`}
+        >
+          <HeartHandshake className="w-4 h-4 mb-1" />
+          <span>Acompañante (RRHH)</span>
+        </button>
+      </div>
+
+      {/* TARJETA DE FORMULARIO */}
+      <div className="bg-slate-950/80 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl space-y-5">
+        <div className="space-y-1 text-center">
+          <h1 className="text-2xl font-black text-white">
+            {category === 'COMPANION' ? 'Registro de Acompañante' : 'Crear cuenta'}
+          </h1>
+          <p className="text-xs text-slate-400">
+            {category === 'COMPANION' 
+              ? 'Paso 1: Credenciales de acceso a la red de asistencia'
+              : 'Registro rápido para coordinar asistencia no médica'}
+          </p>
+        </div>
+
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 text-[11px] text-slate-300 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>
+            {category === 'COMPANION'
+              ? 'Luego de crear tus credenciales pasarás a la Acreditación Oficial con verificación PGR.'
+              : 'Gestiona acompañamiento presencial para citas médicas y diligencias.'}
+          </span>
+        </div>
+
+        {errorMsg && (
+          <div className="bg-rose-950/60 border border-rose-800 text-rose-300 text-xs p-3 rounded-xl text-center">
+            {errorMsg}
           </div>
+        )}
 
-          {errorMsg && (
-            <div className="bg-rose-950/80 border border-rose-800 text-rose-300 text-xs p-3.5 rounded-2xl flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{errorMsg}</span>
-            </div>
-          )}
-
-          {success && (
-            <div className="bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 text-xs p-4 rounded-2xl flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />
-              <span>¡Cuenta creada con éxito! Pasando al formulario de KYC y RRHH...</span>
-            </div>
-          )}
-
-          {/* FORMULARIO */}
-          <form onSubmit={handleRegister} className="space-y-4 text-xs">
-            
-            {/* Nombre completo */}
-            <div>
-              <label className="font-bold text-slate-300 block mb-1">Nombre completo *</label>
-              <div className="relative">
-                <User className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+        <form onSubmit={handleRegister} className="space-y-3.5 text-xs">
+          {/* NOMBRE Y TELÉFONO */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">Nombre completo *</label>
+              <div className="relative flex items-center">
+                <User className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
                 <input
                   type="text"
                   required
-                  placeholder="Ej: Lic. Carlos Manuel Rosario"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500"
+                  placeholder="Ej. Rosa Altagracia Morales"
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
                 />
               </div>
             </div>
 
-            {/* Cédula y Teléfono */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="font-bold text-slate-300 block mb-1">Cédula de Identidad *</label>
-                <div className="relative">
-                  <FileText className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="001-0000000-0"
-                    value={cedula}
-                    onChange={(e) => setCedula(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-300 block mb-1">Teléfono / WhatsApp *</label>
-                <div className="relative">
-                  <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                  <input
-                    type="tel"
-                    required
-                    placeholder="809-541-2000"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500 font-mono"
-                  />
-                </div>
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">Teléfono / WhatsApp *</label>
+              <div className="relative flex items-center">
+                <Phone className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                <input
+                  type="tel"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="Ej. 809-426-8978"
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                />
               </div>
             </div>
-
-            {/* Ciudad y Perfil */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="font-bold text-slate-300 block mb-1">Zona operativa *</label>
-                <div className="relative">
-                  <MapPin className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                  <select
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500"
-                  >
-                    <option value="Santo Domingo / Distrito Nacional">Santo Domingo (DN)</option>
-                    <option value="Santo Domingo Este">Santo Domingo Este</option>
-                    <option value="Santo Domingo Oeste / Norte">SD Oeste / Norte</option>
-                    <option value="Santiago de los Caballeros">Santiago de los Caballeros</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-300 block mb-1">Perfil de Asistencia *</label>
-                <select
-                  value={experience}
-                  onChange={(e) => setExperience(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-white outline-none focus:border-emerald-500"
-                >
-                  <option value="EXPERIENCIA_BASICA">Acompañamiento General</option>
-                  <option value="ENFERMERIA_AUXILIAR">Auxiliar de Enfermería / Salud</option>
-                  <option value="CUIDADO_MAYORES">Especialista en Adultos Mayores</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Correo y Confirmación de Correo */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="font-bold text-slate-300 block mb-1">Correo electrónico *</label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                  <input
-                    type="email"
-                    required
-                    placeholder="ejemplo@correo.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-300 block mb-1">Confirmar correo electrónico *</label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                  <input
-                    type="email"
-                    required
-                    placeholder="Repite tu correo"
-                    value={confirmEmail}
-                    onChange={(e) => setConfirmEmail(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500 font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Contraseña y Confirmación de Contraseña */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="font-bold text-slate-300 block mb-1">Contraseña de acceso *</label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    placeholder="Mínimo 6 caracteres"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-300 block mb-1">Confirmar contraseña de acceso *</label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    placeholder="Repite tu contraseña"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500 font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Aviso de verificación */}
-            <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] text-slate-400 space-y-1">
-              <p>🛡️ <strong>Depuración de Seguridad:</strong> Tu cédula será verificada con el registro de antecedentes de la Procuraduría General de la República (PGR).</p>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || success}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition disabled:opacity-50 mt-2"
-            >
-              <span>{loading ? 'Procesando registro...' : 'Completar Registro y Postulación'}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
-
-          <div className="text-center pt-2 border-t border-slate-800/80 text-xs text-slate-400">
-            ¿Ya tienes una cuenta de acompañante?{' '}
-            <Link href="/login" className="text-emerald-400 font-bold hover:underline">
-              Iniciar Sesión
-            </Link>
           </div>
 
+          {/* CORREO Y CONFIRMAR CORREO */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">Correo electrónico *</label>
+              <div className="relative flex items-center">
+                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="correo@ejemplo.com"
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">Confirmar correo electrónico *</label>
+              <div className="relative flex items-center">
+                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                <input
+                  type="email"
+                  required
+                  value={confirmEmail}
+                  onChange={(e) => setConfirmEmail(e.target.value)}
+                  placeholder="Repite tu correo"
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* CONTRASEÑA Y CONFIRMAR CONTRASEÑA */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">Contraseña *</label>
+              <div className="relative flex items-center">
+                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mínimo 6 caracteres"
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">Confirmar contraseña *</label>
+              <div className="relative flex items-center">
+                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                <input
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Repite tu clave"
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.01] disabled:opacity-50 mt-4"
+          >
+            <span>{submitText}</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </form>
+
+        <div className="pt-3 border-t border-slate-800/80 text-center text-xs">
+          <p className="text-slate-400">
+            ¿Ya tienes cuenta?{' '}
+            <Link href="/login" className="text-emerald-400 font-bold hover:underline">
+              Inicia sesión aquí
+            </Link>
+          </p>
         </div>
-      </main>
+      </div>
+
+      {/* PIE */}
+      <div className="text-center text-[11px] text-slate-500 flex items-center justify-center gap-1.5">
+        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+        <span>Datos confidenciales y protegidos • JUNTOS ASISTENCIA RD</span>
+      </div>
+    </div>
+  );
+}
+
+export default function UnifiedRegisterPage() {
+  return (
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-center items-center p-4 relative overflow-hidden font-sans selection:bg-emerald-500 selection:text-white">
+      <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-900" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+      <Suspense fallback={<div className="text-xs text-slate-400 font-mono">Cargando registro seguro...</div>}>
+        <RegisterForm />
+      </Suspense>
     </div>
   );
 }

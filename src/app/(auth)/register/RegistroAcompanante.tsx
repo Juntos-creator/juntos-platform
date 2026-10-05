@@ -1,8 +1,25 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { 
+  ShieldCheck, 
+  ArrowLeft, 
+  ArrowRight, 
+  Camera, 
+  Upload, 
+  FileCheck2, 
+  User, 
+  Phone, 
+  CreditCard, 
+  AlertCircle,
+  GraduationCap,
+  FileText,
+  Lock,
+  Mail,
+  Home
+} from 'lucide-react';
 
 // Validación oficial de Cédula Dominicana (Módulo 10 JCE)
 function validarCedulaDominicana(cedula: string): boolean {
@@ -47,19 +64,17 @@ function validarVigencia30DiasHabiles(fechaEmisionStr: string): boolean {
   return diasHabiles <= 30;
 }
 
-export default function RegistroAcompanante() {
+export default function RegistroAcompanante(): JSX.Element {
   const router = useRouter();
   const [fase, setFase] = useState(1);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [esAdmin, setEsAdmin] = useState(false);
 
-  // ---------------------------------------------------------------------------
-  // ESTADOS DEL FORMULARIO INTEGRAL KYC / RRHH
-  // ---------------------------------------------------------------------------
+  // Estados del formulario
   const [tipoDocumento, setTipoDocumento] = useState<'CEDULA' | 'PASAPORTE'>('CEDULA');
   
-  // Fase 1: Identidad & Domicilio Completo
+  // Fase 1: Identidad & Domicilio
   const [datosIdentidad, setDatosIdentidad] = useState({
     nombre: '',
     fechaNacimiento: '',
@@ -67,19 +82,17 @@ export default function RegistroAcompanante() {
     numeroDocumento: '',
     telefonoWhatsapp: '',
     telefonoSecundario: '',
-    // Domicilio KYC
     direccionCalle: '',
     sector: '',
     municipioProvincia: 'Santo Domingo Este',
     tipoVivienda: 'Propia',
     tiempoViviendo: 'Más de 3 años',
-    // Contacto de Emergencia
     contactoEmergenciaNombre: '',
     contactoEmergenciaParentesco: '',
     contactoEmergenciaTelefono: '',
   });
 
-  // Fase 2: Documentos & Evidencias KYC
+  // Fase 2: Documentos KYC
   const [docFrontal, setDocFrontal] = useState<File | null>(null);
   const [docDorsal, setDocDorsal] = useState<File | null>(null);
   const [permisoTrabajo, setPermisoTrabajo] = useState<File | null>(null);
@@ -87,45 +100,37 @@ export default function RegistroAcompanante() {
   const [previewDorsal, setPreviewDorsal] = useState<string | null>(null);
 
   const [comprobanteDomicilio, setComprobanteDomicilio] = useState<File | null>(null);
-
   const [certAntecedentes, setCertAntecedentes] = useState<File | null>(null);
   const [fechaAntecedentes, setFechaAntecedentes] = useState('');
-
   const [certProfesional, setCertProfesional] = useState<File | null>(null);
   const [fechaProfesional, setFechaProfesional] = useState('');
-
   const [certBachiller, setCertBachiller] = useState<File | null>(null);
   const [certAcademia, setCertAcademia] = useState<File | null>(null);
   const [codigoAcademia, setCodigoAcademia] = useState('');
 
-  // Fase 3: Referencias Laborales & Personales + Datos Bancarios
+  // Fase 3: Referencias & Nómina
   const [datosLaborales, setDatosLaborales] = useState({
     experienciaAnios: '1-3',
     habilidadesEspeciales: 'Cuidado geriátrico básico, Movilización, Control de medicamentos',
-    // Referencia Laboral 1
     refLab1Nombre: '',
     refLab1Empresa: '',
     refLab1Cargo: '',
     refLab1Telefono: '',
-    // Referencia Laboral 2
     refLab2Nombre: '',
     refLab2Empresa: '',
     refLab2Telefono: '',
-    // Referencia Personal 1
     refPers1Nombre: '',
     refPers1Relacion: '',
     refPers1Telefono: '',
-    // Referencia Personal 2
     refPers2Nombre: '',
     refPers2Relacion: '',
     refPers2Telefono: '',
-    // Datos de pago / nómina
     bancoDestino: 'Banreservas',
     tipoCuenta: 'Ahorros',
     numeroCuentaBanco: '',
   });
 
-  // Fase 4: Credenciales de acceso y Firma Legal
+  // Fase 4: Acceso y Firma
   const [credenciales, setCredenciales] = useState({
     email: '',
     password: '',
@@ -137,7 +142,6 @@ export default function RegistroAcompanante() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Detección de Administrador
   useEffect(() => {
     async function checkAdmin() {
       const supabase = createClient();
@@ -221,7 +225,6 @@ export default function RegistroAcompanante() {
     }
   };
 
-  // Validaciones estrictas por fase
   const handleAvanzar = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setErrorMsg('');
@@ -309,7 +312,6 @@ export default function RegistroAcompanante() {
     }
   };
 
-  // Botón Admin: Cargar expediente KYC completo de demostración
   const handleCompletarDemo = () => {
     setDatosIdentidad({
       nombre: 'Licda. Rosa Altagracia Morales',
@@ -360,7 +362,6 @@ export default function RegistroAcompanante() {
     setErrorMsg('');
   };
 
-  // Creación y almacenamiento del expediente integral KYC
   const handleSubmitFinal = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -389,7 +390,6 @@ export default function RegistroAcompanante() {
 
       const expedienteCompletoKYC = {
         user_id: userId,
-        // Identidad y KYC
         nombre: datosIdentidad.nombre,
         tipo_documento: tipoDocumento,
         numero_documento: datosIdentidad.numeroDocumento,
@@ -397,17 +397,14 @@ export default function RegistroAcompanante() {
         fecha_nacimiento: datosIdentidad.fechaNacimiento,
         telefono_whatsapp: datosIdentidad.telefonoWhatsapp,
         telefono_secundario: datosIdentidad.telefonoSecundario,
-        // Domicilio
         domicilio_direccion: datosIdentidad.direccionCalle,
         domicilio_sector: datosIdentidad.sector,
         domicilio_municipio_provincia: datosIdentidad.municipioProvincia,
         domicilio_tipo_vivienda: datosIdentidad.tipoVivienda,
         domicilio_tiempo_residiendo: datosIdentidad.tiempoViviendo,
-        // Contacto Emergencia
         contacto_emergencia_nombre: datosIdentidad.contactoEmergenciaNombre,
         contacto_emergencia_parentesco: datosIdentidad.contactoEmergenciaParentesco,
         contacto_emergencia_telefono: datosIdentidad.contactoEmergenciaTelefono,
-        // Referencias Laborales y Personales
         experiencia_anios: datosLaborales.experienciaAnios,
         habilidades: datosLaborales.habilidadesEspeciales,
         referencia_laboral_1: {
@@ -431,15 +428,12 @@ export default function RegistroAcompanante() {
           relacion: datosLaborales.refPers2Relacion,
           telefono: datosLaborales.refPers2Telefono,
         },
-        // Datos Bancarios
         datos_pago_banco: datosLaborales.bancoDestino,
         datos_pago_tipo_cuenta: datosLaborales.tipoCuenta,
         datos_pago_numero_cuenta: datosLaborales.numeroCuentaBanco,
-        // Acreditaciones
         codigo_academia: codigoAcademia,
         fecha_antecedentes_pgr: fechaAntecedentes || null,
         fecha_cert_profesional: fechaProfesional || null,
-        // Auditoría
         estado_depuracion: 'PENDIENTE_MESA_RRHH',
         firma_digital: firma ? datosIdentidad.nombre : 'FIRMADO_ELECTRONICO',
         fecha_solicitud: new Date().toISOString(),
@@ -461,208 +455,222 @@ export default function RegistroAcompanante() {
     router.push('/companion/onboarding');
   };
 
+  const stepsInfo = [
+    { num: 1, title: 'Identidad y Domicilio' },
+    { num: 2, title: 'Documentación PGR' },
+    { num: 3, title: 'Referencias & Nómina' },
+    { num: 4, title: 'Firma y Acceso' }
+  ];
+
   return (
-    <div className="mx-auto min-h-screen max-w-lg bg-slate-50 px-4 py-8 font-sans text-slate-900">
+    <div className="w-full max-w-xl mx-auto space-y-6 text-slate-100 font-sans">
       
-      {/* BARRA DE HERRAMIENTAS EXCLUSIVA PARA ADMIN (SIN BOTONES DUPLICADOS) */}
+      {/* BARRA ADMIN */}
       {esAdmin && (
-        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs shadow-sm">
-          <span className="font-semibold text-amber-900">🛠️ Modo Auditoría (Admin)</span>
+        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between text-xs">
+          <span className="font-bold text-amber-400">🛠️ Auditoría de RRHH (Admin)</span>
           <button
             type="button"
             onClick={handleCompletarDemo}
-            className="bg-amber-600 text-white font-bold px-3 py-1.5 rounded-lg hover:bg-amber-700 transition"
+            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3 py-1 rounded-xl transition"
           >
-            Llenar prueba
+            Cargar Datos de Prueba
           </button>
         </div>
       )}
 
-      <button 
-        className="text-sm font-bold text-slate-500 mb-3 flex items-center gap-1 hover:text-slate-800 transition" 
-        onClick={() => router.push('/')}
-        type="button"
-      >
-        ‹ Volver a la portada
-      </button>
-
-      <h2 className="text-2xl font-black text-blue-950 mb-1">Acreditación Oficial</h2>
-      <p className="text-xs text-slate-600 mb-5 font-medium">Expediente integral KYC y verificación legal para Acompañantes JUNTOS.</p>
-
-      {/* Pestañas de Fases */}
-      {esAdmin ? (
-        <div className="grid grid-cols-4 gap-2 mb-6">
-          {[1, 2, 3, 4].map(num => (
-            <button
-              key={num}
-              type="button"
-              onClick={() => { setErrorMsg(''); setFase(num); }}
-              className={`py-2 text-xs font-bold rounded-lg transition-all ${
-                fase === num ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-200 text-slate-700'
-              }`}
-            >
-              Fase {num}
-            </button>
-          ))}
+      {/* ENCABEZADO */}
+      <div className="space-y-1">
+        <div className="inline-flex items-center gap-2 bg-emerald-950/60 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-bold text-emerald-400 mb-2">
+          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <span>Acreditación Oficial de Recursos Humanos</span>
         </div>
-      ) : (
-        <div className="flex gap-2 mb-6">
-          {[1, 2, 3, 4].map(num => (
+        <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Expediente Integral KYC</h2>
+        <p className="text-xs text-slate-400">Validación legal, domicilio y depuración PGR conforme a la Ley 172-13.</p>
+      </div>
+
+      {/* STEPPER PROGRESO */}
+      <div className="grid grid-cols-4 gap-2">
+        {stepsInfo.map(step => (
+          <div key={step.num} className="space-y-1.5">
             <div 
-              key={num} 
-              className={`h-2 flex-1 rounded-full transition-colors duration-300 ${fase >= num ? 'bg-blue-600' : 'bg-slate-200'}`} 
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                fase >= step.num ? 'bg-emerald-500 shadow-sm shadow-emerald-500/40' : 'bg-slate-800'
+              }`} 
             />
-          ))}
-        </div>
-      )}
+            <p className={`text-[10px] font-bold truncate ${fase === step.num ? 'text-emerald-400' : 'text-slate-500'}`}>
+              {step.num}. {step.title}
+            </p>
+          </div>
+        ))}
+      </div>
 
+      {/* MENSAJE DE ERROR */}
       {errorMsg && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium">
-          {errorMsg}
+        <div className="p-3 bg-rose-950/60 border border-rose-800 text-rose-300 text-xs rounded-xl flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+          <span>{errorMsg}</span>
         </div>
       )}
 
-      {/* Modal con Escáner de Cédula */}
+      {/* MODAL CÁMARA */}
       {camaraActiva && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-4">
-          <div className="relative w-full max-w-md bg-black rounded-2xl overflow-hidden shadow-2xl flex flex-col items-center">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-4">
+          <div className="relative w-full max-w-md bg-slate-950 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col items-center">
             <video ref={videoRef} autoPlay playsInline className="w-full h-72 object-cover" />
-            <div className="absolute top-8 w-64 h-40 border-2 border-dashed border-emerald-400 rounded-lg pointer-events-none flex flex-col justify-between p-2">
-              <span className="text-[10px] text-emerald-400 bg-black/60 px-1.5 py-0.5 rounded self-start">Alinea con bordes</span>
-              <span className="text-[10px] text-emerald-400 bg-black/60 px-1.5 py-0.5 rounded self-end">{camaraActiva.toUpperCase()}</span>
+            <div className="absolute top-8 w-64 h-40 border-2 border-dashed border-emerald-400 rounded-2xl pointer-events-none flex flex-col justify-between p-2.5">
+              <span className="text-[10px] font-bold text-emerald-400 bg-slate-950/80 px-2 py-0.5 rounded-md self-start">Alinea documento aquí</span>
+              <span className="text-[10px] font-bold text-emerald-400 bg-slate-950/80 px-2 py-0.5 rounded-md self-end">{camaraActiva.toUpperCase()}</span>
             </div>
-            <div className="w-full bg-slate-900 p-4 flex justify-between items-center">
-              <button type="button" onClick={detenerCamara} className="text-xs text-white bg-slate-700 px-4 py-2 rounded-lg">Cancelar</button>
-              <button type="button" onClick={() => capturarFoto(camaraActiva)} className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 px-5 py-2.5 rounded-lg">
-                📸 Capturar Foto
+            <div className="w-full bg-slate-900 border-t border-slate-800 p-4 flex justify-between items-center">
+              <button type="button" onClick={detenerCamara} className="text-xs font-bold text-slate-400 hover:text-white px-4 py-2 rounded-xl transition">Cancelar</button>
+              <button type="button" onClick={() => capturarFoto(camaraActiva)} className="text-xs font-black text-slate-950 bg-emerald-500 hover:bg-emerald-400 px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center gap-1.5">
+                <Camera className="w-4 h-4" /> Capturar Foto
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <form onSubmit={fase === 4 ? handleSubmitFinal : handleAvanzar}>
+      {/* FORMULARIO */}
+      <form onSubmit={fase === 4 ? handleSubmitFinal : handleAvanzar} className="space-y-5 text-xs">
         
-        {/* ============================================================== */}
-        {/* FASE 1: IDENTIDAD, DOMICILIO LEGAL Y CONTACTO DE EMERGENCIA    */}
-        {/* ============================================================== */}
+        {/* FASE 1 */}
         {fase === 1 && (
           <div className="space-y-4">
-            <h3 className="font-bold text-base text-slate-800 border-b pb-2 flex items-center justify-between">
-              <span>Fase 1: Identidad y Domicilio Legal</span>
-              <span className="text-[11px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-normal">KYC Nivel 1</span>
-            </h3>
-
-            {/* Documento */}
             <div>
-              <label className="text-xs font-bold text-slate-700 uppercase">Documento Oficial</label>
-              <div className="grid grid-cols-2 gap-2 mt-1">
+              <label className="text-slate-300 font-bold block mb-1">Tipo de Documento Oficial *</label>
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => { setTipoDocumento('CEDULA'); setDatosIdentidad({...datosIdentidad, numeroDocumento: ''}); }}
-                  className={`py-2 text-xs font-bold rounded-xl border transition ${tipoDocumento === 'CEDULA' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-300'}`}
+                  className={`py-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+                    tipoDocumento === 'CEDULA'
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
+                      : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
                 >
-                  🪪 Cédula Dominicana
+                  <FileText className="w-3.5 h-3.5" /> Cédula Dominicana
                 </button>
                 <button
                   type="button"
                   onClick={() => { setTipoDocumento('PASAPORTE'); setDatosIdentidad({...datosIdentidad, numeroDocumento: ''}); }}
-                  className={`py-2 text-xs font-bold rounded-xl border transition ${tipoDocumento === 'PASAPORTE' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-300'}`}
+                  className={`py-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+                    tipoDocumento === 'PASAPORTE'
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
+                      : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
                 >
-                  🛂 Pasaporte Extranjero
+                  <FileText className="w-3.5 h-3.5" /> Pasaporte Extranjero
                 </button>
               </div>
             </div>
 
-            <div>
-              <label className="text-xs font-bold text-slate-700 uppercase">Nombre Completo (como aparece en ID)</label>
-              <input 
-                type="text" 
-                className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-sm outline-none focus:border-blue-500" 
-                placeholder="Ej: Rosa Altagracia Morales" 
-                value={datosIdentidad.nombre} 
-                onChange={e => setDatosIdentidad({...datosIdentidad, nombre: e.target.value})} 
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs font-bold text-slate-700 uppercase">{tipoDocumento === 'CEDULA' ? 'Cédula (11 dígitos)' : 'Pasaporte'}</label>
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">Nombre Completo (como figura en ID) *</label>
+              <div className="relative flex items-center">
+                <User className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
                 <input 
                   type="text" 
-                  maxLength={tipoDocumento === 'CEDULA' ? 11 : 20} 
-                  className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-sm outline-none focus:border-blue-500 font-mono" 
-                  placeholder={tipoDocumento === 'CEDULA' ? '40200000000' : 'A12345678'} 
-                  value={datosIdentidad.numeroDocumento} 
-                  onChange={e => setDatosIdentidad({...datosIdentidad, numeroDocumento: e.target.value})} 
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  placeholder="Ej: Rosa Altagracia Morales" 
+                  value={datosIdentidad.nombre} 
+                  onChange={e => setDatosIdentidad({...datosIdentidad, nombre: e.target.value})} 
                 />
               </div>
-              <div>
-                <label className="text-xs font-bold text-slate-700 uppercase">Fecha Nacimiento</label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">{tipoDocumento === 'CEDULA' ? 'Cédula (11 dígitos sin guiones) *' : 'Pasaporte *'}</label>
+                <div className="relative flex items-center">
+                  <FileCheck2 className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                  <input 
+                    type="text" 
+                    maxLength={tipoDocumento === 'CEDULA' ? 11 : 20} 
+                    className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 font-mono outline-none focus:border-emerald-500 transition"
+                    placeholder={tipoDocumento === 'CEDULA' ? '40200000000' : 'A12345678'} 
+                    value={datosIdentidad.numeroDocumento} 
+                    onChange={e => setDatosIdentidad({...datosIdentidad, numeroDocumento: e.target.value})} 
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">Fecha de Nacimiento *</label>
                 <input 
                   type="date" 
-                  className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-xs outline-none focus:border-blue-500" 
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white outline-none focus:border-emerald-500 transition"
                   value={datosIdentidad.fechaNacimiento} 
                   onChange={e => setDatosIdentidad({...datosIdentidad, fechaNacimiento: e.target.value})} 
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs font-bold text-slate-700 uppercase">WhatsApp Personal</label>
-                <input 
-                  type="tel" 
-                  className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-sm outline-none focus:border-blue-500" 
-                  placeholder="809-555-0000" 
-                  value={datosIdentidad.telefonoWhatsapp} 
-                  onChange={e => setDatosIdentidad({...datosIdentidad, telefonoWhatsapp: e.target.value})} 
-                />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">WhatsApp Personal *</label>
+                <div className="relative flex items-center">
+                  <Phone className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                  <input 
+                    type="tel" 
+                    className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 font-mono outline-none focus:border-emerald-500 transition"
+                    placeholder="809-555-0000" 
+                    value={datosIdentidad.telefonoWhatsapp} 
+                    onChange={e => setDatosIdentidad({...datosIdentidad, telefonoWhatsapp: e.target.value})} 
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-xs font-bold text-slate-700 uppercase">Teléfono Fijo / Secundario</label>
-                <input 
-                  type="tel" 
-                  className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-sm outline-none focus:border-blue-500" 
-                  placeholder="Opcional" 
-                  value={datosIdentidad.telefonoSecundario} 
-                  onChange={e => setDatosIdentidad({...datosIdentidad, telefonoSecundario: e.target.value})} 
-                />
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">Teléfono Secundario</label>
+                <div className="relative flex items-center">
+                  <Phone className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                  <input 
+                    type="tel" 
+                    className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 font-mono outline-none focus:border-emerald-500 transition"
+                    placeholder="Opcional" 
+                    value={datosIdentidad.telefonoSecundario} 
+                    onChange={e => setDatosIdentidad({...datosIdentidad, telefonoSecundario: e.target.value})} 
+                  />
+                </div>
               </div>
             </div>
 
-            {/* SECCIÓN DOMICILIO RESIDENCIAL EXACTO */}
-            <div className="pt-3 border-t space-y-3">
-              <label className="text-xs font-black text-blue-900 uppercase tracking-wide block">
-                🏠 Domicilio Residencial Verificado
-              </label>
+            {/* DOMICILIO RESIDENCIAL */}
+            <div className="pt-3 border-t border-slate-800 space-y-3">
+              <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                <Home className="w-4 h-4" />
+                <span>Domicilio Residencial Verificado</span>
+              </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-700">Dirección Exacta (Calle, No., Residencial, Edif./Apto.)</label>
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">Dirección Exacta (Calle, No., Edif./Apto.) *</label>
                 <input 
                   type="text" 
-                  className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-sm outline-none focus:border-blue-500" 
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
                   placeholder="Ej: C/ Mella #45, Edif. Real III, Apto 2-A" 
                   value={datosIdentidad.direccionCalle} 
                   onChange={e => setDatosIdentidad({...datosIdentidad, direccionCalle: e.target.value})} 
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">Sector / Barrio</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-bold block">Sector / Barrio *</label>
                   <input 
                     type="text" 
-                    className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-sm outline-none focus:border-blue-500" 
-                    placeholder="Ej: Ensanche Ozama / Piantini" 
+                    className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                    placeholder="Ej: Ensanche Ozama" 
                     value={datosIdentidad.sector} 
                     onChange={e => setDatosIdentidad({...datosIdentidad, sector: e.target.value})} 
                   />
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">Municipio / Provincia</label>
+
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-bold block">Municipio / Provincia *</label>
                   <select 
-                    className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-xs outline-none focus:border-blue-500"
+                    className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white outline-none focus:border-emerald-500 transition cursor-pointer"
                     value={datosIdentidad.municipioProvincia}
                     onChange={e => setDatosIdentidad({...datosIdentidad, municipioProvincia: e.target.value})}
                   >
@@ -678,372 +686,226 @@ export default function RegistroAcompanante() {
                   </select>
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">Condición Vivienda</label>
-                  <select 
-                    className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-xs outline-none"
-                    value={datosIdentidad.tipoVivienda}
-                    onChange={e => setDatosIdentidad({...datosIdentidad, tipoVivienda: e.target.value})}
-                  >
-                    <option value="Propia">Propia</option>
-                    <option value="Alquilada">Alquilada</option>
-                    <option value="Familiar">Familiar / Padres</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">Tiempo en el lugar</label>
-                  <select 
-                    className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-xs outline-none"
-                    value={datosIdentidad.tiempoViviendo}
-                    onChange={e => setDatosIdentidad({...datosIdentidad, tiempoViviendo: e.target.value})}
-                  >
-                    <option value="Menos de 1 año">Menos de 1 año</option>
-                    <option value="1 a 3 años">1 a 3 años</option>
-                    <option value="Más de 3 años">Más de 3 años</option>
-                  </select>
-                </div>
-              </div>
             </div>
 
-            {/* SECCIÓN CONTACTO DE EMERGENCIA */}
-            <div className="pt-3 border-t space-y-2">
-              <label className="text-xs font-black text-rose-700 uppercase tracking-wide block">
-                🚨 Contacto de Emergencia Inmediato
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-1">
-                  <input 
-                    type="text" 
-                    className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs outline-none" 
-                    placeholder="Nombre y apellido" 
-                    value={datosIdentidad.contactoEmergenciaNombre} 
-                    onChange={e => setDatosIdentidad({...datosIdentidad, contactoEmergenciaNombre: e.target.value})} 
-                  />
-                </div>
-                <div className="col-span-1">
-                  <input 
-                    type="text" 
-                    className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs outline-none" 
-                    placeholder="Parentesco (Ej: Madre)" 
-                    value={datosIdentidad.contactoEmergenciaParentesco} 
-                    onChange={e => setDatosIdentidad({...datosIdentidad, contactoEmergenciaParentesco: e.target.value})} 
-                  />
-                </div>
-                <div className="col-span-1">
-                  <input 
-                    type="tel" 
-                    className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs outline-none" 
-                    placeholder="Teléfono contacto" 
-                    value={datosIdentidad.contactoEmergenciaTelefono} 
-                    onChange={e => setDatosIdentidad({...datosIdentidad, contactoEmergenciaTelefono: e.target.value})} 
-                  />
-                </div>
+            {/* CONTACTO DE EMERGENCIA */}
+            <div className="pt-3 border-t border-slate-800 space-y-3">
+              <div className="flex items-center gap-2 text-rose-400 font-bold">
+                <AlertCircle className="w-4 h-4" />
+                <span>Contacto de Emergencia Inmediato *</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <input 
+                  type="text" 
+                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  placeholder="Nombre y apellido" 
+                  value={datosIdentidad.contactoEmergenciaNombre} 
+                  onChange={e => setDatosIdentidad({...datosIdentidad, contactoEmergenciaNombre: e.target.value})} 
+                />
+                <input 
+                  type="text" 
+                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  placeholder="Parentesco (Ej: Hermano)" 
+                  value={datosIdentidad.contactoEmergenciaParentesco} 
+                  onChange={e => setDatosIdentidad({...datosIdentidad, contactoEmergenciaParentesco: e.target.value})} 
+                />
+                <input 
+                  type="tel" 
+                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 font-mono outline-none focus:border-emerald-500 transition"
+                  placeholder="Teléfono directo" 
+                  value={datosIdentidad.contactoEmergenciaTelefono} 
+                  onChange={e => setDatosIdentidad({...datosIdentidad, contactoEmergenciaTelefono: e.target.value})} 
+                />
               </div>
             </div>
-
           </div>
         )}
 
-        {/* ============================================================== */}
-        {/* FASE 2: DOCUMENTOS, COMPROBANTE DOMICILIO Y CERTIFICADOS       */}
-        {/* ============================================================== */}
+        {/* FASE 2 */}
         {fase === 2 && (
           <div className="space-y-4">
-            <h3 className="font-bold text-base text-slate-800 border-b pb-2 flex items-center justify-between">
-              <span>Fase 2: Evidencias y Certificaciones</span>
-              <span className="text-[11px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-normal">KYC Nivel 2</span>
-            </h3>
-
-            {/* Documento ID */}
-            {tipoDocumento === 'CEDULA' ? (
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 uppercase block">1. Cédula (Ambas Caras) *</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl border-2 border-dashed border-slate-300 p-2.5 bg-white text-center flex flex-col justify-between items-center h-40">
-                    {previewFrontal ? (
-                      <div className="w-full h-full flex flex-col items-center justify-between">
-                        <img src={previewFrontal} alt="Frontal" className="h-24 w-full object-cover rounded-md" />
-                        <button type="button" onClick={() => setPreviewFrontal(null)} className="text-[10px] text-red-500 underline">Cambiar</button>
+            <div className="space-y-2">
+              <label className="text-slate-300 font-bold block">1. Escaneo de Documento de Identidad *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="border border-dashed border-slate-800 bg-slate-900/40 rounded-2xl p-4 text-center flex flex-col justify-between items-center min-h-[170px]">
+                  {previewFrontal ? (
+                    <div className="w-full flex flex-col items-center gap-2">
+                      <img src={previewFrontal} alt="Frontal" className="h-24 w-full object-cover rounded-xl border border-slate-700" />
+                      <button type="button" onClick={() => setPreviewFrontal(null)} className="text-[11px] text-rose-400 font-bold hover:underline">Cambiar foto</button>
+                    </div>
+                  ) : (
+                    <>
+                      <FileText className="w-8 h-8 text-slate-500 mb-1" />
+                      <p className="font-bold text-slate-200">Lado Frontal</p>
+                      <div className="flex gap-2 w-full mt-2">
+                        <button type="button" onClick={() => iniciarCamara('frontal')} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1">
+                          <Camera className="w-3.5 h-3.5" /> Cámara
+                        </button>
+                        <label className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer">
+                          <Upload className="w-3.5 h-3.5" /> Subir
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'frontal')} />
+                        </label>
                       </div>
-                    ) : (
-                      <>
-                        <span className="text-xl">🪪</span>
-                        <p className="text-xs font-bold text-blue-700">Lado Frontal</p>
-                        <div className="flex flex-col gap-1 w-full">
-                          <button type="button" onClick={() => iniciarCamara('frontal')} className="text-[10px] bg-blue-50 text-blue-700 py-1 rounded font-bold">📷 Escanear</button>
-                          <label className="text-[10px] bg-slate-100 text-slate-700 py-1 rounded font-bold cursor-pointer">
-                            📁 Subir
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'frontal')} />
-                          </label>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                    </>
+                  )}
+                </div>
 
-                  <div className="rounded-xl border-2 border-dashed border-slate-300 p-2.5 bg-white text-center flex flex-col justify-between items-center h-40">
-                    {previewDorsal ? (
-                      <div className="w-full h-full flex flex-col items-center justify-between">
-                        <img src={previewDorsal} alt="Dorsal" className="h-24 w-full object-cover rounded-md" />
-                        <button type="button" onClick={() => setPreviewDorsal(null)} className="text-[10px] text-red-500 underline">Cambiar</button>
+                <div className="border border-dashed border-slate-800 bg-slate-900/40 rounded-2xl p-4 text-center flex flex-col justify-between items-center min-h-[170px]">
+                  {previewDorsal ? (
+                    <div className="w-full flex flex-col items-center gap-2">
+                      <img src={previewDorsal} alt="Dorsal" className="h-24 w-full object-cover rounded-xl border border-slate-700" />
+                      <button type="button" onClick={() => setPreviewDorsal(null)} className="text-[11px] text-rose-400 font-bold hover:underline">Cambiar foto</button>
+                    </div>
+                  ) : (
+                    <>
+                      <FileCheck2 className="w-8 h-8 text-slate-500 mb-1" />
+                      <p className="font-bold text-slate-200">Lado Posterior</p>
+                      <div className="flex gap-2 w-full mt-2">
+                        <button type="button" onClick={() => iniciarCamara('dorsal')} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1">
+                          <Camera className="w-3.5 h-3.5" /> Cámara
+                        </button>
+                        <label className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer">
+                          <Upload className="w-3.5 h-3.5" /> Subir
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'dorsal')} />
+                        </label>
                       </div>
-                    ) : (
-                      <>
-                        <span className="text-xl">🔄</span>
-                        <p className="text-xs font-bold text-blue-700">Lado Posterior</p>
-                        <div className="flex flex-col gap-1 w-full">
-                          <button type="button" onClick={() => iniciarCamara('dorsal')} className="text-[10px] bg-blue-50 text-blue-700 py-1 rounded font-bold">📷 Escanear</button>
-                          <label className="text-[10px] bg-slate-100 text-slate-700 py-1 rounded font-bold cursor-pointer">
-                            📁 Subir
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'dorsal')} />
-                          </label>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                    </>
+                  )}
                 </div>
               </div>
-            ) : (
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 uppercase block">1. Pasaporte y Permiso DGM *</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl border-2 border-dashed border-slate-300 p-2.5 bg-white text-center flex flex-col justify-between items-center h-40">
-                    <span className="text-xl">🛂</span>
-                    <p className="text-xs font-bold text-blue-700">Pág. Pasaporte</p>
-                    <label className="w-full text-[10px] bg-slate-100 text-slate-700 py-2 rounded font-bold cursor-pointer">
-                      {docFrontal ? '✓ Adjuntado' : 'Subir Imagen'}
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'frontal')} />
-                    </label>
-                  </div>
-                  <div className="rounded-xl border-2 border-dashed border-slate-300 p-2.5 bg-white text-center flex flex-col justify-between items-center h-40">
-                    <span className="text-xl">📑</span>
-                    <p className="text-xs font-bold text-blue-700">Permiso Trabajo DGM</p>
-                    <label className="w-full text-[10px] bg-slate-100 text-slate-700 py-2 rounded font-bold cursor-pointer">
-                      {permisoTrabajo ? '✓ Adjuntado' : 'Subir PDF/Foto'}
-                      <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setPermisoTrabajo(e.target.files?.[0] || null)} />
-                    </label>
-                  </div>
-                </div>
-              </div>
-            )}
+            </div>
 
-            {/* Comprobante de Domicilio */}
-            <div className="pt-2 border-t space-y-2">
-              <label className="text-xs font-bold text-slate-700 uppercase block">
-                2. Comprobante de Domicilio (Factura Luz, Agua o Contrato) *
-              </label>
-              <label className="w-full text-xs bg-white border border-slate-300 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:bg-slate-50">
-                <span className="font-semibold text-slate-700 truncate">
-                  {comprobanteDomicilio ? `✓ ${comprobanteDomicilio.name}` : '📄 Subir Factura CAASD/Edeeste/Edesur/Claro'}
-                </span>
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">2. Comprobante de Domicilio *</label>
+              <label className="w-full bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:border-slate-700 transition">
+                <span className="text-slate-400 truncate">{comprobanteDomicilio ? `✓ ${comprobanteDomicilio.name}` : 'Adjuntar PDF o Foto de Factura'}</span>
+                <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
                 <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setComprobanteDomicilio(e.target.files?.[0] || null)} />
               </label>
             </div>
 
-            {/* Antecedentes No Penales (PGR - 30 días) */}
-            <div className="pt-2 border-t space-y-2">
-              <label className="text-xs font-bold text-slate-700 uppercase block">
-                3. Certificado No Antecedentes Penales (PGR - 30 días hábiles) *
+            <div className="space-y-2 pt-2 border-t border-slate-800">
+              <label className="text-slate-300 font-bold block">3. Certificado No Antecedentes PGR *</label>
+              <label className="w-full bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:border-slate-700 transition">
+                <span className="text-slate-400 truncate">{certAntecedentes ? `✓ ${certAntecedentes.name}` : 'Adjuntar Certificado Oficial PGR'}</span>
+                <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
+                <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setCertAntecedentes(e.target.files?.[0] || null)} />
               </label>
-              <div className="bg-white border rounded-xl p-3 space-y-2">
-                <label className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 flex items-center justify-between cursor-pointer">
-                  <span className="font-semibold text-slate-700 truncate">{certAntecedentes ? `✓ ${certAntecedentes.name}` : '📎 Adjuntar Certificado PGR'}</span>
-                  <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setCertAntecedentes(e.target.files?.[0] || null)} />
-                </label>
-                {certAntecedentes && (
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 block">Fecha de emisión:</label>
-                    <input type="date" value={fechaAntecedentes} onChange={(e) => setFechaAntecedentes(e.target.value)} className="w-full text-xs p-1.5 rounded border border-slate-300 bg-white mt-1" />
-                  </div>
-                )}
-              </div>
+              {certAntecedentes && (
+                <div className="space-y-1">
+                  <span className="text-[11px] text-slate-400 font-medium">Fecha de emisión del certificado:</span>
+                  <input type="date" value={fechaAntecedentes} onChange={(e) => setFechaAntecedentes(e.target.value)} className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2 px-3 text-white outline-none focus:border-emerald-500" />
+                </div>
+              )}
             </div>
 
-            {/* Certificación Profesional Previa (Opcional - 30 días) */}
-            <div className="pt-2 border-t space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-bold text-slate-700 uppercase">4. Certificación Profesional Previa</label>
-                <span className="text-[10px] bg-slate-100 text-slate-500 font-semibold px-2 py-0.5 rounded-full">Opcional</span>
-              </div>
-              <div className="bg-white border rounded-xl p-3 space-y-2">
-                <label className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 flex items-center justify-between cursor-pointer">
-                  <span className="font-semibold text-slate-700 truncate">{certProfesional ? `✓ ${certProfesional.name}` : '📎 Adjuntar Certificación'}</span>
-                  <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setCertProfesional(e.target.files?.[0] || null)} />
-                </label>
-              </div>
-            </div>
-
-            {/* Título de Bachiller */}
-            <div className="pt-2 border-t space-y-2">
-              <label className="text-xs font-bold text-slate-700 uppercase block">5. Certificado o Diploma de Bachiller *</label>
-              <label className="w-full text-xs bg-white border border-slate-300 rounded-xl p-3 flex items-center justify-between cursor-pointer">
-                <span className="font-semibold text-slate-700 truncate">{certBachiller ? `✓ ${certBachiller.name}` : '🎓 Adjuntar Título Bachiller'}</span>
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">4. Diploma de Bachiller *</label>
+              <label className="w-full bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:border-slate-700 transition">
+                <span className="text-slate-400 truncate">{certBachiller ? `✓ ${certBachiller.name}` : 'Adjuntar Diploma de Bachiller'}</span>
+                <GraduationCap className="w-4 h-4 text-emerald-400 shrink-0" />
                 <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setCertBachiller(e.target.files?.[0] || null)} />
               </label>
             </div>
 
-            {/* JUNTOS Academia */}
-            <div className="pt-2 border-t space-y-2">
-              <label className="text-xs font-bold text-blue-950 uppercase block">6. Certificado JUNTOS Academia *</label>
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+            <div className="space-y-2 pt-2 border-t border-slate-800">
+              <label className="text-slate-300 font-bold block">5. Certificado JUNTOS Academia *</label>
+              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 space-y-2">
                 <input 
                   type="text" 
                   value={codigoAcademia} 
                   onChange={(e) => setCodigoAcademia(e.target.value)} 
-                  placeholder="Código de Acreditación (Ej: JACAD-2026-XXXX)" 
-                  className="w-full text-xs p-2 rounded-lg border border-slate-300 bg-white uppercase font-mono"
+                  placeholder="Código de acreditación (Ej: JACAD-2026-XXXX)" 
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-white font-mono uppercase outline-none focus:border-emerald-500"
                 />
-                <label className="w-full text-xs bg-blue-600 text-white font-bold rounded-lg p-2 block text-center cursor-pointer">
-                  {certAcademia ? `✓ ${certAcademia.name}` : '📎 Adjuntar Diploma Academia'}
+                <label className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2.5 rounded-xl block text-center cursor-pointer transition shadow-md shadow-emerald-500/20">
+                  {certAcademia ? `✓ ${certAcademia.name}` : 'Adjuntar Diploma Academia'}
                   <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setCertAcademia(e.target.files?.[0] || null)} />
                 </label>
               </div>
             </div>
-
           </div>
         )}
 
-        {/* ============================================================== */}
-        {/* FASE 3: REFERENCIAS LABORALES, PERSONALES Y PAGO DE NÓMINA     */}
-        {/* ============================================================== */}
+        {/* FASE 3 */}
         {fase === 3 && (
           <div className="space-y-4">
-            <h3 className="font-bold text-base text-slate-800 border-b pb-2 flex items-center justify-between">
-              <span>Fase 3: Referencias y Depuración RRHH</span>
-              <span className="text-[11px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-normal">RRHH</span>
-            </h3>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700 uppercase">Experiencia con Adultos Mayores</label>
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">Experiencia en Acompañamiento o Cuidado *</label>
               <select 
-                className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-sm outline-none" 
+                className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white outline-none focus:border-emerald-500 transition cursor-pointer"
                 value={datosLaborales.experienciaAnios} 
                 onChange={e => setDatosLaborales({...datosLaborales, experienciaAnios: e.target.value})}
               >
                 <option value="0-1">Menos de 1 año</option>
-                <option value="1-3">1 a 3 años</option>
-                <option value="3-5">3 a 5 años</option>
-                <option value="5+">Más de 5 años</option>
+                <option value="1-3">1 a 3 años de experiencia</option>
+                <option value="3-5">3 a 5 años de experiencia</option>
+                <option value="5+">Más de 5 años de experiencia</option>
               </select>
             </div>
 
-            {/* REFERENCIAS LABORALES */}
-            <div className="pt-2 border-t space-y-3">
-              <label className="text-xs font-black text-blue-900 uppercase tracking-wide block">
-                💼 Referencias Laborales Previas (Mínimo 1 requerida)
-              </label>
-
-              <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
-                <p className="text-[11px] font-bold text-slate-700">Referencia Laboral 1 *</p>
+            <div className="pt-2 border-t border-slate-800 space-y-2">
+              <span className="text-emerald-400 font-bold block">Referencia Laboral 1 *</span>
+              <input 
+                type="text" 
+                placeholder="Nombre supervisor / empleador" 
+                className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                value={datosLaborales.refLab1Nombre}
+                onChange={e => setDatosLaborales({...datosLaborales, refLab1Nombre: e.target.value})}
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input 
                   type="text" 
-                  placeholder="Nombre de la persona o supervisor" 
-                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300"
-                  value={datosLaborales.refLab1Nombre}
-                  onChange={e => setDatosLaborales({...datosLaborales, refLab1Nombre: e.target.value})}
+                  placeholder="Empresa o Familia" 
+                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  value={datosLaborales.refLab1Empresa}
+                  onChange={e => setDatosLaborales({...datosLaborales, refLab1Empresa: e.target.value})}
                 />
-                <div className="grid grid-cols-2 gap-2">
-                  <input 
-                    type="text" 
-                    placeholder="Empresa o Familia" 
-                    className="w-full text-xs p-2 rounded-lg border border-slate-300"
-                    value={datosLaborales.refLab1Empresa}
-                    onChange={e => setDatosLaborales({...datosLaborales, refLab1Empresa: e.target.value})}
-                  />
-                  <input 
-                    type="tel" 
-                    placeholder="Teléfono directo" 
-                    className="w-full text-xs p-2 rounded-lg border border-slate-300"
-                    value={datosLaborales.refLab1Telefono}
-                    onChange={e => setDatosLaborales({...datosLaborales, refLab1Telefono: e.target.value})}
-                  />
-                </div>
-              </div>
-
-              <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
-                <p className="text-[11px] font-bold text-slate-700">Referencia Laboral 2 (Opcional)</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <input 
-                    type="text" 
-                    placeholder="Nombre supervisor/contacto" 
-                    className="w-full text-xs p-2 rounded-lg border border-slate-300"
-                    value={datosLaborales.refLab2Nombre}
-                    onChange={e => setDatosLaborales({...datosLaborales, refLab2Nombre: e.target.value})}
-                  />
-                  <input 
-                    type="tel" 
-                    placeholder="Teléfono de contacto" 
-                    className="w-full text-xs p-2 rounded-lg border border-slate-300"
-                    value={datosLaborales.refLab2Telefono}
-                    onChange={e => setDatosLaborales({...datosLaborales, refLab2Telefono: e.target.value})}
-                  />
-                </div>
+                <input 
+                  type="tel" 
+                  placeholder="Teléfono directo" 
+                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 font-mono outline-none focus:border-emerald-500 transition"
+                  value={datosLaborales.refLab1Telefono}
+                  onChange={e => setDatosLaborales({...datosLaborales, refLab1Telefono: e.target.value})}
+                />
               </div>
             </div>
 
-            {/* REFERENCIAS PERSONALES */}
-            <div className="pt-2 border-t space-y-3">
-              <label className="text-xs font-black text-blue-900 uppercase tracking-wide block">
-                👥 Referencias Personales (No familiares directos)
-              </label>
-
-              <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
-                <p className="text-[11px] font-bold text-slate-700">Referencia Personal 1 *</p>
-                <div className="grid grid-cols-3 gap-2">
-                  <input 
-                    type="text" 
-                    placeholder="Nombre completo" 
-                    className="col-span-1 w-full text-xs p-2 rounded-lg border border-slate-300"
-                    value={datosLaborales.refPers1Nombre}
-                    onChange={e => setDatosLaborales({...datosLaborales, refPers1Nombre: e.target.value})}
-                  />
-                  <input 
-                    type="text" 
-                    placeholder="Relación (Ej: Vecino)" 
-                    className="col-span-1 w-full text-xs p-2 rounded-lg border border-slate-300"
-                    value={datosLaborales.refPers1Relacion}
-                    onChange={e => setDatosLaborales({...datosLaborales, refPers1Relacion: e.target.value})}
-                  />
-                  <input 
-                    type="tel" 
-                    placeholder="Teléfono" 
-                    className="col-span-1 w-full text-xs p-2 rounded-lg border border-slate-300"
-                    value={datosLaborales.refPers1Telefono}
-                    onChange={e => setDatosLaborales({...datosLaborales, refPers1Telefono: e.target.value})}
-                  />
-                </div>
-              </div>
-
-              <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
-                <p className="text-[11px] font-bold text-slate-700">Referencia Personal 2 (Opcional)</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <input 
-                    type="text" 
-                    placeholder="Nombre completo" 
-                    className="w-full text-xs p-2 rounded-lg border border-slate-300"
-                    value={datosLaborales.refPers2Nombre}
-                    onChange={e => setDatosLaborales({...datosLaborales, refPers2Nombre: e.target.value})}
-                  />
-                  <input 
-                    type="tel" 
-                    placeholder="Teléfono de contacto" 
-                    className="w-full text-xs p-2 rounded-lg border border-slate-300"
-                    value={datosLaborales.refPers2Telefono}
-                    onChange={e => setDatosLaborales({...datosLaborales, refPers2Telefono: e.target.value})}
-                  />
-                </div>
+            <div className="pt-2 border-t border-slate-800 space-y-2">
+              <span className="text-emerald-400 font-bold block">Referencia Personal *</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <input 
+                  type="text" 
+                  placeholder="Nombre completo" 
+                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  value={datosLaborales.refPers1Nombre}
+                  onChange={e => setDatosLaborales({...datosLaborales, refPers1Nombre: e.target.value})}
+                />
+                <input 
+                  type="text" 
+                  placeholder="Relación (Ej: Vecino)" 
+                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  value={datosLaborales.refPers1Relacion}
+                  onChange={e => setDatosLaborales({...datosLaborales, refPers1Relacion: e.target.value})}
+                />
+                <input 
+                  type="tel" 
+                  placeholder="Teléfono" 
+                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 font-mono outline-none focus:border-emerald-500 transition"
+                  value={datosLaborales.refPers1Telefono}
+                  onChange={e => setDatosLaborales({...datosLaborales, refPers1Telefono: e.target.value})}
+                />
               </div>
             </div>
 
-            {/* DATOS BANCARIOS PARA PAGO */}
-            <div className="pt-2 border-t space-y-2">
-              <label className="text-xs font-black text-emerald-800 uppercase tracking-wide block">
-                💳 Cuenta Bancaria para Pago de Servicios (RD)
-              </label>
-              <div className="grid grid-cols-3 gap-2">
+            <div className="pt-2 border-t border-slate-800 space-y-2">
+              <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                <CreditCard className="w-4 h-4" />
+                <span>Cuenta Bancaria para Pago de Servicios</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <select 
-                  className="col-span-1 text-xs p-2 rounded-lg border border-slate-300 bg-white"
+                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white outline-none focus:border-emerald-500 cursor-pointer"
                   value={datosLaborales.bancoDestino}
                   onChange={e => setDatosLaborales({...datosLaborales, bancoDestino: e.target.value})}
                 >
@@ -1052,10 +914,9 @@ export default function RegistroAcompanante() {
                   <option value="Banco BHD">Banco BHD</option>
                   <option value="Asociación Popular">APAP</option>
                   <option value="Scotiabank">Scotiabank</option>
-                  <option value="Otro Banco">Otro Banco</option>
                 </select>
                 <select 
-                  className="col-span-1 text-xs p-2 rounded-lg border border-slate-300 bg-white"
+                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white outline-none focus:border-emerald-500 cursor-pointer"
                   value={datosLaborales.tipoCuenta}
                   onChange={e => setDatosLaborales({...datosLaborales, tipoCuenta: e.target.value})}
                 >
@@ -1065,70 +926,69 @@ export default function RegistroAcompanante() {
                 <input 
                   type="text" 
                   placeholder="No. de Cuenta" 
-                  className="col-span-1 text-xs p-2 rounded-lg border border-slate-300 bg-white font-mono"
+                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white font-mono outline-none focus:border-emerald-500 transition"
                   value={datosLaborales.numeroCuentaBanco}
                   onChange={e => setDatosLaborales({...datosLaborales, numeroCuentaBanco: e.target.value})}
                 />
               </div>
             </div>
-
           </div>
         )}
 
-        {/* ============================================================== */}
-        {/* FASE 4: CONSENTIMIENTO LEY 172-13, FIRMA Y ACCESO              */}
-        {/* ============================================================== */}
+        {/* FASE 4 */}
         {fase === 4 && (
           <div className="space-y-4">
-            <h3 className="font-bold text-base text-slate-800 border-b pb-2 flex items-center justify-between">
-              <span>Fase 4: Consentimiento Legal y Acceso</span>
-              <span className="text-[11px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-normal">Firma</span>
-            </h3>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700 uppercase">Correo Electrónico Oficial</label>
-              <input 
-                type="email" 
-                className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-sm outline-none focus:border-blue-500" 
-                placeholder="correo@ejemplo.com"
-                value={credenciales.email}
-                onChange={e => setCredenciales({...credenciales, email: e.target.value})}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700 uppercase">Contraseña para ingresar a la plataforma</label>
-              <input 
-                type="password" 
-                className="w-full rounded-xl border border-slate-300 bg-white p-3 mt-1 text-sm outline-none focus:border-blue-500" 
-                placeholder="Mínimo 6 caracteres"
-                value={credenciales.password}
-                onChange={e => setCredenciales({...credenciales, password: e.target.value})}
-              />
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">Correo Electrónico Oficial *</label>
+              <div className="relative flex items-center">
+                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                <input 
+                  type="email" 
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  placeholder="correo@ejemplo.com"
+                  value={credenciales.email}
+                  onChange={e => setCredenciales({...credenciales, email: e.target.value})}
+                />
+              </div>
             </div>
 
-            <div className="p-3 bg-slate-100 rounded-xl text-[11px] text-slate-600 leading-relaxed text-justify">
-              Autorizo expresamente a <b>JUNTOS PLATFORM</b> a verificar la autenticidad de mis antecedentes penales ante la Procuraduría General de la República (PGR), comprobar mis referencias personales y validar mis credenciales académicas conforme a las <b>Leyes 172-13</b> (Protección de Datos) y <b>126-02</b> (Comercio Electrónico y Firmas Digitales).
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">Contraseña de acceso *</label>
+              <div className="relative flex items-center">
+                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+                <input 
+                  type="password" 
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  placeholder="Mínimo 6 caracteres"
+                  value={credenciales.password}
+                  onChange={e => setCredenciales({...credenciales, password: e.target.value})}
+                />
+              </div>
             </div>
 
-            <div className="mt-2 rounded-xl border-2 border-slate-200 bg-white p-4 h-36 flex flex-col items-center justify-center relative">
+            <div className="p-3.5 bg-slate-900/90 border border-slate-800 rounded-2xl text-[11px] text-slate-400 leading-relaxed text-justify">
+              Autorizo expresamente a <strong className="text-white">JUNTOS ASISTENCIA RD</strong> a verificar la autenticidad de mis antecedentes penales ante la Procuraduría General de la República (PGR), validar mis referencias personales y certificar mis credenciales de conformidad con las <strong className="text-white">Leyes 172-13</strong> y <strong className="text-white">126-02</strong>.
+            </div>
+
+            <div className="border border-slate-800 bg-slate-950/80 rounded-2xl p-5 flex flex-col items-center justify-center min-h-[140px] text-center">
               {!firma ? (
                 <button 
                   type="button" 
                   onClick={() => setFirma(true)} 
-                  className="rounded-full bg-blue-50 px-5 py-2.5 text-xs font-bold text-blue-700 border border-blue-200 hover:bg-blue-100 transition"
+                  className="bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 font-bold px-6 py-3 rounded-xl text-xs hover:bg-emerald-900/50 transition flex items-center gap-2"
                 >
-                  ✍ Toca aquí para estampar tu firma digital
+                  ✍ Estampar Firma Digital Electrónica
                 </button>
               ) : (
-                <div className="w-full text-center">
-                  <div className="text-2xl italic text-blue-950 font-serif border-b pb-1 mb-1">
+                <div className="space-y-1">
+                  <div className="text-2xl italic text-emerald-400 font-serif border-b border-slate-800 pb-1">
                     {datosIdentidad.nombre || 'Firma Registrada'}
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    DOC: {datosIdentidad.numeroDocumento || '---'} | FECHA: {new Date().toLocaleDateString()}
+                  <span className="text-[10px] text-slate-500 font-mono block">
+                    DOC: {datosIdentidad.numeroDocumento || '---'} • FECHA: {new Date().toLocaleDateString()}
                   </span>
-                  <button type="button" onClick={() => setFirma(false)} className="text-xs text-red-500 mt-1 block mx-auto underline font-bold">
-                    Borrar firma
+                  <button type="button" onClick={() => setFirma(false)} className="text-[11px] text-rose-400 underline font-bold mt-1">
+                    Borrar y firmar de nuevo
                   </button>
                 </div>
               )}
@@ -1136,25 +996,34 @@ export default function RegistroAcompanante() {
           </div>
         )}
 
-        {/* BOTONES INFERIORES */}
-        <div className="mt-8 flex gap-3">
+        {/* NAVEGACIÓN */}
+        <div className="flex gap-3 pt-3">
           {fase > 1 && (
             <button 
               type="button" 
-              className="rounded-xl border border-slate-300 bg-white px-6 py-3.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition" 
+              className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold px-5 py-3.5 rounded-xl transition flex items-center gap-1.5" 
               onClick={() => { setErrorMsg(''); setFase(fase - 1); }}
             >
-              Atrás
+              <ArrowLeft className="w-4 h-4" /> Atrás
             </button>
           )}
+
           <button 
             type="submit" 
-            className="flex-1 rounded-xl px-4 py-3.5 text-sm font-bold text-white shadow-md bg-blue-600 hover:bg-blue-700 transition" 
             disabled={loading}
+            className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 rounded-xl shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.01] flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            {loading ? 'Procesando expediente...' : fase === 4 ? 'Firmar y Enviar a RRHH' : 'Siguiente Fase'}
+            <span>
+              {loading 
+                ? 'Procesando expediente...' 
+                : fase === 4 
+                ? 'Firmar y Enviar Expediente a RRHH' 
+                : 'Continuar a Siguiente Fase'}
+            </span>
+            <ArrowRight className="w-4 h-4" />
           </button>
         </div>
+
       </form>
     </div>
   );
