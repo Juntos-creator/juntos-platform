@@ -122,7 +122,7 @@ export default function HomePage() {
             </Link>
 
             <Link
-              href="/register"
+              href="/register?role=companion"
               className="w-full sm:w-auto bg-slate-950 hover:bg-slate-800/80 border border-slate-800 text-slate-200 font-bold px-7 py-4 rounded-2xl text-sm flex items-center justify-center gap-2 transition"
             >
               <Users className="w-4 h-4 text-emerald-400" />
@@ -510,7 +510,7 @@ export default function HomePage() {
               <li><Link href="/services/new" className="hover:text-emerald-400">Solicitar Acompañante</Link></li>
               <li><Link href="/login" className="hover:text-emerald-400">Acceso a Cuenta</Link></li>
               <li><Link href="/register" className="hover:text-emerald-400">Registro de Clientes</Link></li>
-              <li><Link href="/register" className="hover:text-emerald-400">Postulación de Acompañantes</Link></li>
+              <li><Link href="/register?role=companion" className="hover:text-emerald-400">Postulación de Acompañantes</Link></li>
             </ul>
           </div>
 
