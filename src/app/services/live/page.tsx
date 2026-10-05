@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -31,6 +31,7 @@ function LiveRoomContent() {
   const supabase = createClient();
 
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string>('CLIENT');
   const [service, setService] = useState<any>(null);
   const [companion, setCompanion] = useState<any>(null);
   const [clientProfile, setClientProfile] = useState<any>(null);
@@ -41,12 +42,13 @@ function LiveRoomContent() {
   const [pinMode, setPinMode] = useState<'CHECKIN' | 'CHECKOUT'>('CHECKIN');
   const [inputPin, setInputPin] = useState('');
   const [pinActionLoading, setPinActionLoading] = useState(false);
-  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinFeedback, setPinFeedback] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
   // Chat Operativo
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMsg, setSendingMsg] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
 
   // Modal para Asignar / Cambiar Acompañante
   const [showEditCompanionModal, setShowEditCompanionModal] = useState(false);
@@ -68,6 +70,17 @@ function LiveRoomContent() {
       }
       setCurrentUser(user);
 
+      // Obtener rol del usuario actual
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (userProfile?.role) {
+        setCurrentUserRole(userProfile.role);
+      }
+
       let targetId = rawId?.trim();
 
       // Fallback 1: Buscar orden más reciente del usuario
@@ -83,7 +96,7 @@ function LiveRoomContent() {
         if (userLatest) targetId = userLatest.id;
       }
 
-      // Fallback 2: Buscar orden más reciente global
+      // Fallback 2: Buscar orden más reciente global (para Admin / Acompañante)
       if (!targetId) {
         const { data: globalLatest } = await supabase
           .from('service_requests')
@@ -115,21 +128,25 @@ function LiveRoomContent() {
 
       setService(srv);
       setSosSent(srv.emergency_status === 'SOS_ACTIVE');
+      if (srv.status === 'IN_PROGRESS') {
+        setPinMode('CHECKOUT');
+      }
 
-      // Cargar lista de todos los acompañantes de la plataforma
+      // Cargar lista de acompañantes registrados
       const { data: compList } = await supabase
         .from('profiles')
         .select('id, full_name, phone, role')
-        .eq('role', 'COMPANION');
+        .in('role', ['COMPANION', 'ACOMPANANTE']);
       setAllCompanions(compList || []);
 
       // Cargar acompañante asignado
+      const companionId = srv.assigned_companion_id || srv.companion_id;
       let compInfo: any = null;
-      if (srv.companion_id) {
+      if (companionId) {
         const { data: comp } = await supabase
           .from('profiles')
           .select('id, full_name, phone, role, email')
-          .eq('id', srv.companion_id)
+          .eq('id', companionId)
           .maybeSingle();
         compInfo = comp;
       }
@@ -137,7 +154,7 @@ function LiveRoomContent() {
       const nombreAcomp = 
         compInfo?.full_name || 
         srv.companion_name || 
-        (srv.companion_id ? 'Acompañante Asignado' : 'Por asignar por Mesa Central');
+        (companionId ? 'Acompañante Asignado' : 'Por asignar por Mesa Central');
 
       const telAcomp = 
         compInfo?.phone || 
@@ -145,14 +162,14 @@ function LiveRoomContent() {
         '809-541-2000';
 
       setCompanion({
-        id: srv.companion_id,
+        id: companionId,
         full_name: nombreAcomp,
         phone: telAcomp
       });
-      setSelectedCompanionId(srv.companion_id || '');
+      setSelectedCompanionId(companionId || '');
 
       // Cargar datos del solicitante/familiar
-      const customerId = srv.customer_id || srv.user_id || srv.client_id;
+      const customerId = srv.client_id || srv.customer_id || srv.user_id;
       if (customerId) {
         const { data: cli } = await supabase
           .from('profiles')
@@ -162,7 +179,7 @@ function LiveRoomContent() {
         setClientProfile(cli);
       }
 
-      // Cargar Mensajes (con fallback entre tablas service_chat_messages y service_chats)
+      // Cargar Mensajes con compatibilidad de tablas
       let { data: msgs } = await supabase
         .from('service_chat_messages')
         .select('*')
@@ -171,9 +188,9 @@ function LiveRoomContent() {
 
       if (!msgs || msgs.length === 0) {
         const { data: altMsgs } = await supabase
-          .from('service_chats')
+          .from('service_messages')
           .select('*')
-          .eq('service_id', targetId)
+          .eq('service_request_id', targetId)
           .order('created_at', { ascending: true });
         msgs = altMsgs;
       }
@@ -203,7 +220,7 @@ function LiveRoomContent() {
       )
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'service_chats', filter: `service_id=eq.${service.id}` },
+        { event: 'INSERT', schema: 'public', table: 'service_messages', filter: `service_request_id=eq.${service.id}` },
         (payload) => {
           setChatMessages((prev) => {
             if (prev.some(m => m.id === payload.new.id)) return prev;
@@ -216,6 +233,9 @@ function LiveRoomContent() {
         { event: 'UPDATE', schema: 'public', table: 'service_requests', filter: `id=eq.${service.id}` },
         (payload) => {
           setService(payload.new);
+          if (payload.new.status === 'IN_PROGRESS') {
+            setPinMode('CHECKOUT');
+          }
         }
       )
       .subscribe();
@@ -225,53 +245,71 @@ function LiveRoomContent() {
     };
   }, [service?.id, supabase]);
 
-  // 1. VALIDACIÓN DIRECTA DEL PIN (Check-in o Check-out)
+  // Auto-scroll del chat
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
+
+  // 1. VALIDACIÓN SEGURA DEL PIN MEDIANTE RPC
   async function handleVerifyPin(e: React.FormEvent) {
     e.preventDefault();
     if (!service) return;
 
     setPinActionLoading(true);
-    setPinError(null);
+    setPinFeedback(null);
 
     const enteredPin = inputPin.trim();
-    const checkinExpected = (service.checkin_pin || service.id.replace(/\D/g, '').slice(0, 4) || '8430').toString();
-    const checkoutExpected = (service.checkout_pin || service.id.replace(/\D/g, '').slice(2, 6) || '9038').toString();
 
     try {
-      if (pinMode === 'CHECKIN') {
-        if (enteredPin !== checkinExpected) {
-          throw new Error(`PIN incorrecto. (PIN esperado: ${checkinExpected})`);
-        }
+      // Intentar primero con la función segura en base de datos
+      const { data: rpcSuccess, error: rpcError } = await supabase.rpc('verify_service_pin', {
+        p_service_id: service.id,
+        p_pin: enteredPin,
+        p_pin_type: pinMode
+      });
 
+      if (!rpcError && rpcSuccess) {
+        const nextStatus = pinMode === 'CHECKIN' ? 'IN_PROGRESS' : 'COMPLETED';
+        setService((prev: any) => ({ ...prev, status: nextStatus }));
+        setPinFeedback({
+          type: 'success',
+          text: pinMode === 'CHECKIN' ? 'Check-In validado. Servicio en curso.' : 'Check-Out validado. Servicio finalizado.'
+        });
+        setInputPin('');
+        if (pinMode === 'CHECKIN') setPinMode('CHECKOUT');
+        setPinActionLoading(false);
+        return;
+      }
+
+      // Fallback frontend si la RPC no estuviese compilada
+      const expectedPin = pinMode === 'CHECKIN' 
+        ? (service.checkin_pin || '').toString() 
+        : (service.checkout_pin || '').toString();
+
+      if (expectedPin && enteredPin === expectedPin) {
+        const nextStatus = pinMode === 'CHECKIN' ? 'IN_PROGRESS' : 'COMPLETED';
         const { error } = await supabase
           .from('service_requests')
-          .update({ status: 'IN_PROGRESS' })
+          .update({ status: nextStatus })
           .eq('id', service.id);
 
         if (error) throw error;
 
-        setService((prev: any) => ({ ...prev, status: 'IN_PROGRESS' }));
-        alert('✓ ¡Check-In Validado con éxito! Servicio cambiado a: EN CURSO.');
+        setService((prev: any) => ({ ...prev, status: nextStatus }));
+        setPinFeedback({
+          type: 'success',
+          text: pinMode === 'CHECKIN' ? 'Check-In validado con éxito.' : 'Check-Out completado con éxito.'
+        });
         setInputPin('');
-        setPinMode('CHECKOUT');
+        if (pinMode === 'CHECKIN') setPinMode('CHECKOUT');
       } else {
-        if (enteredPin !== checkoutExpected) {
-          throw new Error(`PIN incorrecto. (PIN esperado: ${checkoutExpected})`);
-        }
-
-        const { error } = await supabase
-          .from('service_requests')
-          .update({ status: 'COMPLETED' })
-          .eq('id', service.id);
-
-        if (error) throw error;
-
-        setService((prev: any) => ({ ...prev, status: 'COMPLETED' }));
-        alert('✓ ¡Check-Out Validado con éxito! Servicio FINALIZADO.');
-        setInputPin('');
+        throw new Error('El PIN ingresado es incorrecto.');
       }
     } catch (err: any) {
-      setPinError(err.message || 'Error al validar PIN');
+      setPinFeedback({
+        type: 'error',
+        text: err.message || 'Error al validar el PIN.'
+      });
     } finally {
       setPinActionLoading(false);
     }
@@ -296,11 +334,9 @@ function LiveRoomContent() {
       created_at: new Date().toISOString()
     };
 
-    // Actualización inmediata en UI
     setChatMessages((prev) => [...prev, tempMsg]);
 
     try {
-      // Intentar inserción en service_chat_messages
       const { error: err1 } = await supabase
         .from('service_chat_messages')
         .insert([{
@@ -311,11 +347,10 @@ function LiveRoomContent() {
         }]);
 
       if (err1) {
-        // Fallback a tabla service_chats
         await supabase
-          .from('service_chats')
+          .from('service_messages')
           .insert([{
-            service_id: service.id,
+            service_request_id: service.id,
             sender_id: currentUser.id,
             sender_name: senderName,
             message: texto
@@ -342,10 +377,11 @@ function LiveRoomContent() {
     const { error } = await supabase
       .from('service_requests')
       .update({
+        assigned_companion_id: chosen.id,
         companion_id: chosen.id,
         companion_name: chosen.full_name,
         companion_phone: chosen.phone,
-        status: service.status === 'PENDING' ? 'ASSIGNED' : service.status
+        status: (service.status === 'PENDING' || service.status === 'PENDING_DISPATCH') ? 'ASSIGNED' : service.status
       })
       .eq('id', service.id);
 
@@ -357,14 +393,15 @@ function LiveRoomContent() {
       });
       setService((prev: any) => ({
         ...prev,
+        assigned_companion_id: chosen.id,
         companion_id: chosen.id,
         companion_name: chosen.full_name,
-        companion_phone: chosen.phone
+        companion_phone: chosen.phone,
+        status: (prev.status === 'PENDING' || prev.status === 'PENDING_DISPATCH') ? 'ASSIGNED' : prev.status
       }));
       setShowEditCompanionModal(false);
-      alert(`✓ Acompañante asignado: ${chosen.full_name}`);
     } else {
-      alert(`Error: ${error.message}`);
+      alert(`Error al asignar: ${error.message}`);
     }
     setSavingComp(false);
   }
@@ -377,7 +414,7 @@ function LiveRoomContent() {
 
     await supabase.from('service_requests').update({ emergency_status: 'SOS_ACTIVE' }).eq('id', service.id);
     setSosSent(true);
-    alert('🚨 ALERTA SOS EMITIDA a la Mesa Central de Operaciones.');
+    alert('🚨 ALERTA SOS EMITIDA a la Mesa Central.');
   }
 
   if (loading) {
@@ -407,8 +444,8 @@ function LiveRoomContent() {
     );
   }
 
-  const checkinPin = service.checkin_pin || service.id.replace(/\D/g, '').slice(0, 4) || '8430';
-  const checkoutPin = service.checkout_pin || service.id.replace(/\D/g, '').slice(2, 6) || '9038';
+  const checkinPin = service.checkin_pin || '----';
+  const checkoutPin = service.checkout_pin || '----';
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans pb-20 selection:bg-emerald-500 selection:text-white">
@@ -416,7 +453,7 @@ function LiveRoomContent() {
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 w-full space-y-6">
         
-        {/* HEADER DE ESTADO Y SOS */}
+        {/* HEADER DE ESTADO Y BOTONES */}
         <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 shadow-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -428,25 +465,28 @@ function LiveRoomContent() {
             <h1 className="text-xl sm:text-2xl font-black text-white mt-1">
               {service.status === 'IN_PROGRESS' && 'Servicio en Curso (Check-In Validado)'}
               {service.status === 'ASSIGNED' && 'Acompañante Asignado (Esperando Encuentro)'}
-              {service.status === 'COMPLETED' && 'Servicio Finalizado y Liquidado'}
-              {!['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes(service.status) && `Servicio Activo (${service.status})`}
+              {service.status === 'COMPLETED' && 'Servicio Finalizado'}
+              {service.status === 'PENDING_DISPATCH' && 'En Espera de Despacho Operativo'}
+              {!['ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'PENDING_DISPATCH'].includes(service.status) && `Servicio Activo (${service.status})`}
             </h1>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowEditCompanionModal(true)}
-              className="bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-700 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition"
-            >
-              <Edit3 className="w-3.5 h-3.5" /> Asignar / Cambiar Acompañante
-            </button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            {['ADMIN', 'AUDITOR'].includes(currentUserRole) && (
+              <button
+                type="button"
+                onClick={() => setShowEditCompanionModal(true)}
+                className="flex-1 sm:flex-none bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-700 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition"
+              >
+                <Edit3 className="w-3.5 h-3.5" /> Asignar Personal
+              </button>
+            )}
 
             <button
               type="button"
               onClick={handleTriggerSOS}
               disabled={sosSent}
-              className="bg-rose-600 hover:bg-rose-500 text-white font-black px-4 py-2.5 rounded-2xl text-xs flex items-center gap-2 shadow-lg shadow-rose-600/30 transition animate-pulse"
+              className="bg-rose-600 hover:bg-rose-500 text-white font-black px-4 py-2.5 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-600/30 transition shrink-0"
             >
               <AlertTriangle className="w-4 h-4" />
               <span>{sosSent ? 'SOS ACTIVO' : 'BOTÓN SOS'}</span>
@@ -457,17 +497,21 @@ function LiveRoomContent() {
         {/* CUERPO PRINCIPAL */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          {/* COLUMNA 1: FICHA Y VALIDACIÓN DE PIN */}
+          {/* COLUMNA 1: FICHA Y DOBLE PIN */}
           <div className="space-y-6">
             
             {/* FICHA DEL ACOMPAÑANTE */}
             <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
               <div className="flex justify-between items-center border-b border-slate-800 pb-2">
                 <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400">
-                  Ficha del Acompañante Acreditado
+                  Ficha del Acompañante
                 </h3>
-                <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-                  ASIGNACIÓN CONFIRMADA
+                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                  companion?.id 
+                    ? 'text-emerald-400 bg-emerald-950/60 border-emerald-500/30' 
+                    : 'text-amber-400 bg-amber-950/60 border-amber-500/30'
+                }`}>
+                  {companion?.id ? 'ASIGNACIÓN CONFIRMADA' : 'POR ASIGNAR'}
                 </span>
               </div>
 
@@ -481,26 +525,26 @@ function LiveRoomContent() {
                   </h4>
                   <p className="text-xs text-slate-300 font-mono flex items-center gap-1.5">
                     <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Contacto / WhatsApp: </span>
+                    <span>Contacto: </span>
                     <strong className="text-emerald-400">{companion?.phone || '809-541-2000'}</strong>
                   </p>
                   <div className="flex items-center gap-2 pt-0.5">
                     <span className="bg-emerald-950 text-emerald-400 border border-emerald-500/40 text-[9px] font-mono px-2 py-0.5 rounded font-bold">
-                      ✓ ACREDITACIÓN PGR: #RD-2026-884
+                      ✓ ACREDITADO KYC
                     </span>
-                    <span className="text-[10px] text-slate-400">• Depurado y Activo</span>
+                    <span className="text-[10px] text-slate-400">• Antecedentes Cotejados</span>
                   </div>
                 </div>
               </div>
 
               <div className="border-t border-slate-800/80 pt-3 text-xs text-slate-300 space-y-1">
-                <p><strong className="text-white">Paciente:</strong> {service.recipient_name || service.client_name}</p>
-                <p><strong className="text-white">Destino:</strong> {service.facility_or_location || service.address}</p>
-                <p><strong className="text-white">Familiar:</strong> {clientProfile?.full_name || 'Contacto Registrado'} ({clientProfile?.phone || service.recipient_phone || '809-541-2000'})</p>
+                <p><strong className="text-white">Paciente:</strong> {service.recipient_name || service.client_name || 'No especificado'}</p>
+                <p><strong className="text-white">Punto de Encuentro:</strong> {service.facility_or_location || service.address || 'Distrito Nacional'}</p>
+                <p><strong className="text-white">Familiar Responsable:</strong> {clientProfile?.full_name || 'Contacto Registrado'} ({clientProfile?.phone || service.recipient_phone || '809-541-2000'})</p>
               </div>
             </div>
 
-            {/* CONTROL DE VALIDACIÓN ANTIFRAUDE */}
+            {/* CONTROL DE VALIDACIÓN ANTIFRAUDE CON DOBLE PIN */}
             <div className="bg-slate-950 border border-emerald-500/40 rounded-3xl p-6 space-y-5 shadow-2xl">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                 <span className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-1.5">
@@ -511,7 +555,7 @@ function LiveRoomContent() {
                 </span>
               </div>
 
-              {/* CLAVES VISUALES */}
+              {/* TARJETAS DE VISUALIZACIÓN DE PINS */}
               <div className="grid grid-cols-2 gap-3 text-center">
                 <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl">
                   <span className="text-[10px] font-bold text-slate-400 block uppercase">1. PIN Check-In (Llegada)</span>
@@ -525,37 +569,41 @@ function LiveRoomContent() {
                 </div>
               </div>
 
-              {/* FORMULARIO ACTIVO PARA VALIDAR PIN */}
+              {/* FORMULARIO DE VALIDACIÓN */}
               <div className="pt-2 border-t border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-200">
-                    Ingresar PIN de Validación:
+                    Ingresar PIN para Validación:
                   </label>
                   <div className="flex gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-[10px]">
                     <button
                       type="button"
-                      onClick={() => { setPinMode('CHECKIN'); setPinError(null); }}
+                      onClick={() => { setPinMode('CHECKIN'); setPinFeedback(null); }}
                       className={`px-2.5 py-1 rounded-lg font-bold transition ${
                         pinMode === 'CHECKIN' ? 'bg-emerald-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
                       }`}
                     >
-                      Check-In (Inicio)
+                      Check-In
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setPinMode('CHECKOUT'); setPinError(null); }}
+                      onClick={() => { setPinMode('CHECKOUT'); setPinFeedback(null); }}
                       className={`px-2.5 py-1 rounded-lg font-bold transition ${
                         pinMode === 'CHECKOUT' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
                       }`}
                     >
-                      Check-Out (Cierre)
+                      Check-Out
                     </button>
                   </div>
                 </div>
 
-                {pinError && (
-                  <div className="bg-rose-950/80 border border-rose-800 text-rose-300 text-xs p-2.5 rounded-xl text-center">
-                    {pinError}
+                {pinFeedback && (
+                  <div className={`text-xs p-2.5 rounded-xl text-center border ${
+                    pinFeedback.type === 'success' 
+                      ? 'bg-emerald-950/80 border-emerald-700 text-emerald-300' 
+                      : 'bg-rose-950/80 border-rose-800 text-rose-300'
+                  }`}>
+                    {pinFeedback.text}
                   </div>
                 )}
 
@@ -564,15 +612,15 @@ function LiveRoomContent() {
                     type="text"
                     maxLength={6}
                     required
-                    placeholder={`Ingresar PIN de ${pinMode === 'CHECKIN' ? 'Check-In' : 'Check-Out'}...`}
+                    placeholder="Escribir PIN..."
                     value={inputPin}
-                    onChange={(e) => setInputPin(e.target.value)}
+                    onChange={(e) => setInputPin(e.target.value.replace(/\D/g, ''))}
                     className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-center font-mono text-base text-white font-bold outline-none focus:border-emerald-500"
                   />
                   <button
                     type="submit"
-                    disabled={pinActionLoading || !inputPin.trim()}
-                    className={`px-4 py-2.5 rounded-xl text-xs font-black transition disabled:opacity-50 ${
+                    disabled={pinActionLoading || inputPin.trim().length < 4}
+                    className={`px-5 py-2.5 rounded-xl text-xs font-black transition disabled:opacity-50 shrink-0 ${
                       pinMode === 'CHECKIN' 
                         ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950' 
                         : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
@@ -588,26 +636,20 @@ function LiveRoomContent() {
                   <span className="text-emerald-400 font-bold text-xs flex items-center justify-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4" /> ¡SERVICIO FINALIZADO CON ÉXITO!
                   </span>
-                  <Link
-                    href={`/services/receipt?id=${service.id}`}
-                    className="text-xs text-white underline font-mono block mt-1"
-                  >
-                    Ver Recibo y Comprobante Fiscal
-                  </Link>
                 </div>
               )}
             </div>
 
           </div>
 
-          {/* COLUMNA 2: CHAT EN VIVO */}
+          {/* COLUMNA 2: CHAT OPERATIVO EN VIVO */}
           <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 shadow-2xl flex flex-col h-[560px]">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
               <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                 <MessageSquare className="w-4 h-4 text-emerald-400" /> Chat Operativo del Servicio
               </span>
-              <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950 px-2 py-0.5 rounded border border-emerald-500/30 font-bold">
-                EN VIVO
+              <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950 px-2 py-0.5 rounded border border-emerald-500/30 font-bold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> EN VIVO
               </span>
             </div>
 
@@ -625,8 +667,8 @@ function LiveRoomContent() {
                       <span className="text-[9px] text-slate-500 font-mono mb-0.5">{msg.sender_name}</span>
                       <div className={`p-2.5 rounded-2xl max-w-[85%] break-words ${
                         isMine 
-                          ? 'bg-emerald-500 text-slate-950 font-medium' 
-                          : 'bg-slate-900 text-slate-200 border border-slate-800'
+                          ? 'bg-emerald-500 text-slate-950 font-medium rounded-br-none' 
+                          : 'bg-slate-900 text-slate-200 border border-slate-800 rounded-bl-none'
                       }`}>
                         {msg.message}
                       </div>
@@ -634,6 +676,7 @@ function LiveRoomContent() {
                   );
                 })
               )}
+              <div ref={chatBottomRef} />
             </div>
 
             {/* FORMULARIO DE ENVÍO */}
@@ -657,7 +700,7 @@ function LiveRoomContent() {
 
         </div>
 
-        {/* MODAL PARA CAMBIAR ACOMPAÑANTE */}
+        {/* MODAL PARA ASIGNAR ACOMPAÑANTE */}
         {showEditCompanionModal && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-slate-950 border border-emerald-500/40 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
