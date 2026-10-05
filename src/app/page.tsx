@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import { Logo } from '@/components/brand/Logo';
 import { 
   HeartHandshake, 
@@ -18,15 +20,56 @@ import {
   Globe2,
   Calculator,
   KeyRound,
-  MessageSquare
+  MessageSquare,
+  Radio
 } from 'lucide-react';
 
 export default function HomePage() {
+  const router = useRouter();
+  const supabase = createClient();
+
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [activeServiceId, setActiveServiceId] = useState<string | null>(null);
+
   const [calcHours, setCalcHours] = useState(2);
   const RATE_PER_HOUR = 900;
   const calculatedTotal = calcHours * RATE_PER_HOUR;
 
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  // Comprobar automáticamente si el usuario ya está conectado y tiene cita activa
+  useEffect(() => {
+    async function checkUserSession() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      setCurrentUser(user);
+
+      // Si es la administradora, va directo a la mesa de operaciones
+      if (user.email?.toLowerCase() === 'odel_kiss@hotmail.com' || user.user_metadata?.role === 'ADMIN') {
+        router.replace('/admin/mesa-operaciones');
+        return;
+      }
+
+      // Si es un cliente, buscar si tiene un servicio activo
+      const { data: activeOrder } = await supabase
+        .from('service_requests')
+        .select('id')
+        .eq('client_id', user.id)
+        .in('status', ['PENDING', 'PENDING_DISPATCH', 'ASSIGNED', 'IN_PROGRESS'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (activeOrder) {
+        setActiveServiceId(activeOrder.id);
+        // Redirección directa e instantánea a la Sala Situacional
+        router.replace(`/services/live?id=${activeOrder.id}`);
+      }
+    }
+
+    checkUserSession();
+  }, [router, supabase]);
 
   const faqs = [
     {
@@ -68,22 +111,56 @@ export default function HomePage() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="text-xs font-bold text-slate-300 hover:text-white px-3.5 py-2 rounded-xl transition"
-            >
-              Iniciar sesión
-            </Link>
-            <Link
-              href="/services/new"
-              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-4.5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02] flex items-center gap-1.5"
-            >
-              <span>Solicitar Servicio</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            {currentUser ? (
+              <Link
+                href="/profile"
+                className="text-xs font-bold text-slate-300 hover:text-white px-3.5 py-2 rounded-xl transition"
+              >
+                Mi Perfil
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="text-xs font-bold text-slate-300 hover:text-white px-3.5 py-2 rounded-xl transition"
+              >
+                Iniciar sesión
+              </Link>
+            )}
+
+            {activeServiceId ? (
+              <Link
+                href={`/services/live?id=${activeServiceId}`}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-4.5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02] flex items-center gap-1.5"
+              >
+                <Radio className="w-3.5 h-3.5 animate-pulse" />
+                <span>Sala en Vivo</span>
+              </Link>
+            ) : (
+              <Link
+                href="/services/new"
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-4.5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02] flex items-center gap-1.5"
+              >
+                <span>Solicitar Servicio</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            )}
           </div>
         </div>
       </header>
+
+      {/* BANNER DINÁMICO SI HAY SERVICIO ACTIVO */}
+      {activeServiceId && (
+        <div className="bg-emerald-950 border-b border-emerald-500/40 p-3 text-center text-xs flex items-center justify-center gap-2 text-emerald-300">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          <span>Tienes un servicio activo en curso.</span>
+          <Link 
+            href={`/services/live?id=${activeServiceId}`} 
+            className="font-black underline text-white hover:text-emerald-200 ml-1"
+          >
+            Abrir Sala en Vivo ahora &rarr;
+          </Link>
+        </div>
+      )}
 
       {/* 2. HERO SECTION */}
       <section className="relative overflow-hidden pt-12 pb-20 sm:pt-20 sm:pb-28">
@@ -106,13 +183,24 @@ export default function HomePage() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2">
-            <Link
-              href="/services/new"
-              className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-8 py-4 rounded-2xl text-sm flex items-center justify-center gap-2.5 shadow-xl shadow-emerald-500/25 transition-all hover:scale-[1.02]"
-            >
-              <span>Solicitar Acompañante Ahora</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
+            {activeServiceId ? (
+              <Link
+                href={`/services/live?id=${activeServiceId}`}
+                className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-8 py-4 rounded-2xl text-sm flex items-center justify-center gap-2.5 shadow-xl shadow-emerald-500/25 transition-all hover:scale-[1.02]"
+              >
+                <Radio className="w-4 h-4 animate-pulse" />
+                <span>Ir a mi Sala en Vivo Activa</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            ) : (
+              <Link
+                href="/services/new"
+                className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-8 py-4 rounded-2xl text-sm flex items-center justify-center gap-2.5 shadow-xl shadow-emerald-500/25 transition-all hover:scale-[1.02]"
+              >
+                <span>Solicitar Acompañante Ahora</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            )}
 
             <Link
               href="/companion/register"
@@ -203,7 +291,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 4. CÓMO FUNCIONA (PASO A PASO) */}
+      {/* 4. CÓMO FUNCIONA */}
       <section id="como-funciona" className="py-20 bg-slate-950/70 border-y border-slate-800/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-12">
           <div className="text-center max-w-2xl mx-auto space-y-3">
@@ -304,7 +392,7 @@ export default function HomePage() {
             </div>
 
             <Link
-              href="/services/new"
+              href={`/services/new?hours=${calcHours}`}
               className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-3.5 rounded-xl text-xs flex items-center justify-center gap-2 transition"
             >
               <span>Continuar con {calcHours} Horas</span>
@@ -314,7 +402,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 6. LÍMITES Y PROTOCOLO NO CLÍNICO */}
+      {/* 6. PROTOCOLO NO CLÍNICO */}
       <section id="seguridad" className="py-20 bg-slate-950/60 border-t border-slate-800/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
@@ -389,7 +477,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 7. PREGUNTAS FRECUENTES (FAQ) */}
+      {/* 7. PREGUNTAS FRECUENTES */}
       <section id="faq" className="py-20 max-w-4xl mx-auto px-4 sm:px-6 space-y-10">
         <div className="text-center space-y-2">
           <span className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider bg-emerald-950/60 border border-emerald-500/30 px-3 py-1 rounded-full">
@@ -405,7 +493,7 @@ export default function HomePage() {
             const isOpen = openFaq === idx;
             return (
               <div 
-                key={idx}
+                key={idx} 
                 className="bg-slate-950/70 border border-slate-800 rounded-2xl overflow-hidden transition"
               >
                 <button
@@ -427,10 +515,9 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 8. FOOTER LIMPIO */}
+      {/* 8. FOOTER */}
       <footer className="border-t border-slate-800/80 bg-slate-950 py-12 text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-1 md:grid-cols-4 gap-8">
-          
           <div className="space-y-3">
             <Logo size="sm" variant="dark" href="/" />
             <p className="text-[11px] text-slate-500 leading-relaxed">
@@ -471,7 +558,6 @@ export default function HomePage() {
               </span>
             </div>
           </div>
-
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 mt-8 border-t border-slate-900 flex flex-col sm:flex-row justify-between items-center gap-3 text-[11px] text-slate-500">
