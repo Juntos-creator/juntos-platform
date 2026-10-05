@@ -17,7 +17,7 @@ export default async function InvoicePrint({ params }: { params: { id: string } 
       <div className="max-w-2xl mx-auto bg-white rounded-lg shadow print:shadow-none print:rounded-none p-8">
         {/* Encabezado con logo oficial */}
         <div className="flex items-center justify-between border-b-2 border-juntos-blue pb-4">
-          <Logo size={56} />
+          <Logo size="lg" />
           <div className="text-right text-sm">
             <p className="font-bold text-juntos-blue">COMPROBANTE FISCAL</p>
             <p className="text-muted-foreground">{inv.ncf_type === 'B01' ? 'Credito Fiscal (B01)' : 'Consumidor Final (B02)'}</p>
