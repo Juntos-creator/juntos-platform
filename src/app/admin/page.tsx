@@ -36,12 +36,22 @@ export default function AdminDashboardPage() {
 
   const [ultimosServicios, setUltimosServicios] = useState<any[]>([]);
   const [adminUser, setAdminUser] = useState<any>(null);
+  const [adminProfile, setAdminProfile] = useState<any>(null);
 
   useEffect(() => {
     async function cargarMetricas() {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       setAdminUser(user);
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, role')
+          .eq('id', user.id)
+          .maybeSingle();
+        setAdminProfile(profile);
+      }
 
       // 1. Cargar servicios
       const { data: servicios } = await supabase
@@ -57,12 +67,12 @@ export default function AdminDashboardPage() {
       // 3. Cargar expedientes RRHH
       const { data: expedientes } = await supabase
         .from('companion_applications')
-        .select('id, estado');
+        .select('id, estado, estado_depuracion');
 
       if (servicios) {
         const hoyStr = new Date().toISOString().split('T')[0];
         const hoy = servicios.filter(s => s.created_at?.startsWith(hoyStr)).length;
-        const curso = servicios.filter(s => ['IN_PROGRESS', 'EN_CURSO', 'PENDING', 'PENDIENTE_PAGO'].includes((s.status || '').toUpperCase())).length;
+        const curso = servicios.filter(s => ['IN_PROGRESS', 'EN_CURSO', 'PENDING', 'PENDING_DISPATCH', 'PENDIENTE_PAGO'].includes((s.status || '').toUpperCase())).length;
         const sos = servicios.filter(s => s.emergency_status === 'SOS_ACTIVE').length;
 
         setUltimosServicios(servicios.slice(0, 5));
@@ -71,7 +81,11 @@ export default function AdminDashboardPage() {
           .filter(p => p.status === 'COMPLETED' || p.status === 'PAID')
           .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
 
-        const rrhhPendientes = (expedientes || []).filter(e => e.estado === 'PENDIENTE_REVISION' || !e.estado).length;
+        const rrhhPendientes = (expedientes || []).filter(e => 
+          e.estado === 'PENDIENTE_REVISION' || 
+          e.estado_depuracion === 'PENDIENTE_MESA_RRHH' ||
+          !e.estado
+        ).length;
 
         setMetricas({
           solicitudesHoy: hoy || servicios.length,
@@ -79,7 +93,7 @@ export default function AdminDashboardPage() {
           facturadoTotal: facturado,
           sosActivos: sos,
           postulacionesPendientes: rrhhPendientes,
-          institucionesActivas: 24,
+          institucionesActivas: 0,
         });
       }
 
@@ -89,10 +103,14 @@ export default function AdminDashboardPage() {
     cargarMetricas();
   }, [supabase]);
 
+  const inicialesAdmin = adminProfile?.full_name
+    ? adminProfile.full_name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
+    : adminUser?.email ? adminUser.email.slice(0, 2).toUpperCase() : 'AD';
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       
-      {/* SUBNAV ADMIN CON TODAS LAS PESTAÑAS */}
+      {/* SUBNAV ADMIN */}
       <div className="bg-white border-b border-slate-200 px-6 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between overflow-x-auto gap-3">
           <div className="flex items-center gap-2">
@@ -103,14 +121,13 @@ export default function AdminDashboardPage() {
               <span>Dashboard</span>
             </Link>
 
-            {/* BOTÓN DESTACADO A LA MESA DE OPERACIONES */}
             <Link 
               href="/admin/mesa-operaciones" 
               className="bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 font-bold text-xs px-4 py-2 rounded-xl transition flex items-center gap-2"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <Radio className="w-3.5 h-3.5" />
-              <span>Mesa Operaciones 24/7</span>
+              <span>Mesa Operaciones</span>
               {metricas.sosActivos > 0 && (
                 <span className="bg-rose-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black">
                   {metricas.sosActivos} SOS
@@ -141,7 +158,7 @@ export default function AdminDashboardPage() {
 
           <div className="flex items-center gap-2 text-xs">
             <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> OPERATIVO 24/7
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Mesa Operativa RD
             </span>
           </div>
         </div>
@@ -152,7 +169,7 @@ export default function AdminDashboardPage() {
         {/* TARJETAS DE MÉTRICAS EJECUTIVAS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           
-          {/* Tarjeta 1: Solicitudes Hoy */}
+          {/* Tarjeta 1: Solicitudes Totales */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <div>
@@ -164,7 +181,7 @@ export default function AdminDashboardPage() {
               </div>
             </div>
             <p className="text-xs text-emerald-600 font-bold mt-4 flex items-center gap-1">
-              <TrendingUp className="w-3.5 h-3.5" /> Flujo activo en plataforma
+              <TrendingUp className="w-3.5 h-3.5" /> Registros en plataforma
             </p>
           </div>
 
@@ -193,7 +210,7 @@ export default function AdminDashboardPage() {
               <div>
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Facturado</p>
                 <h3 className="text-3xl font-black text-slate-900 mt-1">
-                  RD$ {metricas.facturadoTotal > 0 ? (metricas.facturadoTotal / 1000).toFixed(1) + 'k' : '248k'}
+                  RD$ {metricas.facturadoTotal > 0 ? (metricas.facturadoTotal / 1000).toFixed(1) + 'k' : '0.0k'}
                 </h3>
               </div>
               <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
@@ -216,7 +233,9 @@ export default function AdminDashboardPage() {
             </div>
             <Link 
               href="/admin/mesa-operaciones" 
-              onClick={() => localStorage.setItem('mesa_tab', 'EXPEDIENTES')}
+              onClick={() => {
+                if (typeof window !== 'undefined') localStorage.setItem('mesa_tab', 'EXPEDIENTES');
+              }}
               className="text-xs text-purple-600 font-bold mt-4 flex items-center gap-1 hover:underline"
             >
               Revisar expedientes KYC <ArrowUpRight className="w-3.5 h-3.5" />
@@ -250,16 +269,21 @@ export default function AdminDashboardPage() {
                 ultimosServicios.map((srv) => (
                   <div key={srv.id} className="py-3 flex items-center justify-between text-xs">
                     <div>
-                      <p className="font-bold text-slate-900">{srv.for_who_name || srv.client_name || 'Solicitud sin nombre'}</p>
-                      <p className="text-[11px] text-slate-500">📍 {srv.center_name || srv.address || 'Ubicación coordinada'}</p>
+                      <p className="font-bold text-slate-900">
+                        {srv.recipient_name || srv.for_who_name || srv.client_name || 'Solicitud sin nombre'}
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        📍 {srv.facility_or_location || srv.center_name || srv.address || 'Ubicación coordinada'}
+                      </p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="font-mono text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
-                        {srv.status || 'PENDIENTE'}
+                      <span className="font-mono text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
+                        {srv.status || 'PENDING_DISPATCH'}
                       </span>
                       <button 
+                        type="button"
                         onClick={() => router.push('/admin/mesa-operaciones')}
-                        className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-1.5 rounded-lg text-[11px] transition"
+                        className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-1.5 rounded-lg text-[11px] transition cursor-pointer"
                       >
                         Gestionar
                       </button>
@@ -274,12 +298,14 @@ export default function AdminDashboardPage() {
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
             <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
               <div className="w-12 h-12 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-sm">
-                DR
+                {inicialesAdmin}
               </div>
               <div>
-                <h4 className="font-bold text-slate-900 text-sm">Dra. Rosa M.</h4>
+                <h4 className="font-bold text-slate-900 text-sm">
+                  {adminProfile?.full_name || 'Administrador Mesa'}
+                </h4>
                 <p className="text-[11px] text-emerald-600 font-semibold">Administrador Maestro • JUNTOS</p>
-                <p className="text-[10px] text-slate-400">{adminUser?.email || 'admin@juntos.do'}</p>
+                <p className="text-[10px] text-slate-400 font-mono">{adminUser?.email || 'Mesa Operativa'}</p>
               </div>
             </div>
 
@@ -297,7 +323,7 @@ export default function AdminDashboardPage() {
                 href="/admin/institutions" 
                 className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold p-2.5 rounded-xl flex items-center justify-between transition"
               >
-                <span>Ver embudo comercial B2B</span>
+                <span>Ver embudo institucional B2B</span>
                 <span>→</span>
               </Link>
 
@@ -312,11 +338,12 @@ export default function AdminDashboardPage() {
 
             <div className="pt-2 border-t border-slate-100">
               <button 
+                type="button"
                 onClick={async () => {
                   await supabase.auth.signOut();
                   router.push('/login');
                 }}
-                className="w-full text-center text-rose-600 font-bold text-xs py-2 hover:bg-rose-50 rounded-xl transition"
+                className="w-full text-center text-rose-600 font-bold text-xs py-2 hover:bg-rose-50 rounded-xl transition cursor-pointer"
               >
                 Cerrar Sesión Segura
               </button>
