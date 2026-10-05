@@ -31,14 +31,34 @@ export default function CompanionRegisterPage() {
   const [cedula, setCedula] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [confirmEmail, setConfirmEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [city, setCity] = useState('Santo Domingo / Distrito Nacional');
   const [experience, setExperience] = useState('EXPERIENCIA_BASICA');
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setErrorMsg(null);
+
+    // Validación de coincidencia de correo electrónico
+    if (email.trim().toLowerCase() !== confirmEmail.trim().toLowerCase()) {
+      setErrorMsg('Los correos electrónicos ingresados no coinciden.');
+      return;
+    }
+
+    // Validación de coincidencia de contraseña
+    if (password !== confirmPassword) {
+      setErrorMsg('Las contraseñas ingresadas no coinciden.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrorMsg('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+
+    setLoading(true);
 
     try {
       // 1. Registro en Supabase Auth con metadatos de acompañante
@@ -212,36 +232,71 @@ export default function CompanionRegisterPage() {
               </div>
             </div>
 
-            {/* Correo */}
-            <div>
-              <label className="font-bold text-slate-300 block mb-1">Correo electrónico *</label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                <input
-                  type="email"
-                  required
-                  placeholder="ejemplo@correo.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500 font-mono"
-                />
+            {/* Correo y Confirmación de Correo */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="font-bold text-slate-300 block mb-1">Correo electrónico *</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="ejemplo@correo.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-300 block mb-1">Confirmar correo electrónico *</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="Repite tu correo"
+                    value={confirmEmail}
+                    onChange={(e) => setConfirmEmail(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Contraseña */}
-            <div>
-              <label className="font-bold text-slate-300 block mb-1">Contraseña de acceso *</label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  placeholder="Mínimo 6 caracteres"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500 font-mono"
-                />
+            {/* Contraseña y Confirmación de Contraseña */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="font-bold text-slate-300 block mb-1">Contraseña de acceso *</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    placeholder="Mínimo 6 caracteres"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-300 block mb-1">Confirmar contraseña de acceso *</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    placeholder="Repite tu contraseña"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
               </div>
             </div>
 
