@@ -6,15 +6,12 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { 
   Radio, 
-  Users, 
   CreditCard, 
   Receipt, 
   ShieldCheck, 
   FileText, 
-  AlertOctagon, 
   TrendingUp, 
   Building2, 
-  CheckCircle2, 
   Clock, 
   ArrowUpRight,
   UserCheck
@@ -72,7 +69,7 @@ export default function AdminDashboardPage() {
       if (servicios) {
         const hoyStr = new Date().toISOString().split('T')[0];
         const hoy = servicios.filter(s => s.created_at?.startsWith(hoyStr)).length;
-        const curso = servicios.filter(s => ['IN_PROGRESS', 'EN_CURSO', 'PENDING', 'PENDING_DISPATCH', 'PENDIENTE_PAGO'].includes((s.status || '').toUpperCase())).length;
+        const curso = servicios.filter(s => ['IN_PROGRESS', 'EN_CURSO', 'PENDING', 'PENDING_DISPATCH', 'ASSIGNED'].includes((s.status || '').toUpperCase())).length;
         const sos = servicios.filter(s => s.emergency_status === 'SOS_ACTIVE').length;
 
         setUltimosServicios(servicios.slice(0, 5));
@@ -108,7 +105,7 @@ export default function AdminDashboardPage() {
     : adminUser?.email ? adminUser.email.slice(0, 2).toUpperCase() : 'AD';
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
+    <div className="min-h-screen bg-slate-50 text-slate-900 pb-20 font-sans">
       
       {/* SUBNAV ADMIN */}
       <div className="bg-white border-b border-slate-200 px-6 py-3">
@@ -122,12 +119,12 @@ export default function AdminDashboardPage() {
             </Link>
 
             <Link 
-              href="/admin/mesa-operaciones" 
+              href="/admin/operations" 
               className="bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 font-bold text-xs px-4 py-2 rounded-xl transition flex items-center gap-2"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <Radio className="w-3.5 h-3.5" />
-              <span>Mesa Operaciones</span>
+              <span>Operaciones Central</span>
               {metricas.sosActivos > 0 && (
                 <span className="bg-rose-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black">
                   {metricas.sosActivos} SOS
@@ -158,7 +155,7 @@ export default function AdminDashboardPage() {
 
           <div className="flex items-center gap-2 text-xs">
             <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Mesa Operativa RD
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Operaciones RD
             </span>
           </div>
         </div>
@@ -169,7 +166,7 @@ export default function AdminDashboardPage() {
         {/* TARJETAS DE MÉTRICAS EJECUTIVAS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           
-          {/* Tarjeta 1: Solicitudes Totales */}
+          {/* Solicitudes Totales */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <div>
@@ -185,7 +182,7 @@ export default function AdminDashboardPage() {
             </p>
           </div>
 
-          {/* Tarjeta 2: En curso */}
+          {/* En curso */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <div>
@@ -197,14 +194,14 @@ export default function AdminDashboardPage() {
               </div>
             </div>
             <Link 
-              href="/admin/mesa-operaciones" 
+              href="/admin/operations" 
               className="text-xs text-blue-600 font-bold mt-4 flex items-center gap-1 hover:underline"
             >
-              Ir a Mesa de Operaciones <ArrowUpRight className="w-3.5 h-3.5" />
+              Ir a Operaciones Central <ArrowUpRight className="w-3.5 h-3.5" />
             </Link>
           </div>
 
-          {/* Tarjeta 3: Facturado */}
+          {/* Facturado */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <div>
@@ -220,7 +217,7 @@ export default function AdminDashboardPage() {
             <p className="text-xs text-slate-500 font-medium mt-4">Transacciones en línea DOP</p>
           </div>
 
-          {/* Tarjeta 4: Postulaciones RRHH */}
+          {/* Postulaciones RRHH */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <div>
@@ -232,10 +229,7 @@ export default function AdminDashboardPage() {
               </div>
             </div>
             <Link 
-              href="/admin/mesa-operaciones" 
-              onClick={() => {
-                if (typeof window !== 'undefined') localStorage.setItem('mesa_tab', 'EXPEDIENTES');
-              }}
+              href="/admin/operations" 
               className="text-xs text-purple-600 font-bold mt-4 flex items-center gap-1 hover:underline"
             >
               Revisar expedientes KYC <ArrowUpRight className="w-3.5 h-3.5" />
@@ -244,10 +238,9 @@ export default function AdminDashboardPage() {
 
         </div>
 
-        {/* ACCESOS DIRECTOS Y PERFIL DEL ADMINISTRADOR */}
+        {/* BANDEJA Y PERFIL */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* BANDEJA DE CONTROL OPERATIVO */}
           <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
             <div className="flex justify-between items-center mb-4">
               <div>
@@ -255,7 +248,7 @@ export default function AdminDashboardPage() {
                 <p className="text-xs text-slate-500">Monitoreo de citas y estados en tiempo real</p>
               </div>
               <Link 
-                href="/admin/mesa-operaciones" 
+                href="/admin/operations" 
                 className="text-xs font-bold text-blue-600 hover:text-blue-800"
               >
                 Ver consola completa →
@@ -282,7 +275,7 @@ export default function AdminDashboardPage() {
                       </span>
                       <button 
                         type="button"
-                        onClick={() => router.push('/admin/mesa-operaciones')}
+                        onClick={() => router.push('/admin/operations')}
                         className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-1.5 rounded-lg text-[11px] transition cursor-pointer"
                       >
                         Gestionar
@@ -302,7 +295,7 @@ export default function AdminDashboardPage() {
               </div>
               <div>
                 <h4 className="font-bold text-slate-900 text-sm">
-                  {adminProfile?.full_name || 'Administrador Mesa'}
+                  {adminProfile?.full_name || 'Administrador Central'}
                 </h4>
                 <p className="text-[11px] text-emerald-600 font-semibold">Administrador Maestro • JUNTOS</p>
                 <p className="text-[10px] text-slate-400 font-mono">{adminUser?.email || 'Mesa Operativa'}</p>
