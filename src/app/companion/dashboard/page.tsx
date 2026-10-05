@@ -14,13 +14,12 @@ import {
   AlertTriangle, 
   CheckCircle2, 
   Clock, 
-  Calendar,
-  MessageCircle,
-  RefreshCw,
-  FileText,
-  UserCheck,
-  ChevronRight,
-  LogOut
+  MessageCircle, 
+  RefreshCw, 
+  LogOut, 
+  ArrowRight,
+  HandMetal,
+  Check
 } from 'lucide-react';
 
 export default function CompanionDashboardPage() {
@@ -28,10 +27,15 @@ export default function CompanionDashboardPage() {
   const supabase = createClient();
 
   const [loading, setLoading] = useState(true);
-  const [companionUser, setCompanionUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
-  const [assignedOrders, setAssignedOrders] = useState<any[]>([]);
+
+  // Servicios
   const [activeOrder, setActiveOrder] = useState<any | null>(null);
+  const [availableOrders, setAvailableOrders] = useState<any[]>([]);
+  const [pastOrders, setPastOrders] = useState<any[]>([]);
+
+  // Acciones
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
@@ -46,9 +50,8 @@ export default function CompanionDashboardPage() {
         return;
       }
 
-      setCompanionUser(user);
+      setCurrentUser(user);
 
-      // Cargar perfil
       const { data: prof } = await supabase
         .from('profiles')
         .select('*')
@@ -57,30 +60,85 @@ export default function CompanionDashboardPage() {
 
       setProfile(prof);
 
-      // Cargar servicios asignados en vivo
-      await fetchCompanionServices(user.id);
+      await fetchAllServices(user.id);
       setLoading(false);
     }
 
     initDashboard();
-  }, [router, supabase]);
 
-  async function fetchCompanionServices(userId: string) {
-    const { data: orders, error } = await supabase
+    // Suscripción en tiempo real: Detectar cuando crees una orden desde el celular
+    const channel = supabase
+      .channel('companion-dashboard-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'service_requests' },
+        () => {
+          if (currentUser) {
+            fetchAllServices(currentUser.id);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [router, supabase, currentUser?.id]);
+
+  async function fetchAllServices(userId: string) {
+    const { data: allRequests, error } = await supabase
       .from('service_requests')
       .select('*')
-      .eq('companion_id', userId)
       .order('created_at', { ascending: false });
 
-    if (!error && orders) {
-      setAssignedOrders(orders);
-      // La orden activa es la que está en progreso o asignada pendiente de inicio
-      const active = orders.find(o => ['ASSIGNED', 'IN_PROGRESS', 'EN_CAMINO'].includes(o.status));
-      setActiveOrder(active || null);
+    if (!error && allRequests) {
+      // 1. Servicio activo asignado específicamente a este acompañante
+      const myAssignedActive = allRequests.find(o => 
+        (o.companion_id === userId) && 
+        ['ASSIGNED', 'IN_PROGRESS', 'EN_CAMINO'].includes(o.status)
+      );
+      setActiveOrder(myAssignedActive || null);
+
+      // 2. Solicitudes disponibles para tomar (pendientes de asignación)
+      const openForDispatch = allRequests.filter(o => 
+        ['PENDING', 'PENDING_DISPATCH', 'SOLICITADO'].includes(o.status) &&
+        (!o.companion_id || o.companion_id === userId)
+      );
+      setAvailableOrders(openForDispatch);
+
+      // 3. Historial completado
+      const completed = allRequests.filter(o => 
+        (o.companion_id === userId) && 
+        ['COMPLETED', 'FINALIZADO'].includes(o.status)
+      );
+      setPastOrders(completed);
     }
   }
 
-  // Validar PIN de encuentro o de salida
+  // Tomar un pedido que llegó del celular
+  async function handleTomarServicio(orderId: string) {
+    if (!currentUser) return;
+    setActionLoading(true);
+
+    const { error } = await supabase
+      .from('service_requests')
+      .update({
+        companion_id: currentUser.id,
+        companion_name: profile?.full_name || currentUser.email,
+        companion_phone: profile?.phone || '8095550192',
+        status: 'ASSIGNED'
+      })
+      .eq('id', orderId);
+
+    if (!error) {
+      await fetchAllServices(currentUser.id);
+    } else {
+      alert('Error al tomar el servicio: ' + error.message);
+    }
+    setActionLoading(false);
+  }
+
+  // Validar PIN presencial
   async function handleValidarPIN(tipo: 'INICIO' | 'FINAL') {
     if (!activeOrder || !pinInput.trim()) return;
     setPinError(null);
@@ -91,12 +149,11 @@ export default function CompanionDashboardPage() {
       : (activeOrder.pin_end || activeOrder.checkout_pin);
 
     if (pinInput.trim() !== String(pinEsperado).trim()) {
-      setPinError(`El PIN de ${tipo === 'INICIO' ? 'encuentro' : 'salida'} no coincide. Solicítalo al solicitante.`);
+      setPinError(`PIN de ${tipo === 'INICIO' ? 'encuentro' : 'salida'} incorrecto. Pídeselo al paciente.`);
       setActionLoading(false);
       return;
     }
 
-    // Actualizar estado en Supabase
     const nuevoEstado = tipo === 'INICIO' ? 'IN_PROGRESS' : 'COMPLETED';
     const { error } = await supabase
       .from('service_requests')
@@ -108,19 +165,17 @@ export default function CompanionDashboardPage() {
 
     if (!error) {
       setPinInput('');
-      if (companionUser) await fetchCompanionServices(companionUser.id);
+      if (currentUser) await fetchAllServices(currentUser.id);
     } else {
-      setPinError('Error al sincronizar con la central: ' + error.message);
+      setPinError('Error de sincronización: ' + error.message);
     }
     setActionLoading(false);
   }
 
-  // Botón SOS de contingencia
+  // Protocolo SOS
   async function handleActivarSOS() {
     if (!activeOrder) return;
-    if (!confirm('🚨 ¿DESEAS ACTIVAR EL PROTOCOLO SOS? Se emitirá una alarma prioritaria a la Mesa de Operaciones Central.')) {
-      return;
-    }
+    if (!confirm('🚨 ¿DESEAS ACTIVAR EL PROTOCOLO SOS? Esto alertará de urgencia a la Central.')) return;
 
     setActionLoading(true);
     await supabase
@@ -128,7 +183,7 @@ export default function CompanionDashboardPage() {
       .update({ emergency_status: 'SOS_ACTIVE' })
       .eq('id', activeOrder.id);
 
-    if (companionUser) await fetchCompanionServices(companionUser.id);
+    if (currentUser) await fetchAllServices(currentUser.id);
     setActionLoading(false);
   }
 
@@ -137,7 +192,7 @@ export default function CompanionDashboardPage() {
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3 font-sans">
         <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin" />
         <p className="text-xs font-mono tracking-widest uppercase">
-          Cargando Sala de Operaciones del Acompañante...
+          Sincronizando consola de despacho en vivo...
         </p>
       </div>
     );
@@ -147,7 +202,7 @@ export default function CompanionDashboardPage() {
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-20 selection:bg-emerald-500 selection:text-white">
       <Navbar />
 
-      {/* HEADER OPERATIVO */}
+      {/* HEADER */}
       <header className="bg-slate-900/80 border-b border-slate-800 px-4 sm:px-6 py-5 sticky top-0 z-30 backdrop-blur">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="flex items-center gap-3">
@@ -163,15 +218,15 @@ export default function CompanionDashboardPage() {
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Acompañante: <strong className="text-white">{profile?.full_name || companionUser?.email}</strong>
+                Acompañante: <strong className="text-white">{profile?.full_name || currentUser?.email}</strong>
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => companionUser && fetchCompanionServices(companionUser.id)}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition"
+              onClick={() => currentUser && fetchAllServices(currentUser.id)}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Sincronizar</span>
@@ -181,7 +236,7 @@ export default function CompanionDashboardPage() {
                 await supabase.auth.signOut();
                 router.replace('/login');
               }}
-              className="bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 text-slate-400 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition"
+              className="bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 text-slate-400 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span>Salir</span>
@@ -192,7 +247,7 @@ export default function CompanionDashboardPage() {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
 
-        {/* ORDEN ACTIVA EN CURSO */}
+        {/* 1. SERVICIO ACTIVO ASIGNADO */}
         {activeOrder ? (
           <div className={`rounded-3xl border p-6 space-y-6 shadow-2xl transition ${
             activeOrder.emergency_status === 'SOS_ACTIVE'
@@ -200,7 +255,6 @@ export default function CompanionDashboardPage() {
               : 'bg-slate-900/90 border-emerald-500/40'
           }`}>
             
-            {/* ESTADO SUPERIOR */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-4">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
@@ -222,14 +276,13 @@ export default function CompanionDashboardPage() {
               </button>
             </div>
 
-            {/* DETALLES DEL PACIENTE Y DESTINO */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
                 <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">
                   Información del Solicitante / Paciente
                 </span>
                 <h3 className="text-lg font-black text-white">
-                  {activeOrder.recipient_name || activeOrder.client_name || activeOrder.for_who_name || 'Paciente Asignado'}
+                  {activeOrder.recipient_name || activeOrder.client_name || activeOrder.for_who_name || 'Paciente'}
                 </h3>
                 <div className="flex items-center gap-3 pt-1">
                   <a
@@ -267,7 +320,7 @@ export default function CompanionDashboardPage() {
               </div>
             </div>
 
-            {/* CONTROL DE PINS ANTIFRAUDE */}
+            {/* VALIDACIÓN DE PIN */}
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <KeyRound className="w-4 h-4 text-emerald-400" />
@@ -286,13 +339,13 @@ export default function CompanionDashboardPage() {
               {activeOrder.status === 'ASSIGNED' ? (
                 <div className="space-y-3">
                   <p className="text-xs text-slate-400">
-                    Al encontrarte con el solicitante, solicítale el <strong>PIN de Encuentro</strong> para iniciar formalmente el servicio:
+                    Pídele al paciente su <strong>PIN de Encuentro</strong> para comenzar la jornada:
                   </p>
                   <div className="flex gap-2 max-w-sm">
                     <input
                       type="text"
                       maxLength={6}
-                      placeholder="Ingresa PIN de inicio (4-6 dígitos)"
+                      placeholder="PIN de inicio (4 dígitos)"
                       value={pinInput}
                       onChange={(e) => setPinInput(e.target.value)}
                       className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-center text-base font-mono font-bold text-white outline-none focus:border-emerald-500"
@@ -313,13 +366,13 @@ export default function CompanionDashboardPage() {
                     <span>Servicio en progreso presencial</span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Al finalizar el acompañamiento, solicita el <strong>PIN de Salida</strong> al paciente para cerrar la orden y acreditar tu cobro:
+                    Pídele el <strong>PIN de Salida</strong> para finalizar la orden:
                   </p>
                   <div className="flex gap-2 max-w-sm">
                     <input
                       type="text"
                       maxLength={6}
-                      placeholder="Ingresa PIN de salida (4-6 dígitos)"
+                      placeholder="PIN de salida (4 dígitos)"
                       value={pinInput}
                       onChange={(e) => setPinInput(e.target.value)}
                       className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-center text-base font-mono font-bold text-white outline-none focus:border-emerald-500"
@@ -337,57 +390,88 @@ export default function CompanionDashboardPage() {
             </div>
 
           </div>
-        ) : (
-          <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-8 text-center space-y-3 shadow-xl">
-            <Radio className="w-10 h-10 text-emerald-400 mx-auto animate-pulse" />
-            <h3 className="text-base font-bold text-white">Sin asignaciones activas en este momento</h3>
-            <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Tu estado está en línea. La Mesa de Operaciones Central te notificará vía WhatsApp tan pronto un servicio sea despachado en tu zona de cobertura.
-            </p>
-          </div>
-        )}
+        ) : null}
 
-        {/* HISTORIAL DE SERVICIOS */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 space-y-4">
+        {/* 2. SOLICITUDES DISPONIBLES EN TIEMPO REAL (CREADAS DESDE EL CELULAR) */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-            <h3 className="text-sm font-black text-white uppercase tracking-wider">Historial de Turnos y Asistencias</h3>
-            <span className="text-xs text-slate-500 font-mono">Total: {assignedOrders.length}</span>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <h3 className="text-sm font-black text-white uppercase tracking-wider">
+                Solicitudes Nuevas en Espera ({availableOrders.length})
+              </h3>
+            </div>
+            <span className="text-[11px] font-mono text-emerald-400 font-bold">Despacho Inmediato RD</span>
           </div>
 
           <div className="divide-y divide-slate-800/80">
-            {assignedOrders.length === 0 ? (
-              <p className="text-xs text-slate-500 py-6 text-center">No registras turnos pasados.</p>
+            {availableOrders.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 text-xs space-y-1">
+                <Radio className="w-7 h-7 text-slate-700 mx-auto mb-1 animate-pulse" />
+                <p>No hay solicitudes pendientes de asignación en este momento.</p>
+                <p className="text-[11px] text-slate-600">Cuando registres una orden en el celular, se mostrará aquí automáticamente.</p>
+              </div>
             ) : (
-              assignedOrders.map((ord) => (
-                <div key={ord.id} className="py-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
-                  <div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="font-mono text-[10px] text-slate-400 font-bold">
+              availableOrders.map((ord) => (
+                <div key={ord.id} className="py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="space-y-1 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-slate-400 font-bold">
                         #{ord.id.slice(0, 8).toUpperCase()}
                       </span>
-                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                        ord.status === 'COMPLETED' ? 'bg-slate-800 text-slate-300' :
-                        ord.status === 'IN_PROGRESS' ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40' :
-                        'bg-blue-950 text-blue-400 border border-blue-500/40'
-                      }`}>
+                      <span className="bg-amber-950 border border-amber-500/40 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
                         {ord.status}
                       </span>
+                      <span className="text-slate-500 text-[11px]">
+                        {new Date(ord.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     </div>
-                    <p className="font-bold text-white">
-                      {ord.recipient_name || ord.client_name || 'Paciente'}
+
+                    <p className="text-sm font-bold text-white">
+                      {ord.recipient_name || ord.client_name || ord.for_who_name || 'Paciente'}
                     </p>
-                    <p className="text-[11px] text-slate-400">
-                      📍 {ord.facility_or_location || ord.address || 'Ubicación coordinada'}
+
+                    <p className="text-slate-400 flex items-center gap-1 text-[11px]">
+                      <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                      {ord.facility_or_location || ord.address || ord.pickup_address || 'Santo Domingo'}
                     </p>
                   </div>
 
+                  <button
+                    onClick={() => handleTomarServicio(ord.id)}
+                    disabled={actionLoading}
+                    className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Aceptar y Tomar Servicio</span>
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* 3. HISTORIAL DE SERVICIOS */}
+        <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <h3 className="text-sm font-black text-white uppercase tracking-wider">Historial de Turnos Completados</h3>
+            <span className="text-xs text-slate-500 font-mono">Total: {pastOrders.length}</span>
+          </div>
+
+          <div className="divide-y divide-slate-800/80">
+            {pastOrders.length === 0 ? (
+              <p className="text-xs text-slate-500 py-6 text-center">No registras turnos completados aún.</p>
+            ) : (
+              pastOrders.map((ord) => (
+                <div key={ord.id} className="py-3 flex justify-between items-center text-xs">
+                  <div>
+                    <span className="font-mono text-[10px] text-slate-500">#{ord.id.slice(0, 8).toUpperCase()}</span>
+                    <p className="font-bold text-white">{ord.recipient_name || ord.client_name || 'Paciente'}</p>
+                    <p className="text-[11px] text-slate-400">📍 {ord.facility_or_location || ord.address}</p>
+                  </div>
                   <div className="text-right">
-                    <span className="text-[11px] font-mono text-slate-500 block">
-                      {new Date(ord.created_at).toLocaleDateString()}
-                    </span>
-                    <span className="font-mono text-xs font-bold text-emerald-400">
-                      RD$ {Number(ord.rate_total || 1800).toLocaleString()}
-                    </span>
+                    <span className="text-emerald-400 font-mono font-bold">RD$ {Number(ord.rate_total || 1800).toLocaleString()}</span>
+                    <span className="text-[10px] text-slate-500 block">Completado</span>
                   </div>
                 </div>
               ))
