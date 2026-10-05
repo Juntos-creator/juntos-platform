@@ -153,7 +153,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 3. MÉTRICAS CLAVE (ACTUALIZADAS: SIN 0 OCULTOS NI 24/7) */}
+      {/* 3. MÉTRICAS CLAVE */}
       <section className="border-y border-slate-800/80 bg-slate-950/60 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
@@ -532,7 +532,14 @@ export default function HomePage() {
               Mesa Operativa: Santo Domingo Este, RD
             </p>
             <p className="text-[11px] text-slate-400">
-              WhatsApp: +1 (829) 781-8886
+              <a 
+                href="https://wa.me/18094268978" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="hover:text-emerald-400 transition"
+              >
+                WhatsApp: +1 (809) 426-8978
+              </a>
             </p>
           </div>
 
