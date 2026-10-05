@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Logo } from '@/components/brand/Logo';
 import RegistroAcompanante from './RegistroAcompanante';
@@ -21,21 +21,10 @@ type RegisterCategory = 'CLIENT' | 'COMPANION';
 
 function RegisterForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const supabase = createClient();
 
-  // Iniciar por defecto SIEMPRE en CLIENT
+  // Iniciar siempre estrictamente en Solicitante (CLIENT)
   const [category, setCategory] = useState<RegisterCategory>('CLIENT');
-
-  // Leer parámetros de la URL de forma segura
-  useEffect(() => {
-    const roleParam = searchParams.get('role');
-    if (roleParam === 'companion') {
-      setCategory('COMPANION');
-    } else {
-      setCategory('CLIENT');
-    }
-  }, [searchParams]);
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -130,7 +119,6 @@ function RegisterForm() {
           onClick={() => { 
             setCategory('CLIENT'); 
             setErrorMsg(null);
-            router.replace('/register');
           }}
           className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             category === 'CLIENT'
@@ -147,7 +135,6 @@ function RegisterForm() {
           onClick={() => { 
             setCategory('COMPANION'); 
             setErrorMsg(null);
-            router.replace('/register?role=companion');
           }}
           className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             category === 'COMPANION'
@@ -160,7 +147,7 @@ function RegisterForm() {
         </button>
       </div>
 
-      {/* CONTENEDOR SEGÚN LA PESTAÑA SELECCIONADA */}
+      {/* CONTENEDOR SEGÚN LA PESTAÑA */}
       <div className="bg-slate-950/80 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
         {category === 'COMPANION' ? (
           <RegistroAcompanante />
