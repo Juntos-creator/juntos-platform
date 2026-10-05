@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Navbar } from '@/components/navbar';
 import { 
@@ -21,7 +22,9 @@ import {
   Activity,
   Navigation,
   ExternalLink,
-  LocateFixed
+  LocateFixed,
+  AlertCircle,
+  FileText
 } from 'lucide-react';
 
 function ServiceBookingWizard() {
@@ -35,8 +38,9 @@ function ServiceBookingWizard() {
   const [locating, setLocating] = useState(false);
   const [user, setUser] = useState<any>(null);
 
-  // Beneficio de descuento
+  // Beneficio de descuento y consentimiento Ley 172-13
   const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [acceptedTerms, setAcceptedTerms] = useState<boolean>(true);
 
   // Form Data State
   const [formData, setFormData] = useState({
@@ -82,41 +86,50 @@ function ServiceBookingWizard() {
   });
 
   useEffect(() => {
+    let isMounted = true;
+
     async function checkAuth() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          router.replace('/login?redirect=/services/new');
-          return;
+        if (isMounted && user) {
+          setUser(user);
+
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role, full_name, phone')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          const hasUrlDiscount = searchParams.get('discount') === '5';
+          if (profile?.role === 'COMPANION' || hasUrlDiscount) {
+            setDiscountPercent(5);
+          }
+
+          setFormData(prev => ({
+            ...prev,
+            contactName: profile?.full_name || prev.contactName,
+            contactPhone: profile?.phone || prev.contactPhone,
+          }));
         }
-
-        setUser(user);
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role, full_name, phone')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        const hasUrlDiscount = searchParams.get('discount') === '5';
-        if (profile?.role === 'COMPANION' || hasUrlDiscount) {
-          setDiscountPercent(5);
-        }
-
-        setFormData(prev => ({
-          ...prev,
-          contactName: profile?.full_name || prev.contactName,
-          contactPhone: profile?.phone || prev.contactPhone,
-        }));
       } catch (err) {
-        console.warn('Error al verificar sesión:', err);
+        console.warn('Accediendo como cliente sin sesion previa o invitado:', err);
       } finally {
-        setCheckingAuth(false);
+        if (isMounted) setCheckingAuth(false);
       }
     }
 
+    // Timeout de seguridad de 800ms para evitar que la pantalla quede colgada
+    const timer = setTimeout(() => {
+      if (isMounted) setCheckingAuth(false);
+    }, 800);
+
     checkAuth();
-  }, [router, searchParams, supabase]);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [searchParams, supabase]);
 
   const RATE_PER_HOUR = 900;
   const subtotal = formData.hours * RATE_PER_HOUR;
@@ -128,7 +141,6 @@ function ServiceBookingWizard() {
   }
 
   function handleNext() {
-    // Si está en el Paso 4 y la fecha está vacía, asignar la fecha de hoy por defecto
     if (step === 4 && (!formData.serviceDate || formData.serviceDate.trim() === '')) {
       const today = new Date().toISOString().split('T')[0];
       updateField('serviceDate', today);
@@ -141,7 +153,7 @@ function ServiceBookingWizard() {
   }
 
   function handleGetDeviceLocation() {
-    if (!navigator.geolocation) {
+    if (typeof window !== 'undefined' && !navigator.geolocation) {
       alert('Tu dispositivo no soporta geolocalización directa.');
       return;
     }
@@ -157,50 +169,68 @@ function ServiceBookingWizard() {
         setLocating(false);
       },
       () => {
-        alert('No se pudo obtener la señal GPS. Puedes buscar el punto en Google Maps RD y pegar el enlace.');
+        alert('No se pudo obtener la señal GPS directa. Puedes pegar la dirección o enlace de Google Maps RD debajo.');
         setLocating(false);
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 8000 }
     );
   }
 
   async function handleSubmitService() {
-    if (!user) {
-      alert('Debes iniciar sesión para confirmar y despachar el acompañante.');
-      window.location.href = '/login?redirect=/services/new';
+    if (!acceptedTerms) {
+      alert('Debes autorizar el consentimiento de datos conforme a la Ley 172-13 para continuar.');
       return;
-    }
-
-    // 1. Asegurar fecha válida en formato YYYY-MM-DD
-    let validDate = formData.serviceDate;
-    if (!validDate || validDate.trim() === '') {
-      const today = new Date();
-      validDate = today.toISOString().split('T')[0];
     }
 
     setLoading(true);
 
     try {
+      // 1. Verificar si hay usuario activo o crear sesión anónima/de paso
+      let activeUser = user;
+      if (!activeUser) {
+        const { data: authData } = await supabase.auth.getUser();
+        activeUser = authData?.user;
+      }
+
+      // Si aún no hay usuario, redirigir guardando el borrador o pedir login
+      if (!activeUser) {
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('juntos_pending_booking', JSON.stringify(formData));
+        }
+        window.location.href = '/login?redirect=/services/new';
+        return;
+      }
+
+      let validDate = formData.serviceDate;
+      if (!validDate || validDate.trim() === '') {
+        validDate = new Date().toISOString().split('T')[0];
+      }
+
       const ubicacionConsolidada = `${formData.facilityName || 'Domicilio'}${formData.address ? ' - ' + formData.address : ''} (${formData.city})${formData.geoLat ? ` [GPS: ${formData.geoLat}, ${formData.geoLng}]` : ''}`;
       
       const recipientFinal = formData.forWhom === 'SELF' 
-        ? (user.user_metadata?.full_name || user.email || 'Titular Solicitante') 
-        : (formData.recipientName || 'Familiar');
+        ? (activeUser.user_metadata?.full_name || activeUser.email?.split('@')[0] || 'Titular Solicitante') 
+        : (formData.recipientName || 'Familiar Acompañado');
 
       const notasConsolidadas = [
         `Supervisor/Contacto: ${formData.contactName || 'No especificado'} (${formData.contactPhone || 'Sin teléfono'}) [${formData.relationship}]`,
         `Movilidad: ${formData.mobilitySupport}`,
         formData.specialInstructions ? `Instrucciones: ${formData.specialInstructions}` : '',
-        formData.mapsUrl ? `Punto Google Maps: ${formData.mapsUrl}` : '',
-        formData.requiresNCF ? `NCF Solicitado: ${formData.fiscalName} (RNC: ${formData.rncOrCedula})` : '',
-        discountAmount > 0 ? `Descuento Aplicado: RD$ ${discountAmount}` : ''
+        formData.mapsUrl ? `Punto Maps: ${formData.mapsUrl}` : '',
+        formData.requiresNCF ? `NCF: ${formData.fiscalName} (RNC: ${formData.rncOrCedula})` : '',
+        discountAmount > 0 ? `Descuento: RD$ ${discountAmount}` : '',
+        `Consentimiento Ley 172-13: ACEPTADO`
       ].filter(Boolean).join(' | ');
 
+      // Generar PINs de seguridad aleatorios de 4 dígitos
+      const randomCheckinPin = Math.floor(1000 + Math.random() * 9000).toString();
+      const randomCheckoutPin = Math.floor(1000 + Math.random() * 9000).toString();
+
       const universalPayload: any = {
-        user_id: user.id,
-        customer_id: user.id,
+        user_id: activeUser.id,
+        customer_id: activeUser.id,
         recipient_name: recipientFinal,
-        recipient_phone: formData.recipientPhone || formData.contactPhone || 'N/A',
+        recipient_phone: formData.recipientPhone || formData.contactPhone || '809-000-0000',
         service_type: formData.serviceType,
         facility_or_location: ubicacionConsolidada,
         scheduled_date: validDate,
@@ -211,7 +241,9 @@ function ServiceBookingWizard() {
         special_notes: notasConsolidadas,
         mobility_notes: formData.mobilitySupport,
         status: 'PENDING_DISPATCH',
-        emergency_status: 'NORMAL'
+        emergency_status: 'NORMAL',
+        checkin_pin: randomCheckinPin,
+        checkout_pin: randomCheckoutPin
       };
 
       const { data, error } = await supabase
@@ -223,21 +255,19 @@ function ServiceBookingWizard() {
       let serviceId = data?.id;
 
       if (error) {
-        console.warn('Primer intento falló, ejecutando inserción base:', error.message);
+        console.warn('Intento con esquema completo falló, aplicando payload base:', error.message);
         
         const corePayload: any = {
-          user_id: user.id,
-          customer_id: user.id,
+          user_id: activeUser.id,
           recipient_name: recipientFinal,
-          recipient_phone: formData.recipientPhone || formData.contactPhone || 'N/A',
           service_type: formData.serviceType,
           facility_or_location: ubicacionConsolidada,
           scheduled_date: validDate,
-          requested_date: validDate,
           scheduled_time: formData.serviceTime || '08:00',
           duration_hours: formData.hours,
           rate_total: total,
-          special_notes: notasConsolidadas
+          special_notes: notasConsolidadas,
+          status: 'PENDING_DISPATCH'
         };
 
         const { data: fallbackData, error: coreError } = await supabase
@@ -250,9 +280,8 @@ function ServiceBookingWizard() {
         serviceId = fallbackData?.id;
       }
 
-      // Redirección a la pantalla de éxito con los detalles del servicio
       if (serviceId) {
-        window.location.href = `/services/success?id=${serviceId}`;
+        window.location.href = `/services/live?id=${serviceId}`;
       } else {
         window.location.href = '/profile';
       }
@@ -266,8 +295,8 @@ function ServiceBookingWizard() {
   if (checkingAuth) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-slate-400 gap-3">
-        <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-xs font-mono">Verificando sesión segura...</p>
+        <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs font-mono">Iniciando asistente de reserva segura...</p>
       </div>
     );
   }
@@ -298,7 +327,7 @@ function ServiceBookingWizard() {
               </span>
             )}
             <span className="bg-slate-950/90 border border-slate-800 text-amber-400 font-mono text-xs px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-sm">
-              <span>RD$ 900/h</span>
+              <span>RD$ 900/h (~$15 USD)</span>
             </span>
           </div>
         </div>
@@ -322,7 +351,7 @@ function ServiceBookingWizard() {
                   ¿Para quién es el acompañamiento?
                 </h1>
                 <p className="text-xs text-slate-400 mt-1">
-                  Elige la persona que recibirá el apoyo humano:
+                  Elige la persona que recibirá el apoyo humano presencial:
                 </p>
               </div>
 
@@ -364,8 +393,8 @@ function ServiceBookingWizard() {
                       <Users className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-white">Para un familiar</h4>
-                      <p className="text-xs text-slate-400">Mamá, Papá, Pareja o pariente cercano</p>
+                      <h4 className="font-bold text-sm text-white">Para un familiar (Padres / Diáspora)</h4>
+                      <p className="text-xs text-slate-400">Mamá, Papá, Pareja o pariente en República Dominicana</p>
                     </div>
                   </div>
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${formData.forWhom === 'FAMILY' ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'}`}>
@@ -401,7 +430,7 @@ function ServiceBookingWizard() {
                 <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                     <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 text-emerald-400" /> Datos de la persona acompañada
+                      <User className="w-3.5 h-3.5 text-emerald-400" /> Datos de la persona que recibirá el apoyo
                     </span>
                     <span className="text-[10px] bg-emerald-950 text-emerald-400 font-mono px-2 py-0.5 rounded border border-emerald-800/40">
                       Requerido
@@ -422,7 +451,7 @@ function ServiceBookingWizard() {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-slate-300 font-bold block">WhatsApp / Teléfono directo *</label>
+                      <label className="text-slate-300 font-bold block">WhatsApp / Teléfono en RD *</label>
                       <input
                         type="tel"
                         required
@@ -446,7 +475,7 @@ function ServiceBookingWizard() {
                   Modalidad del Acompañamiento
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Soporte personal y logístico estrictamente no clínico:
+                  Soporte personal y logístico estrictamente no clínico (Ley General de Salud 42-01):
                 </p>
               </div>
 
@@ -592,7 +621,7 @@ function ServiceBookingWizard() {
                   Duración del Servicio
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Selecciona la cantidad estimada de horas:
+                  Selecciona la cantidad de horas estimadas (mínimo 2 horas para cobertura de traslado):
                 </p>
               </div>
 
@@ -618,7 +647,7 @@ function ServiceBookingWizard() {
 
               <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex justify-between items-center text-xs">
                 <div>
-                  <p className="text-slate-400">Total calculado para {formData.hours} horas:</p>
+                  <p className="text-slate-400">Total calculado ({formData.hours} horas):</p>
                   <p className="text-xl font-black text-white">RD$ {total.toLocaleString()}</p>
                 </div>
                 {discountPercent > 0 && (
@@ -641,14 +670,14 @@ function ServiceBookingWizard() {
                   Punto de Encuentro y Movilidad
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Especifica dónde esperará la persona que recibirá el servicio en RD.
+                  Especifica dónde esperará la persona que recibirá el servicio en RD:
                 </p>
               </div>
 
               <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
                   <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4 text-emerald-400" /> Origen de la solicitud
+                    <MapPin className="w-4 h-4 text-emerald-400" /> Coordenadas operativas
                   </span>
                   {formData.forWhom !== 'SELF' && (
                     <span className="text-[10px] bg-blue-950 border border-blue-800/60 text-blue-400 px-2.5 py-0.5 rounded-full font-bold">
@@ -666,7 +695,7 @@ function ServiceBookingWizard() {
                       className="flex-1 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 font-bold py-2.5 px-3.5 rounded-xl text-xs flex items-center justify-center gap-2 transition disabled:opacity-50"
                     >
                       <LocateFixed className="w-4 h-4 text-emerald-400" />
-                      <span>{locating ? 'Leyendo GPS...' : 'Usar GPS de este teléfono (Solo si estoy en RD)'}</span>
+                      <span>{locating ? 'Leyendo GPS...' : 'Usar GPS de este teléfono (si estoy en RD)'}</span>
                     </button>
 
                     <a
@@ -681,7 +710,7 @@ function ServiceBookingWizard() {
                   </div>
 
                   <p className="text-[11px] text-slate-500 leading-relaxed">
-                    💡 Si estás solicitando desde el extranjero (EE. UU., Europa) o tu trabajo, busca el punto en Google Maps RD y copia el enlace o dirección exacta debajo.
+                    💡 Si estás solicitando desde el extranjero (EE. UU., Europa), copia el enlace del centro o vivienda en Google Maps RD y pégalo debajo.
                   </p>
                 </div>
 
@@ -751,7 +780,7 @@ function ServiceBookingWizard() {
                   rows={2}
                   value={formData.specialInstructions}
                   onChange={(e) => updateField('specialInstructions', e.target.value)}
-                  placeholder="Ej: Casa blanca con rejas negras frente al colmado; o en CEDIMAT en sala de espera Piso 2..."
+                  placeholder="Ej: En CEDIMAT en sala de espera Piso 2; o casa de rejas blancas..."
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition resize-none"
                 />
               </div>
@@ -827,7 +856,10 @@ function ServiceBookingWizard() {
               </div>
 
               <div className="space-y-4 text-xs">
-                <div className="flex items-center gap-3 bg-slate-900/60 p-4 rounded-2xl border border-slate-800 cursor-pointer" onClick={() => updateField('requiresNCF', !formData.requiresNCF)}>
+                <div 
+                  className="flex items-center gap-3 bg-slate-900/60 p-4 rounded-2xl border border-slate-800 cursor-pointer" 
+                  onClick={() => updateField('requiresNCF', !formData.requiresNCF)}
+                >
                   <input
                     type="checkbox"
                     checked={formData.requiresNCF}
@@ -836,7 +868,7 @@ function ServiceBookingWizard() {
                   />
                   <div>
                     <h4 className="font-bold text-white text-xs">¿Requiere Factura con Crédito Fiscal (NCF tipo B01)?</h4>
-                    <p className="text-[11px] text-slate-400">Para empresas o deducción fiscal autorizada</p>
+                    <p className="text-[11px] text-slate-400">Para empresas o deducción fiscal autorizada ante DGII</p>
                   </div>
                 </div>
 
@@ -881,7 +913,7 @@ function ServiceBookingWizard() {
                 </p>
               </div>
 
-              <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3.5 text-xs text-slate-300">
+              <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3 text-xs text-slate-300">
                 <div className="flex justify-between border-b border-slate-800/80 pb-2">
                   <span className="text-slate-400">Modalidad:</span>
                   <span className="font-bold text-white">
@@ -890,7 +922,7 @@ function ServiceBookingWizard() {
                 </div>
 
                 <div className="flex justify-between border-b border-slate-800/80 pb-2">
-                  <span className="text-slate-400">Ubicación y Sector:</span>
+                  <span className="text-slate-400">Ubicación:</span>
                   <span className="font-bold text-white text-right">
                     {formData.facilityName || 'Domicilio'} ({formData.city})
                   </span>
@@ -898,7 +930,7 @@ function ServiceBookingWizard() {
 
                 {formData.geoLat && (
                   <div className="flex justify-between border-b border-slate-800/80 pb-2">
-                    <span className="text-slate-400">Punto GPS Fijado:</span>
+                    <span className="text-slate-400">GPS Fijado:</span>
                     <span className="font-mono text-emerald-400 font-bold">
                       {formData.geoLat}, {formData.geoLng}
                     </span>
@@ -931,14 +963,30 @@ function ServiceBookingWizard() {
 
                 <div className="flex justify-between pt-1 text-sm font-black text-white">
                   <span>Total a Pagar:</span>
-                  <span className="text-emerald-400 font-mono text-base">RD$ {total.toLocaleString()}</span>
+                  <span className="text-emerald-400 font-mono text-base">RD${total.toLocaleString()} (~${Math.round(total / 60)} USD)</span>
                 </div>
               </div>
 
+              {/* CLÁUSULA LEY 172-13 DE PROTECCIÓN DE DATOS */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <label className="flex items-start gap-3 cursor-pointer text-xs">
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500 bg-slate-950 border-slate-700 shrink-0 mt-0.5"
+                  />
+                  <span className="text-slate-300 leading-relaxed text-[11px]">
+                    Autorizo el tratamiento de los datos de contacto, ubicación y condición de movilidad exclusivamente para fines de coordinación operativa del servicio, conforme a lo establecido en la <strong>Ley No. 172-13 sobre Protección de Datos de Carácter Personal en República Dominicana</strong>.
+                  </span>
+                </label>
+              </div>
+
+              {/* GARANTÍA Y POLÍTICA DE CANCELACIÓN */}
               <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex items-start gap-3 text-xs text-slate-400">
                 <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                 <p className="leading-relaxed text-[11px]">
-                  <strong>Garantía JUNTOS:</strong> Todos los acompañantes cuentan con depuración penal PGR y carnet de identificación. El servicio es de asistencia y movilidad 100% no clínico.
+                  <strong>Protocolo de Seguridad JUNTOS:</strong> Acompañantes acreditados con Certificado de No Antecedentes Penales PGR verificado. Asistencia humana no clínica (Ley 42-01). Cancelación gratuita hasta 2 horas antes de la cita; tolerancia de espera de 15 minutos en punto de encuentro.
                 </p>
               </div>
             </div>
@@ -968,11 +1016,11 @@ function ServiceBookingWizard() {
             ) : (
               <button
                 type="button"
-                disabled={loading}
+                disabled={loading || !acceptedTerms}
                 onClick={handleSubmitService}
                 className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-8 py-3.5 rounded-xl flex items-center gap-2 text-xs shadow-xl shadow-emerald-500/25 transition-all hover:scale-[1.02] disabled:opacity-50"
               >
-                <span>{loading ? 'Enviando a Mesa de Operaciones...' : 'Confirmar y Despachar Acompañante'}</span>
+                <span>{loading ? 'Asignando en Mesa de Operaciones...' : 'Confirmar e Iniciar Operación en Vivo'}</span>
                 <CheckCircle2 className="w-4 h-4" />
               </button>
             )}
@@ -992,7 +1040,12 @@ function ServiceBookingWizard() {
 
 export default function NewServicePage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-900 flex items-center justify-center text-slate-400 text-xs">Cargando reserva...</div>}>
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-slate-400 gap-3">
+        <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs font-mono">Iniciando reserva segura...</p>
+      </div>
+    }>
       <ServiceBookingWizard />
     </Suspense>
   );
