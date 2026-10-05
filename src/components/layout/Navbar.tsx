@@ -55,7 +55,7 @@ export function Navbar() {
         
         {/* Logo principal */}
         <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
-          <Logo withText className="[&_span]:text-white" />
+          <Logo size="md" variant="dark" />
         </Link>
 
         {/* Navegación dinámica unificada */}
