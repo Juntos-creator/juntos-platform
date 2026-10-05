@@ -22,8 +22,7 @@ import {
   Activity,
   Navigation,
   ExternalLink,
-  LocateFixed,
-  RotateCcw
+  LocateFixed
 } from 'lucide-react';
 
 function ServiceBookingWizard() {
@@ -37,57 +36,37 @@ function ServiceBookingWizard() {
   const [locating, setLocating] = useState(false);
   const [user, setUser] = useState<any>(null);
 
-  // Descuento y consentimiento Ley 172-13
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [acceptedTerms, setAcceptedTerms] = useState<boolean>(true);
 
-  // Form Data State
   const [formData, setFormData] = useState({
-    // Paso 1: Beneficiario
-    forWhom: 'FAMILY', // 'SELF' | 'FAMILY' | 'OTHER'
+    forWhom: 'FAMILY',
     recipientName: '',
     recipientPhone: '',
-
-    // Paso 2: Tipo de Servicio
     serviceType: 'CLINIC_APPOINTMENT',
-    
-    // Paso 3: Ubicación y centro
     facilityName: 'CEDIMAT',
     city: 'Distrito Nacional (Santo Domingo)',
     address: '',
-
-    // Paso 4: Fecha y Hora
     serviceDate: '',
     serviceTime: '08:00',
-
-    // Paso 5: Duración
     hours: 2,
-
-    // Paso 6: Geolocalización GPS y Punto de Mapa
     geoLat: '',
     geoLng: '',
     mapsUrl: '',
     mobilitySupport: 'NONE',
     specialInstructions: '',
-
-    // Paso 7: Contacto Familiar Responsable
     contactName: '',
     contactPhone: '',
     relationship: 'Hijo(a)',
-
-    // Paso 8: Facturación
     requiresNCF: false,
     rncOrCedula: '',
     fiscalName: '',
-
-    // Paso 9: Método
     paymentMethod: 'CARD_ONLINE'
   });
 
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Sincronizar horas desde URL (?hours=X)
     const hoursParam = searchParams.get('hours');
     if (hoursParam) {
       const parsedHours = parseInt(hoursParam, 10);
@@ -96,15 +75,14 @@ function ServiceBookingWizard() {
       }
     }
 
-    // 2. Verificar autenticación y si ya tiene cita activa
     async function checkAuthAndActiveService() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (isMounted && user) {
           setUser(user);
 
-          // COMPROBACIÓN CRÍTICA: ¿Tiene ya una cita activa?
-          const { data: activeOrder } = await supabase
+          // 1. Buscar cita activa del usuario
+          let { data: activeOrder } = await supabase
             .from('service_requests')
             .select('id, status')
             .or(`client_id.eq.${user.id},customer_id.eq.${user.id},user_id.eq.${user.id}`)
@@ -112,6 +90,27 @@ function ServiceBookingWizard() {
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
+
+          // 2. Fallback de rescate para órdenes previas no enlazadas
+          if (!activeOrder) {
+            const { data: recentOrder } = await supabase
+              .from('service_requests')
+              .select('id, status, client_id')
+              .in('status', ['PENDING', 'PENDING_DISPATCH', 'ASSIGNED', 'IN_PROGRESS'])
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (recentOrder) {
+              activeOrder = recentOrder;
+              if (!recentOrder.client_id) {
+                await supabase
+                  .from('service_requests')
+                  .update({ client_id: user.id })
+                  .eq('id', recentOrder.id);
+              }
+            }
+          }
 
           if (activeOrder) {
             window.location.replace(`/services/live?id=${activeOrder.id}`);
@@ -187,7 +186,7 @@ function ServiceBookingWizard() {
         setLocating(false);
       },
       () => {
-        alert('No se pudo obtener la señal GPS directa. Puedes escribir la dirección o pegar el enlace de Google Maps debajo.');
+        alert('No se pudo obtener la señal GPS directa. Puedes escribir la dirección debajo.');
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 8000 }
@@ -196,7 +195,7 @@ function ServiceBookingWizard() {
 
   async function handleSubmitService() {
     if (!acceptedTerms) {
-      alert('Debes autorizar el consentimiento de datos conforme a la Ley 172-13 para continuar.');
+      alert('Debes autorizar el consentimiento conforme a la Ley 172-13 para continuar.');
       return;
     }
 
@@ -241,7 +240,6 @@ function ServiceBookingWizard() {
       const randomCheckinPin = Math.floor(1000 + Math.random() * 9000).toString();
       const randomCheckoutPin = Math.floor(1000 + Math.random() * 9000).toString();
 
-      // INCLUYE EXPRESAMENTE client_id PARA EVITAR VALORES NULL
       const universalPayload: any = {
         client_id: activeUser.id,
         user_id: activeUser.id,
@@ -272,7 +270,7 @@ function ServiceBookingWizard() {
       let serviceId = data?.id;
 
       if (error) {
-        console.warn('Esquema extendido falló, aplicando payload simplificado:', error.message);
+        console.warn('Esquema extendido no disponible, aplicando payload core:', error.message);
         
         const corePayload: any = {
           client_id: activeUser.id,
