@@ -1,190 +1,400 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
 import { Navbar } from '@/components/navbar';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Calendar, MapPin, Clock, DollarSign, UserSquare2, CheckCircle2, AlertCircle } from 'lucide-react';
-import { useState } from 'react';
-import { useToast } from '@/components/ui/toast';
+import { 
+  ShieldCheck, 
+  Radio, 
+  MapPin, 
+  PhoneCall, 
+  KeyRound, 
+  AlertTriangle, 
+  CheckCircle2, 
+  Clock, 
+  Calendar,
+  MessageCircle,
+  RefreshCw,
+  FileText,
+  UserCheck,
+  ChevronRight,
+  LogOut
+} from 'lucide-react';
 
 export default function CompanionDashboardPage() {
-  const { toast } = useToast();
-  const [arrived, setArrived] = useState(false);
+  const router = useRouter();
+  const supabase = createClient();
 
-  const handleArrival = () => {
-    setArrived(true);
-    toast({
-      title: 'Llegada confirmada',
-      description: 'Se ha notificado al familiar que ya estás en el centro médico.',
-      variant: 'success',
-    });
-  };
+  const [loading, setLoading] = useState(true);
+  const [companionUser, setCompanionUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [assignedOrders, setAssignedOrders] = useState<any[]>([]);
+  const [activeOrder, setActiveOrder] = useState<any | null>(null);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  useEffect(() => {
+    async function initDashboard() {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
+
+      setCompanionUser(user);
+
+      // Cargar perfil
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      setProfile(prof);
+
+      // Cargar servicios asignados en vivo
+      await fetchCompanionServices(user.id);
+      setLoading(false);
+    }
+
+    initDashboard();
+  }, [router, supabase]);
+
+  async function fetchCompanionServices(userId: string) {
+    const { data: orders, error } = await supabase
+      .from('service_requests')
+      .select('*')
+      .eq('companion_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (!error && orders) {
+      setAssignedOrders(orders);
+      // La orden activa es la que está en progreso o asignada pendiente de inicio
+      const active = orders.find(o => ['ASSIGNED', 'IN_PROGRESS', 'EN_CAMINO'].includes(o.status));
+      setActiveOrder(active || null);
+    }
+  }
+
+  // Validar PIN de encuentro o de salida
+  async function handleValidarPIN(tipo: 'INICIO' | 'FINAL') {
+    if (!activeOrder || !pinInput.trim()) return;
+    setPinError(null);
+    setActionLoading(true);
+
+    const pinEsperado = tipo === 'INICIO' 
+      ? (activeOrder.pin_start || activeOrder.checkin_pin) 
+      : (activeOrder.pin_end || activeOrder.checkout_pin);
+
+    if (pinInput.trim() !== String(pinEsperado).trim()) {
+      setPinError(`El PIN de ${tipo === 'INICIO' ? 'encuentro' : 'salida'} no coincide. Solicítalo al solicitante.`);
+      setActionLoading(false);
+      return;
+    }
+
+    // Actualizar estado en Supabase
+    const nuevoEstado = tipo === 'INICIO' ? 'IN_PROGRESS' : 'COMPLETED';
+    const { error } = await supabase
+      .from('service_requests')
+      .update({ 
+        status: nuevoEstado,
+        ...(tipo === 'INICIO' ? { started_at: new Date().toISOString() } : { completed_at: new Date().toISOString() })
+      })
+      .eq('id', activeOrder.id);
+
+    if (!error) {
+      setPinInput('');
+      if (companionUser) await fetchCompanionServices(companionUser.id);
+    } else {
+      setPinError('Error al sincronizar con la central: ' + error.message);
+    }
+    setActionLoading(false);
+  }
+
+  // Botón SOS de contingencia
+  async function handleActivarSOS() {
+    if (!activeOrder) return;
+    if (!confirm('🚨 ¿DESEAS ACTIVAR EL PROTOCOLO SOS? Se emitirá una alarma prioritaria a la Mesa de Operaciones Central.')) {
+      return;
+    }
+
+    setActionLoading(true);
+    await supabase
+      .from('service_requests')
+      .update({ emergency_status: 'SOS_ACTIVE' })
+      .eq('id', activeOrder.id);
+
+    if (companionUser) await fetchCompanionServices(companionUser.id);
+    setActionLoading(false);
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3 font-sans">
+        <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin" />
+        <p className="text-xs font-mono tracking-widest uppercase">
+          Cargando Sala de Operaciones del Acompañante...
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-20 selection:bg-emerald-500 selection:text-white">
       <Navbar />
-      
-      <main className="container max-w-5xl py-8 px-4">
-        
-        {/* Encabezado del Dashboard */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-juntos-blue">Mi Panel de Trabajo</h1>
-            <p className="text-muted-foreground mt-1">Bienvenido(a), aquí tienes el resumen de tus acompañamientos.</p>
-          </div>
-          <div className="flex items-center gap-2 bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-semibold border border-green-200">
-            <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></span>
-            Perfil Aprobado y Activo
-          </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {/* Tarjetas de Estadísticas */}
-          <Card className="shadow-sm border-slate-200">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">Ganancias del Mes</CardTitle>
-              <DollarSign className="w-5 h-5 text-juntos-green" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-juntos-blue">RD$ 12,500</div>
-              <p className="text-xs text-muted-foreground mt-1">+RD$ 3,000 esta semana</p>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm border-slate-200">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">Servicios Completados</CardTitle>
-              <CheckCircle2 className="w-5 h-5 text-juntos-blue" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-juntos-blue">14</div>
-              <p className="text-xs text-muted-foreground mt-1">Este mes</p>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm border-slate-200">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">Horas de Acompañamiento</CardTitle>
-              <Clock className="w-5 h-5 text-orange-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-juntos-blue">48 hrs</div>
-              <p className="text-xs text-muted-foreground mt-1">Calificación promedio: 5.0 ⭐</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Próximo Servicio (Ocupa 2 columnas en pantallas grandes) */}
-          <div className="lg:col-span-2 space-y-6">
-            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-juntos-green" />
-              Tu próximo servicio asignado
-            </h2>
-            
-            <Card className="shadow-md border-juntos-blue/20 overflow-hidden">
-              <div className="bg-juntos-blue/5 px-6 py-4 border-b border-juntos-blue/10 flex justify-between items-center">
-                <span className="text-sm font-bold text-juntos-blue uppercase tracking-wider">Hoy</span>
-                <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded border border-blue-200">
-                  Confirmado
+      {/* HEADER OPERATIVO */}
+      <header className="bg-slate-900/80 border-b border-slate-800 px-4 sm:px-6 py-5 sticky top-0 z-30 backdrop-blur">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-lg shadow-lg shadow-emerald-500/20">
+              J
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-black text-white">SALA DE OPERACIONES</h1>
+                <span className="bg-emerald-950 border border-emerald-500/40 text-emerald-400 text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  PERSONAL ACTIVO
                 </span>
               </div>
-              <CardContent className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-3">
-                      <UserSquare2 className="w-5 h-5 text-slate-400 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-slate-500">Paciente</p>
-                        <p className="font-semibold text-slate-900">Don Carlos Mendoza (78 años)</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <MapPin className="w-5 h-5 text-slate-400 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-slate-500">Centro Médico</p>
-                        <p className="font-semibold text-slate-900">Plaza de la Salud</p>
-                        <p className="text-sm text-muted-foreground">Área de Cardiología, 2do Nivel</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-3">
-                      <Calendar className="w-5 h-5 text-slate-400 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-slate-500">Fecha y Hora</p>
-                        <p className="font-semibold text-slate-900">2 de Octubre, 2026</p>
-                        <p className="text-sm text-juntos-blue font-medium">02:30 PM - 06:30 PM (4 hrs)</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
-                  <Button 
-                    className={`w-full sm:w-auto ${arrived ? 'bg-green-600 hover:bg-green-700' : 'bg-juntos-blue hover:bg-juntos-blue/90'} text-white`}
-                    onClick={handleArrival}
-                    disabled={arrived}
-                  >
-                    {arrived ? (
-                      <><CheckCircle2 className="w-4 h-4 mr-2" /> Llegada Confirmada</>
-                    ) : (
-                      <><MapPin className="w-4 h-4 mr-2" /> Confirmar que llegué al centro</>
-                    )}
-                  </Button>
-                  <Button variant="outline" className="w-full sm:w-auto">
-                    Ver detalles médicos
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Historial Reciente */}
-          <div className="space-y-6">
-            <h2 className="text-xl font-bold text-slate-800">Historial reciente</h2>
-            
-            <div className="space-y-4">
-              {/* Item de historial */}
-              <Card className="shadow-sm border-slate-200">
-                <CardContent className="p-4 flex gap-4 items-center">
-                  <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                    <CheckCircle2 className="w-5 h-5 text-slate-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm text-slate-900">Clínica Abreu</p>
-                    <p className="text-xs text-muted-foreground">Ayer • 3 horas</p>
-                  </div>
-                  <div className="ml-auto font-bold text-sm text-juntos-green">
-                    +RD$ 900
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Item de historial */}
-              <Card className="shadow-sm border-slate-200">
-                <CardContent className="p-4 flex gap-4 items-center">
-                  <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                    <CheckCircle2 className="w-5 h-5 text-slate-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm text-slate-900">Hospital General</p>
-                    <p className="text-xs text-muted-foreground">28 Sept • 5 horas</p>
-                  </div>
-                  <div className="ml-auto font-bold text-sm text-juntos-green">
-                    +RD$ 1,500
-                  </div>
-                </CardContent>
-              </Card>
+              <p className="text-xs text-slate-400">
+                Acompañante: <strong className="text-white">{profile?.full_name || companionUser?.email}</strong>
+              </p>
             </div>
-            
-            <Button variant="ghost" className="w-full text-juntos-blue hover:text-juntos-blue/80">
-              Ver todo mi historial
-            </Button>
           </div>
 
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => companionUser && fetchCompanionServices(companionUser.id)}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Sincronizar</span>
+            </button>
+            <button
+              onClick={async () => {
+                await supabase.auth.signOut();
+                router.replace('/login');
+              }}
+              className="bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 text-slate-400 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Salir</span>
+            </button>
+          </div>
         </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+
+        {/* ORDEN ACTIVA EN CURSO */}
+        {activeOrder ? (
+          <div className={`rounded-3xl border p-6 space-y-6 shadow-2xl transition ${
+            activeOrder.emergency_status === 'SOS_ACTIVE'
+              ? 'bg-rose-950/60 border-rose-600 ring-2 ring-rose-500'
+              : 'bg-slate-900/90 border-emerald-500/40'
+          }`}>
+            
+            {/* ESTADO SUPERIOR */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                <span className="text-xs font-black uppercase tracking-wider text-emerald-400">
+                  {activeOrder.status === 'IN_PROGRESS' ? 'SERVICIO EN CURSO' : 'SERVICIO ASIGNADO - PENDIENTE INICIO'}
+                </span>
+                <span className="text-[10px] font-mono bg-slate-950 border border-slate-800 text-slate-400 px-2 py-0.5 rounded">
+                  #{activeOrder.id.slice(0, 8).toUpperCase()}
+                </span>
+              </div>
+
+              <button
+                onClick={handleActivarSOS}
+                disabled={actionLoading}
+                className="bg-rose-600 hover:bg-rose-500 text-white font-black text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-lg shadow-rose-600/30 transition cursor-pointer"
+              >
+                <AlertTriangle className="w-4 h-4" />
+                <span>BOTÓN DE ALERTA SOS</span>
+              </button>
+            </div>
+
+            {/* DETALLES DEL PACIENTE Y DESTINO */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">
+                  Información del Solicitante / Paciente
+                </span>
+                <h3 className="text-lg font-black text-white">
+                  {activeOrder.recipient_name || activeOrder.client_name || activeOrder.for_who_name || 'Paciente Asignado'}
+                </h3>
+                <div className="flex items-center gap-3 pt-1">
+                  <a
+                    href={`tel:${activeOrder.recipient_phone || activeOrder.client_phone || '8095412000'}`}
+                    className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-emerald-400 font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition"
+                  >
+                    <PhoneCall className="w-3.5 h-3.5" />
+                    <span>Llamar</span>
+                  </a>
+                  <a
+                    href={`https://wa.me/${(activeOrder.recipient_phone || activeOrder.client_phone || '8095412000').replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>WhatsApp</span>
+                  </a>
+                </div>
+              </div>
+
+              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">
+                  Ubicación y Coordinación
+                </span>
+                <p className="text-sm font-bold text-white flex items-start gap-1.5">
+                  <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>{activeOrder.facility_or_location || activeOrder.address || activeOrder.pickup_address || 'Punto de encuentro asignado'}</span>
+                </p>
+                {activeOrder.special_notes && (
+                  <p className="text-[11px] text-slate-400 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
+                    <strong>Notas:</strong> {activeOrder.special_notes}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* CONTROL DE PINS ANTIFRAUDE */}
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-emerald-400" />
+                <h4 className="font-bold text-white text-xs uppercase tracking-wider">
+                  Validación de Seguridad Presencial (Doble PIN)
+                </h4>
+              </div>
+
+              {pinError && (
+                <div className="bg-rose-950/80 border border-rose-800 text-rose-300 text-xs p-3 rounded-xl flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{pinError}</span>
+                </div>
+              )}
+
+              {activeOrder.status === 'ASSIGNED' ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-400">
+                    Al encontrarte con el solicitante, solicítale el <strong>PIN de Encuentro</strong> para iniciar formalmente el servicio:
+                  </p>
+                  <div className="flex gap-2 max-w-sm">
+                    <input
+                      type="text"
+                      maxLength={6}
+                      placeholder="Ingresa PIN de inicio (4-6 dígitos)"
+                      value={pinInput}
+                      onChange={(e) => setPinInput(e.target.value)}
+                      className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-center text-base font-mono font-bold text-white outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      onClick={() => handleValidarPIN('INICIO')}
+                      disabled={actionLoading || !pinInput.trim()}
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 cursor-pointer"
+                    >
+                      {actionLoading ? 'Validando...' : 'Iniciar Asistencia'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="inline-flex items-center gap-1.5 text-emerald-400 text-xs font-bold bg-emerald-950/60 border border-emerald-500/30 px-3 py-1 rounded-full">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Servicio en progreso presencial</span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Al finalizar el acompañamiento, solicita el <strong>PIN de Salida</strong> al paciente para cerrar la orden y acreditar tu cobro:
+                  </p>
+                  <div className="flex gap-2 max-w-sm">
+                    <input
+                      type="text"
+                      maxLength={6}
+                      placeholder="Ingresa PIN de salida (4-6 dígitos)"
+                      value={pinInput}
+                      onChange={(e) => setPinInput(e.target.value)}
+                      className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-center text-base font-mono font-bold text-white outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      onClick={() => handleValidarPIN('FINAL')}
+                      disabled={actionLoading || !pinInput.trim()}
+                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-amber-500/20 transition disabled:opacity-50 cursor-pointer"
+                    >
+                      {actionLoading ? 'Completando...' : 'Finalizar Asistencia'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </div>
+        ) : (
+          <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-8 text-center space-y-3 shadow-xl">
+            <Radio className="w-10 h-10 text-emerald-400 mx-auto animate-pulse" />
+            <h3 className="text-base font-bold text-white">Sin asignaciones activas en este momento</h3>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              Tu estado está en línea. La Mesa de Operaciones Central te notificará vía WhatsApp tan pronto un servicio sea despachado en tu zona de cobertura.
+            </p>
+          </div>
+        )}
+
+        {/* HISTORIAL DE SERVICIOS */}
+        <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <h3 className="text-sm font-black text-white uppercase tracking-wider">Historial de Turnos y Asistencias</h3>
+            <span className="text-xs text-slate-500 font-mono">Total: {assignedOrders.length}</span>
+          </div>
+
+          <div className="divide-y divide-slate-800/80">
+            {assignedOrders.length === 0 ? (
+              <p className="text-xs text-slate-500 py-6 text-center">No registras turnos pasados.</p>
+            ) : (
+              assignedOrders.map((ord) => (
+                <div key={ord.id} className="py-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="font-mono text-[10px] text-slate-400 font-bold">
+                        #{ord.id.slice(0, 8).toUpperCase()}
+                      </span>
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                        ord.status === 'COMPLETED' ? 'bg-slate-800 text-slate-300' :
+                        ord.status === 'IN_PROGRESS' ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40' :
+                        'bg-blue-950 text-blue-400 border border-blue-500/40'
+                      }`}>
+                        {ord.status}
+                      </span>
+                    </div>
+                    <p className="font-bold text-white">
+                      {ord.recipient_name || ord.client_name || 'Paciente'}
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      📍 {ord.facility_or_location || ord.address || 'Ubicación coordinada'}
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-[11px] font-mono text-slate-500 block">
+                      {new Date(ord.created_at).toLocaleDateString()}
+                    </span>
+                    <span className="font-mono text-xs font-bold text-emerald-400">
+                      RD$ {Number(ord.rate_total || 1800).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
       </main>
     </div>
   );
