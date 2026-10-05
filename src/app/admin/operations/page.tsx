@@ -7,27 +7,20 @@ import { createClient } from '@/lib/supabase/client';
 import { Navbar } from '@/components/navbar';
 import { 
   Radio, 
-  Clock, 
   History, 
-  FileText, 
   PhoneCall, 
   ShieldCheck, 
-  CheckCircle2, 
   UserPlus, 
   X,
   Play,
   CheckSquare,
   AlertTriangle,
-  MessageSquare,
-  Send,
   MessageCircle,
   KeyRound,
   ShieldAlert,
-  DollarSign,
   Search,
   Receipt,
-  Users,
-  AlertCircle
+  Users
 } from 'lucide-react';
 
 interface SolicitudServicio {
@@ -35,7 +28,7 @@ interface SolicitudServicio {
   client_name?: string;
   recipient_name?: string;
   for_who_name?: string;
-  companion_id?: string;          // <-- CORRECCIÓN: propiedad agregada para evitar error TS2353
+  companion_id?: string;
   companion_name?: string;
   client_phone?: string;
   recipient_phone?: string;
@@ -56,23 +49,19 @@ interface SolicitudServicio {
   ncf?: string;
 }
 
-export default function MesaOperacionesPage() {
+export default function OperacionesPage() {
   const router = useRouter();
   const supabase = createClient();
 
-  // Estados de autenticación
   const [authChecking, setAuthChecking] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [currentAdmin, setCurrentAdmin] = useState<any>(null);
 
-  // Estados de datos operativos
   const [tab, setTab] = useState<'EN_CURSO' | 'HISTORIAL' | 'EXPEDIENTES'>('EN_CURSO');
   const [servicios, setServicios] = useState<SolicitudServicio[]>([]);
   const [expedientes, setExpedientes] = useState<any[]>([]);
   const [acompanantesActivos, setAcompanantesActivos] = useState<any[]>([]);
   const [selectedService, setSelectedService] = useState<SolicitudServicio | null>(null);
   
-  // Controles
   const [filtroTexto, setFiltroTexto] = useState('');
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -80,7 +69,7 @@ export default function MesaOperacionesPage() {
   const [acompananteSeleccionado, setAcompananteSeleccionado] = useState('');
   const [nuevaBitacora, setNuevaBitacora] = useState('');
 
-  // 1. VERIFICACIÓN DE ADMINISTRADORA
+  // 1. Verificación de Administradora
   useEffect(() => {
     async function checkAuth() {
       const { data: { session } } = await supabase.auth.getSession();
@@ -103,12 +92,10 @@ export default function MesaOperacionesPage() {
         user.email?.toLowerCase() === 'odel_kiss@hotmail.com';
 
       if (!esAdmin) {
-        alert('⛔ Acceso exclusivo para la Mesa de Operaciones Central.');
         router.replace('/');
         return;
       }
 
-      setCurrentAdmin(user);
       setIsAuthorized(true);
       setAuthChecking(false);
       cargarDatos();
@@ -117,11 +104,10 @@ export default function MesaOperacionesPage() {
     checkAuth();
   }, [router, supabase]);
 
-  // 2. CARGA GENERAL DE DATOS
+  // 2. Carga General de Datos
   async function cargarDatos() {
     setLoading(true);
 
-    // Consultar servicios
     const { data: srvData } = await supabase
       .from('service_requests')
       .select('*')
@@ -136,9 +122,9 @@ export default function MesaOperacionesPage() {
         scheduled_date: srv.scheduled_date || srv.requested_date,
         notes: srv.special_notes || srv.notes || '',
         client_phone: srv.recipient_phone || srv.client_phone || '809-541-2000',
-        checkin_pin: srv.checkin_pin || srv.id.replace(/\D/g, '').slice(0, 4) || '2491',
-        checkout_pin: srv.checkout_pin || srv.id.replace(/\D/g, '').slice(2, 6) || '8421',
-        rate_total: Number(srv.rate_total || 2700),
+        checkin_pin: srv.checkin_pin || srv.pin_start || srv.id.replace(/\D/g, '').slice(0, 4) || '2491',
+        checkout_pin: srv.checkout_pin || srv.pin_end || srv.id.replace(/\D/g, '').slice(2, 6) || '8421',
+        rate_total: Number(srv.rate_total || 1800),
         payment_status: srv.payment_status || 'PENDIENTE_CONCILIACION',
         ncf: srv.ncf || 'B0200004921'
       }));
@@ -154,14 +140,12 @@ export default function MesaOperacionesPage() {
       setServicios([]);
     }
 
-    // Consultar acompañantes disponibles
     const { data: acompanantes } = await supabase
       .from('profiles')
       .select('id, full_name, phone')
       .eq('role', 'COMPANION');
     setAcompanantesActivos(acompanantes || []);
 
-    // Consultar expedientes de postulantes
     const { data: apps } = await supabase
       .from('companion_applications')
       .select('*')
@@ -171,7 +155,7 @@ export default function MesaOperacionesPage() {
     setLoading(false);
   }
 
-  // 3. CAMBIAR ESTADO OPERATIVO
+  // 3. Cambiar Estado
   async function handleCambiarEstado(nuevoEstado: string) {
     if (!selectedService) return;
     setUpdating(true);
@@ -190,7 +174,7 @@ export default function MesaOperacionesPage() {
     setUpdating(false);
   }
 
-  // 4. CONMUTAR PROTOCOLO SOS
+  // 4. Protocolo SOS
   async function handleToggleSOS() {
     if (!selectedService) return;
     const nuevoSOS = selectedService.emergency_status === 'SOS_ACTIVE' ? 'NORMAL' : 'SOS_ACTIVE';
@@ -212,7 +196,7 @@ export default function MesaOperacionesPage() {
     setUpdating(false);
   }
 
-  // 5. ASIGNAR Y DESPACHAR ACOMPAÑANTE
+  // 5. Asignar Personal
   async function handleAsignarPersonal() {
     if (!acompananteSeleccionado || !selectedService) return;
     const pers = acompanantesActivos.find(a => a.id === acompananteSeleccionado);
@@ -239,12 +223,11 @@ export default function MesaOperacionesPage() {
       });
       setAsignarModal(false);
       cargarDatos();
-      alert(`✓ Personal ${pers.full_name} asignado y despachado.`);
     }
     setUpdating(false);
   }
 
-  // 6. CONCILIAR PAGO / COMPROBANTE DGII
+  // 6. Conciliar Pago
   async function handleConciliarPago() {
     if (!selectedService) return;
     const nuevoStatus = selectedService.payment_status === 'PAID' ? 'PENDIENTE_CONCILIACION' : 'PAID';
@@ -258,16 +241,15 @@ export default function MesaOperacionesPage() {
     setSelectedService({ ...selectedService, payment_status: nuevoStatus });
     cargarDatos();
     setUpdating(false);
-    alert(nuevoStatus === 'PAID' ? '✓ Pago validado y conciliado en sistema.' : 'Pago marcado como pendiente.');
   }
 
-  // 7. REGISTRAR BITÁCORA
+  // 7. Bitácora
   async function handleAnotarBitacora(e: React.FormEvent) {
     e.preventDefault();
     if (!nuevaBitacora.trim() || !selectedService) return;
 
     const anterior = selectedService.notes ? `${selectedService.notes}\n` : '';
-    const nueva = `${anterior}[${new Date().toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })} Mesa Central]: ${nuevaBitacora.trim()}`;
+    const nueva = `${anterior}[${new Date().toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })} Operaciones]: ${nuevaBitacora.trim()}`;
 
     setUpdating(true);
     await supabase
@@ -281,21 +263,18 @@ export default function MesaOperacionesPage() {
     cargarDatos();
   }
 
-  // 8. DISPARAR WHATSAPP OPERATIVO
+  // 8. Mensajería WhatsApp
   function handleWhatsApp(tipo: 'PACIENTE' | 'ACOMPANANTE') {
     if (!selectedService) return;
     const telefono = tipo === 'PACIENTE' ? selectedService.client_phone : selectedService.companion_phone;
-    if (!telefono) {
-      alert('No hay teléfono registrado para este contacto.');
-      return;
-    }
+    if (!telefono) return;
 
     const num = telefono.replace(/[^0-9]/g, '');
     const telFinal = num.length === 10 ? '1' + num : num;
 
     const mensaje = tipo === 'PACIENTE'
-      ? `🟢 *JUNTOS ASISTENCIA RD - Mesa de Operaciones*\n\nHola *${selectedService.client_name}*, te confirmamos tu servicio de acompañamiento:\n📍 *Punto:* ${selectedService.address}\n👤 *Acompañante Asignado:* ${selectedService.companion_name || 'En despacho'}\n🔑 *PIN de Encuentro:* ${selectedService.checkin_pin}\n🔑 *PIN de Salida:* ${selectedService.checkout_pin}\n\nEstamos a tu disposición 24/7.`
-      : `🟢 *JUNTOS ASISTENCIA RD - Asignación de Servicio*\n\nEstimado/a *${selectedService.companion_name}*, tienes un servicio activo:\n📍 *Destino:* ${selectedService.address}\n👤 *Paciente:* ${selectedService.client_name}\n📞 *Contacto:* ${selectedService.client_phone}\n\nRecuerda solicitar el PIN de encuentro al llegar.`;
+      ? `🟢 *JUNTOS ASISTENCIA RD - Operaciones*\n\nHola *${selectedService.client_name}*, te confirmamos tu servicio:\n📍 *Punto:* ${selectedService.address}\n👤 *Acompañante:* ${selectedService.companion_name || 'En despacho'}\n🔑 *PIN de Encuentro:* ${selectedService.checkin_pin}\n🔑 *PIN de Salida:* ${selectedService.checkout_pin}`
+      : `🟢 *JUNTOS ASISTENCIA RD - Asignación de Servicio*\n\nEstimado/a *${selectedService.companion_name}*, tienes un servicio activo:\n📍 *Destino:* ${selectedService.address}\n👤 *Paciente:* ${selectedService.client_name}\n📞 *Contacto:* ${selectedService.client_phone}`;
 
     window.open(`https://wa.me/${telFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
   }
@@ -304,14 +283,13 @@ export default function MesaOperacionesPage() {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">
         <ShieldAlert className="w-8 h-8 text-emerald-400 animate-pulse" />
-        <p className="text-xs font-mono tracking-widest uppercase">Iniciando Mesa de Operaciones Central...</p>
+        <p className="text-xs font-mono tracking-widest uppercase">Cargando Operaciones Central...</p>
       </div>
     );
   }
 
   if (!isAuthorized) return null;
 
-  // Filtrado de servicios
   const serviciosEnCurso = servicios.filter(s => 
     ['IN_PROGRESS', 'ASSIGNED', 'PENDING_DISPATCH', 'SCHEDULED', 'EN_CURSO', 'PENDING'].includes((s.status || '').toUpperCase())
   );
@@ -331,7 +309,6 @@ export default function MesaOperacionesPage() {
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex flex-col pb-20 selection:bg-emerald-500 selection:text-white">
       <Navbar />
 
-      {/* HEADER DE MANDO OPERACIONAL */}
       <header className="bg-slate-950 border-b border-slate-800 px-4 sm:px-8 py-5">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
@@ -342,7 +319,7 @@ export default function MesaOperacionesPage() {
               </span>
             </div>
             <h1 className="text-2xl font-black text-white tracking-tight">
-              Mesa de Operaciones Central JUNTOS
+              Operaciones Central JUNTOS
             </h1>
           </div>
 
@@ -357,7 +334,6 @@ export default function MesaOperacionesPage() {
           </div>
         </div>
 
-        {/* MÉTRICAS EN VIVO */}
         <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
           <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-2xl">
             <span className="text-[10px] font-mono text-slate-400 uppercase block">Servicios Activos</span>
@@ -380,7 +356,6 @@ export default function MesaOperacionesPage() {
         </div>
       </header>
 
-      {/* NAVEGACIÓN DE PESTAÑAS */}
       <div className="bg-slate-950/70 border-b border-slate-800 px-4 sm:px-8 py-3">
         <div className="max-w-7xl mx-auto flex gap-2">
           <button
@@ -415,12 +390,10 @@ export default function MesaOperacionesPage() {
         </div>
       </div>
 
-      {/* CUERPO PRINCIPAL DE GESTIÓN */}
       <main className="max-w-7xl mx-auto w-full px-4 sm:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* BANDEJA IZQUIERDA DE SERVICIOS (4 COLUMNAS) */}
+        {/* BANDEJA IZQUIERDA */}
         <div className="lg:col-span-4 flex flex-col gap-3 max-h-[780px] overflow-hidden">
-          
           <div className="relative w-full">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
             <input
@@ -506,12 +479,11 @@ export default function MesaOperacionesPage() {
           </div>
         </div>
 
-        {/* DETALLE Y CONSOLA DE ACCIONES OPERATIVAS (8 COLUMNAS) */}
+        {/* DETALLE Y CONSOLA DE ACCIONES */}
         <div className="lg:col-span-8 bg-slate-950 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col max-h-[780px] overflow-y-auto">
           {selectedService ? (
             <div className="space-y-6">
               
-              {/* CABECERA CON ESTADO Y BOTONERA DE MANDO */}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-5">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
@@ -525,7 +497,6 @@ export default function MesaOperacionesPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* BOTÓN SOS */}
                   <button
                     onClick={handleToggleSOS}
                     disabled={updating}
@@ -539,7 +510,6 @@ export default function MesaOperacionesPage() {
                     <span>{selectedService.emergency_status === 'SOS_ACTIVE' ? 'SOS ACTIVO (CANCELAR)' : 'BOTÓN SOS'}</span>
                   </button>
 
-                  {/* DESPACHAR PERSONAL */}
                   <button
                     onClick={() => setAsignarModal(true)}
                     className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition"
@@ -548,7 +518,6 @@ export default function MesaOperacionesPage() {
                     <span>Despachar Personal</span>
                   </button>
 
-                  {/* INICIAR SERVICIO */}
                   {selectedService.status !== 'IN_PROGRESS' && (
                     <button
                       onClick={() => handleCambiarEstado('IN_PROGRESS')}
@@ -558,7 +527,6 @@ export default function MesaOperacionesPage() {
                     </button>
                   )}
 
-                  {/* FINALIZAR SERVICIO */}
                   {selectedService.status !== 'COMPLETED' && (
                     <button
                       onClick={() => handleCambiarEstado('COMPLETED')}
@@ -570,10 +538,8 @@ export default function MesaOperacionesPage() {
                 </div>
               </div>
 
-              {/* SECCIÓN CRÍTICA: PINS ANTIFRAUDE Y FINANZAS */}
+              {/* DOBLE PIN Y FINANZAS */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                
-                {/* TARJETA DE PINS PRESENCIALES */}
                 <div className="bg-slate-900/90 border border-emerald-500/30 rounded-2xl p-4 space-y-2">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-2">
                     <span className="font-bold text-white text-xs flex items-center gap-1.5">
@@ -596,7 +562,6 @@ export default function MesaOperacionesPage() {
                   </div>
                 </div>
 
-                {/* TARJETA FINANCIERA & DGII */}
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-2 text-xs">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-2">
                     <span className="font-bold text-white flex items-center gap-1.5">
@@ -627,10 +592,9 @@ export default function MesaOperacionesPage() {
                     </button>
                   </div>
                 </div>
-
               </div>
 
-              {/* ACCIONES DE COMUNICACIÓN DIRECTA */}
+              {/* COMUNICACIÓN */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <a
                   href={`tel:${selectedService.client_phone}`}
@@ -661,7 +625,7 @@ export default function MesaOperacionesPage() {
                 </button>
               </div>
 
-              {/* BITÁCORA Y OBSERVACIONES DE MANDO */}
+              {/* BITÁCORA */}
               <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-2 text-xs">
                 <h4 className="font-bold text-slate-300 uppercase text-[10px] tracking-wider">
                   Bitácora de Eventos y Novedades del Servicio
@@ -700,7 +664,7 @@ export default function MesaOperacionesPage() {
 
       </main>
 
-      {/* MODAL DE DESPACHO / ASIGNACIÓN */}
+      {/* MODAL DE DESPACHO */}
       {asignarModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-950 border border-emerald-500/40 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
