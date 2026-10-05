@@ -105,9 +105,9 @@ export default function LoginPage() {
 
         const role = profile?.role || user.user_metadata?.role;
 
-        // 1. Administrador: super-usuario con acceso libre
+        // 1. Administrador: super-usuario con acceso directo a operaciones
         if (userEmail === 'odel_kiss@hotmail.com' || role === 'ADMIN') {
-          window.location.href = '/admin/mesa-operaciones';
+          window.location.href = '/admin/operations';
           return;
         }
 
