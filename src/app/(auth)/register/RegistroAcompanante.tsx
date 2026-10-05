@@ -13,14 +13,18 @@ import {
   User, 
   Phone, 
   CreditCard, 
-  AlertCircle,
-  GraduationCap,
-  FileText,
-  Lock,
-  Mail,
-  Home,
-  CheckCircle2,
-  Fingerprint
+  AlertCircle, 
+  GraduationCap, 
+  FileText, 
+  Lock, 
+  Mail, 
+  Home, 
+  CheckCircle2, 
+  Fingerprint, 
+  FileStack, 
+  ChevronDown, 
+  ChevronUp, 
+  Info 
 } from 'lucide-react';
 
 // Validación oficial de Cédula Dominicana (Módulo 10 JCE)
@@ -72,6 +76,7 @@ export default function RegistroAcompanante(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [esAdmin, setEsAdmin] = useState(false);
+  const [mostrarRequisitos, setMostrarRequisitos] = useState(true);
 
   // Estados del formulario
   const [tipoDocumento, setTipoDocumento] = useState<'CEDULA' | 'PASAPORTE'>('CEDULA');
@@ -565,7 +570,7 @@ export default function RegistroAcompanante(): JSX.Element {
           <button
             type="button"
             onClick={handleCompletarDemo}
-            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3 py-1 rounded-xl transition"
+            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3 py-1 rounded-xl transition cursor-pointer"
           >
             Cargar Datos de Prueba
           </button>
@@ -580,6 +585,70 @@ export default function RegistroAcompanante(): JSX.Element {
         </div>
         <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Expediente Integral KYC</h2>
         <p className="text-xs text-slate-400">Validación legal, domicilio y depuración PGR conforme a la Ley 172-13.</p>
+      </div>
+
+      {/* RECUADRO INSTRUCTIVO: DOCUMENTOS REQUERIDOS PREVIOS */}
+      <div className="bg-slate-900/90 border border-emerald-500/40 rounded-2xl overflow-hidden shadow-xl transition-all">
+        <button
+          type="button"
+          onClick={() => setMostrarRequisitos(!mostrarRequisitos)}
+          className="w-full p-3.5 bg-emerald-950/40 hover:bg-emerald-900/30 border-b border-emerald-500/20 flex items-center justify-between gap-3 text-left cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <FileStack className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="text-xs font-extrabold text-emerald-300 uppercase tracking-wide">
+              📋 Documentos que debes tener a mano antes de iniciar
+            </span>
+          </div>
+          {mostrarRequisitos ? (
+            <ChevronUp className="w-4 h-4 text-emerald-400 shrink-0" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+          )}
+        </button>
+
+        {mostrarRequisitos && (
+          <div className="p-4 space-y-3 text-xs text-slate-300 bg-slate-950/60">
+            <div className="flex items-start gap-2 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+              <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Tener listos los archivos en formato <b>PDF o Foto JPG/PNG clara</b> en tu teléfono o computador acelerará la aprobación de tu expediente por la Mesa de RRHH.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-2">
+                <span className="text-emerald-400 font-bold">1.</span>
+                <span><b>Cédula o Pasaporte:</b> Foto clara frontal y posterior (o permiso DGM).</span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-2">
+                <span className="text-emerald-400 font-bold">2.</span>
+                <span><b>Certificado PGR:</b> Antecedentes no penales vigentes (máx. 30 días hábiles).</span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-2">
+                <span className="text-emerald-400 font-bold">3.</span>
+                <span><b>Comprobante de Domicilio:</b> Factura de servicio (Luz, Agua o Teléfono).</span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-2">
+                <span className="text-emerald-400 font-bold">4.</span>
+                <span><b>Título o Diploma:</b> Certificado de Bachiller o grado equivalente.</span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-2">
+                <span className="text-emerald-400 font-bold">5.</span>
+                <span><b>Diploma JUNTOS Academia:</b> Código de acreditación o certificado.</span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-2">
+                <span className="text-emerald-400 font-bold">6.</span>
+                <span><b>Datos de Nómina:</b> Cuenta bancaria activa en banco local (RD).</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* STEPPER PROGRESO */}
@@ -616,8 +685,8 @@ export default function RegistroAcompanante(): JSX.Element {
               <span className="text-[10px] font-bold text-emerald-400 bg-slate-950/80 px-2 py-0.5 rounded-md self-end">{camaraActiva.toUpperCase()}</span>
             </div>
             <div className="w-full bg-slate-900 border-t border-slate-800 p-4 flex justify-between items-center">
-              <button type="button" onClick={detenerCamara} className="text-xs font-bold text-slate-400 hover:text-white px-4 py-2 rounded-xl transition">Cancelar</button>
-              <button type="button" onClick={() => capturarFoto(camaraActiva)} className="text-xs font-black text-slate-950 bg-emerald-500 hover:bg-emerald-400 px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center gap-1.5">
+              <button type="button" onClick={detenerCamara} className="text-xs font-bold text-slate-400 hover:text-white px-4 py-2 rounded-xl transition cursor-pointer">Cancelar</button>
+              <button type="button" onClick={() => capturarFoto(camaraActiva)} className="text-xs font-black text-slate-950 bg-emerald-500 hover:bg-emerald-400 px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center gap-1.5 cursor-pointer">
                 <Camera className="w-4 h-4" /> Capturar Foto
               </button>
             </div>
@@ -637,7 +706,7 @@ export default function RegistroAcompanante(): JSX.Element {
                 <button
                   type="button"
                   onClick={() => { setTipoDocumento('CEDULA'); setDatosIdentidad({...datosIdentidad, numeroDocumento: ''}); }}
-                  className={`py-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+                  className={`py-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
                     tipoDocumento === 'CEDULA'
                       ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
                       : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-white'
@@ -648,7 +717,7 @@ export default function RegistroAcompanante(): JSX.Element {
                 <button
                   type="button"
                   onClick={() => { setTipoDocumento('PASAPORTE'); setDatosIdentidad({...datosIdentidad, numeroDocumento: ''}); }}
-                  className={`py-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+                  className={`py-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
                     tipoDocumento === 'PASAPORTE'
                       ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
                       : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-white'
@@ -824,14 +893,14 @@ export default function RegistroAcompanante(): JSX.Element {
                   {previewFrontal ? (
                     <div className="w-full flex flex-col items-center gap-2">
                       <img src={previewFrontal} alt="Frontal" className="h-24 w-full object-cover rounded-xl border border-slate-700" />
-                      <button type="button" onClick={() => setPreviewFrontal(null)} className="text-[11px] text-rose-400 font-bold hover:underline">Cambiar foto</button>
+                      <button type="button" onClick={() => setPreviewFrontal(null)} className="text-[11px] text-rose-400 font-bold hover:underline cursor-pointer">Cambiar foto</button>
                     </div>
                   ) : (
                     <>
                       <FileText className="w-8 h-8 text-slate-500 mb-1" />
                       <p className="font-bold text-slate-200">Lado Frontal</p>
                       <div className="flex gap-2 w-full mt-2">
-                        <button type="button" onClick={() => iniciarCamara('frontal')} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1">
+                        <button type="button" onClick={() => iniciarCamara('frontal')} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer">
                           <Camera className="w-3.5 h-3.5" /> Cámara
                         </button>
                         <label className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer">
@@ -847,14 +916,14 @@ export default function RegistroAcompanante(): JSX.Element {
                   {previewDorsal ? (
                     <div className="w-full flex flex-col items-center gap-2">
                       <img src={previewDorsal} alt="Dorsal" className="h-24 w-full object-cover rounded-xl border border-slate-700" />
-                      <button type="button" onClick={() => setPreviewDorsal(null)} className="text-[11px] text-rose-400 font-bold hover:underline">Cambiar foto</button>
+                      <button type="button" onClick={() => setPreviewDorsal(null)} className="text-[11px] text-rose-400 font-bold hover:underline cursor-pointer">Cambiar foto</button>
                     </div>
                   ) : (
                     <>
                       <FileCheck2 className="w-8 h-8 text-slate-500 mb-1" />
                       <p className="font-bold text-slate-200">Lado Posterior</p>
                       <div className="flex gap-2 w-full mt-2">
-                        <button type="button" onClick={() => iniciarCamara('dorsal')} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1">
+                        <button type="button" onClick={() => iniciarCamara('dorsal')} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer">
                           <Camera className="w-3.5 h-3.5" /> Cámara
                         </button>
                         <label className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer">
