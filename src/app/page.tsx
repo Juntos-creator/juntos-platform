@@ -22,7 +22,8 @@ import {
   ChevronUp,
   Globe2,
   Sparkles,
-  Calculator
+  Calculator,
+  KeyRound
 } from 'lucide-react';
 
 export default function HomePage() {
@@ -41,19 +42,19 @@ export default function HomePage() {
     },
     {
       q: '¿El acompañante puede aplicar inyecciones o cambiar medicamentos?',
-      a: 'No. Todo el personal de JUNTOS tiene prohibido por protocolo y estatuto legal realizar procedimientos médicos o de enfermería (diagnosticar, inyectar, colocar sondas o modificar dosis). Nuestro rol es de soporte humano, logística y acompañamiento digno.'
+      a: 'No. Todo el personal de JUNTOS tiene prohibido por protocolo y estatuto legal realizar procedimientos médicos o de enfermería (diagnosticar, inyectar, colocar sondas o modificar dosis). Nuestro rol es de soporte humano, logística y acompañamiento digno conforme a la Ley 42-01.'
     },
     {
       q: '¿Puedo contratar el servicio si resido en Estados Unidos o el extranjero (Diáspora)?',
-      a: 'Sí, es una de nuestras principales especialidades. Puedes reservar y pagar en línea para un familiar en la República Dominicana. Nuestra Mesa de Operaciones te enviará reportes y confirmaciones de llegada en tiempo real vía WhatsApp.'
+      a: 'Sí, es una de nuestras principales especialidades. Puedes reservar y pagar en línea para un familiar en la República Dominicana. Recibirás reportes y confirmaciones de llegada en tiempo real vía WhatsApp.'
     },
     {
       q: '¿Cuál es el costo del servicio y cómo se calcula?',
-      a: 'Contamos con una tarifa diurna fija y transparente de RD$ 900 por hora (mínimo de 2 horas). No hay costos ocultos de inscripción. Si eres parte de convenios o red familiar acreditada, se aplica un 5% de descuento.'
+      a: 'Contamos con una tarifa diurna fija y transparente de RD$ 900 por hora (mínimo de 2 horas para desplazamiento). Si eres parte de convenios o red familiar acreditada, se aplica un 5% de descuento.'
     },
     {
       q: '¿Cómo garantizan la seguridad e identidad del acompañante?',
-      a: 'Cada acompañante pasa por una depuración exhaustiva de antecedentes penales ante la Procuraduría General de la República (PGR), validación de identidad biométrica/cédula de la JCE, capacitación de 40 horas y porta carnet de identificación institucional con código QR verificable.'
+      a: 'Cada acompañante pasa por validación de antecedentes penales mediante Certificado oficial de la Procuraduría General de la República (PGR), verificación de identidad de la JCE, capacitación y asignación de código PIN de inicio para el encuentro presencial.'
     }
   ];
 
@@ -108,7 +109,7 @@ export default function HomePage() {
           </h1>
 
           <p className="text-slate-300 text-base sm:text-lg max-w-2xl mx-auto leading-relaxed">
-            Coordinamos acompañantes depurados para citas médicas, trámites personales y compañía diurna en el hogar. Solución oficial para familias en RD y la comunidad dominicana en la diáspora.
+            Coordinamos acompañantes depurados para citas médicas, trámites personales y compañía diurna en el hogar. Diseñado para familias en RD y la comunidad dominicana en la diáspora.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2">
@@ -133,7 +134,7 @@ export default function HomePage() {
           <div className="pt-6 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400 font-medium">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Depuración Penal PGR</span>
+              <span>Certificado No Antecedentes PGR</span>
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -145,14 +146,14 @@ export default function HomePage() {
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Cobertura Santo Domingo y Santiago</span>
+              <span>Gran Santo Domingo y Santiago</span>
             </div>
           </div>
 
         </div>
       </section>
 
-      {/* 3. MÉTRICAS CLAVE */}
+      {/* 3. MÉTRICAS CLAVE (ACTUALIZADAS: SIN 0 OCULTOS NI 24/7) */}
       <section className="border-y border-slate-800/80 bg-slate-950/60 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
@@ -161,16 +162,16 @@ export default function HomePage() {
               <p className="text-xs text-slate-400 uppercase tracking-wider font-bold">Tarifa por Hora Fija</p>
             </div>
             <div className="space-y-1">
-              <p className="text-3xl sm:text-4xl font-black text-white font-mono">100%</p>
-              <p className="text-xs text-slate-400 uppercase tracking-wider font-bold">Depuración Penal PGR</p>
+              <p className="text-3xl sm:text-4xl font-black text-white font-mono">PGR</p>
+              <p className="text-xs text-slate-400 uppercase tracking-wider font-bold">No Antecedentes Penales</p>
             </div>
             <div className="space-y-1">
-              <p className="text-3xl sm:text-4xl font-black text-emerald-400 font-mono">24/7</p>
-              <p className="text-xs text-slate-400 uppercase tracking-wider font-bold">Mesa de Despacho RD</p>
+              <p className="text-3xl sm:text-4xl font-black text-emerald-400 font-mono">PIN</p>
+              <p className="text-xs text-slate-400 uppercase tracking-wider font-bold">Validación de Llegada</p>
             </div>
             <div className="space-y-1">
-              <p className="text-3xl sm:text-4xl font-black text-white font-mono">0 Ocultos</p>
-              <p className="text-xs text-slate-400 uppercase tracking-wider font-bold">Transparencia Total</p>
+              <p className="text-3xl sm:text-4xl font-black text-white font-mono">2 Horas</p>
+              <p className="text-xs text-slate-400 uppercase tracking-wider font-bold">Mínimo por Servicio</p>
             </div>
           </div>
         </div>
@@ -207,7 +208,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-lg font-bold text-white">Compañía en Hogar</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Compañía activa diurna, apoyo para caminar, lectura, conversación empática y supervisión para prevenir caídas domésticas.
+              Compañía activa diurna, apoyo para caminar, lectura, conversación empática y supervisión preventiva dentro del domicilio.
             </p>
           </div>
 
@@ -217,7 +218,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-lg font-bold text-white">Altas y Procedimientos</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Acompañamiento presencial durante el egreso de clínica o centro de salud, asistencia de traslado de regreso a casa.
+              Acompañamiento presencial durante el egreso de clínica o centro de salud, con soporte en el retorno seguro a casa.
             </p>
           </div>
 
@@ -227,7 +228,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-lg font-bold text-white">Diligencias Personales</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Soporte para acudir al banco, pagos de servicios, supermercado o trámites cotidianos sin que la persona esté sola.
+              Soporte para acudir al banco, pagos de servicios, compras o gestiones cotidianas con asistencia continua.
             </p>
           </div>
         </div>
@@ -244,7 +245,7 @@ export default function HomePage() {
               ¿Cómo Funciona el Proceso?
             </h2>
             <p className="text-sm text-slate-400 leading-relaxed">
-              Diseñado tanto para familiares en República Dominicana como para hijos en la diáspora.
+              Diseñado tanto para familiares en República Dominicana como para la comunidad dominicana en el exterior.
             </p>
           </div>
 
@@ -265,7 +266,7 @@ export default function HomePage() {
               </span>
               <h4 className="font-bold text-white text-base">Asignación Depurada</h4>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Nuestra Mesa Central asigna un acompañante acreditado con carnet y registro PGR validado.
+                Asignamos un acompañante acreditado con carnet institucional y Certificado PGR verificado.
               </p>
             </div>
 
@@ -273,9 +274,9 @@ export default function HomePage() {
               <span className="w-8 h-8 rounded-full bg-emerald-500 text-slate-950 font-black text-sm flex items-center justify-center shadow-lg shadow-emerald-500/20">
                 3
               </span>
-              <h4 className="font-bold text-white text-base">Servicio Presencial</h4>
+              <h4 className="font-bold text-white text-base">Validación con PIN</h4>
               <p className="text-xs text-slate-400 leading-relaxed">
-                El acompañante se presenta puntualmente en la clínica, domicilio o punto fijado con identificación oficial.
+                El acompañante se presenta puntualmente y confirma el inicio del servicio mediante tu código PIN único.
               </p>
             </div>
 
@@ -283,9 +284,9 @@ export default function HomePage() {
               <span className="w-8 h-8 rounded-full bg-emerald-500 text-slate-950 font-black text-sm flex items-center justify-center shadow-lg shadow-emerald-500/20">
                 4
               </span>
-              <h4 className="font-bold text-white text-base">Reporte en Vivo</h4>
+              <h4 className="font-bold text-white text-base">Reportes Directos</h4>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Recibes confirmación de llegada y término por WhatsApp, ya sea que estés en el país o en el extranjero.
+                Recibes confirmación de llegada y finalización por WhatsApp, estés donde estés.
               </p>
             </div>
           </div>
@@ -301,7 +302,7 @@ export default function HomePage() {
                 <Calculator className="w-5 h-5 text-emerald-400" />
                 <h3 className="text-xl sm:text-2xl font-black text-white">Calculadora Rápida de Servicio</h3>
               </div>
-              <p className="text-xs text-slate-400 mt-1">Tarifa diurna estándar sin cargos sorpresa</p>
+              <p className="text-xs text-slate-400 mt-1">Tarifa diurna estándar (7:00 AM – 7:00 PM)</p>
             </div>
             <span className="bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 font-mono text-xs px-3 py-1.5 rounded-full font-bold">
               RD$ 900 / Hora
@@ -337,7 +338,7 @@ export default function HomePage() {
                 RD$ {calculatedTotal.toLocaleString()}
               </p>
               <p className="text-[11px] text-emerald-400 mt-0.5">
-                * 5% de descuento adicional aplicable con código de red familiar o rol acreditado.
+                * 5% de descuento aplicable con código de red familiar o rol acreditado.
               </p>
             </div>
 
@@ -365,7 +366,7 @@ export default function HomePage() {
                 Garantía y Tranquilidad para Familias Locales y en el Exterior
               </h2>
               <p className="text-sm text-slate-300 leading-relaxed">
-                Sabemos la preocupación que genera coordinar la asistencia de una madre, padre o ser querido cuando te encuentras trabajando o fuera del país. En JUNTOS la seguridad no se delega:
+                Sabemos la preocupación que genera coordinar la asistencia de un ser querido cuando te encuentras trabajando o fuera del país:
               </p>
 
               <div className="space-y-3.5 text-xs text-slate-300">
@@ -373,23 +374,23 @@ export default function HomePage() {
                   <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                   <div>
                     <strong className="text-white block font-bold">Depuración de Antecedentes PGR:</strong>
-                    Certificación de no antecedentes penales emitida por la Procuraduría General de la República Dominicana.
+                    Certificación de no antecedentes penales emitida por la Procuraduría General de la República Dominicana con verificación periódica.
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3">
-                  <FileCheck2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                  <KeyRound className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="text-white block font-bold">Carnet Institucional con Código QR:</strong>
-                    Cada acompañante porta identificación con foto, código de acreditación y vinculación al sistema central.
+                    <strong className="text-white block font-bold">Protocolo de Seguridad con Código PIN:</strong>
+                    Validación numérica mutua en el punto de encuentro para garantizar la autenticidad y el inicio exacto del servicio.
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3">
                   <Globe2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="text-white block font-bold">Canal Especial para la Diáspora:</strong>
-                    Soporte telefónico y WhatsApp internacional (+1) para seguimiento directo desde EE. UU., España o cualquier país.
+                    <strong className="text-white block font-bold">Canal de Seguimiento para la Diáspora:</strong>
+                    Soporte telefónico y WhatsApp directo (+1) para seguimiento operativo continuo desde el exterior.
                   </div>
                 </div>
               </div>
@@ -404,7 +405,7 @@ export default function HomePage() {
               </div>
 
               <p className="text-xs text-slate-400 leading-relaxed">
-                Para seguridad del usuario y cumplimiento de la Ley General de Salud 42-01, los acompañantes de JUNTOS no son enfermeros a domicilio ni médicos.
+                Para seguridad del usuario y estricto cumplimiento de la Ley General de Salud 42-01, los acompañantes de JUNTOS no son enfermeros a domicilio ni personal médico.
               </p>
 
               <div className="space-y-2.5 text-xs">
@@ -499,7 +500,7 @@ export default function HomePage() {
           <div className="space-y-3">
             <Logo size="sm" variant="dark" href="/" />
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              Plataforma de Acompañamiento y Asistencia No Clínica en República Dominicana. Cuidado humano, digno y transparente.
+              Plataforma de Acompañamiento y Asistencia No Clínica en República Dominicana. Cuidado humano, digno y seguro.
             </p>
           </div>
 
@@ -514,29 +515,31 @@ export default function HomePage() {
           </div>
 
           <div className="space-y-2">
-            <h5 className="font-bold text-white uppercase tracking-wider text-[11px]">Seguridad & Cobertura</h5>
+            <h5 className="font-bold text-white uppercase tracking-wider text-[11px]">Marco Legal</h5>
             <ul className="space-y-1.5 text-[11px] text-slate-400">
-              <li>Depuración Penal PGR</li>
-              <li>Distrito Nacional & Gran Santo Domingo</li>
-              <li>Santiago de los Caballeros</li>
-              <li>Soporte a la Diáspora (EE. UU. / Europa)</li>
+              <li><Link href="/terminos" className="hover:text-emerald-400">Términos de Servicio y Tarifas</Link></li>
+              <li><Link href="/privacidad" className="hover:text-emerald-400">Protección de Datos (Ley 172-13)</Link></li>
+              <li><Link href="/cancelacion" className="hover:text-emerald-400">Cancelaciones y Reembolsos</Link></li>
             </ul>
           </div>
 
           <div className="space-y-2">
-            <h5 className="font-bold text-white uppercase tracking-wider text-[11px]">Mesa de Operaciones</h5>
+            <h5 className="font-bold text-white uppercase tracking-wider text-[11px]">Atención y Contacto</h5>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              Atención y Despacho 24/7 en República Dominicana.
+              Coordinación operativa: Lunes a Domingo, 7:00 AM – 9:00 PM.
             </p>
             <p className="text-emerald-400 font-mono font-bold text-xs">
-              Mesa Central: Santo Domingo Este, RD
+              Mesa Operativa: Santo Domingo Este, RD
+            </p>
+            <p className="text-[11px] text-slate-400">
+              WhatsApp: +1 (829) 781-8886
             </p>
           </div>
 
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 mt-8 border-t border-slate-900 flex flex-col sm:flex-row justify-between items-center gap-3 text-[11px] text-slate-500">
-          <p>© 2026 JUNTOS ASISTENCIA RD. Todos los derechos reservados.</p>
+          <p>© 2026 JUNTOS ASISTENCIA RD. Operado por Odelkis Domínguez. Todos los derechos reservados.</p>
           <p>Servicios de Asistencia Personal No Clínica bajo normativa legal dominicana.</p>
         </div>
       </footer>
