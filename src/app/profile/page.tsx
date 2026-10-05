@@ -10,16 +10,14 @@ import {
   Clock,
   MapPin,
   FileText,
-  KeyRound,
   Plus,
   ArrowRight,
-  Camera, 
   Save, 
   LogOut,
   Activity,
   UserCheck,
   Radio,
-  ShieldCheck
+  CheckCircle2
 } from 'lucide-react';
 
 export default function ProfilePage() {
@@ -49,19 +47,19 @@ export default function ProfilePage() {
       return;
     }
 
-    // 1. COMPROBACIÓN DE ADMINISTRADORA: REDIRIGIR INMEDIATAMENTE A LA NUEVA MESA CENTRAL
+    // Redirección si es Administradora
     const esAdmin = 
       user.email?.toLowerCase() === 'odel_kiss@hotmail.com' || 
       user.user_metadata?.role === 'ADMIN';
 
     if (esAdmin) {
-      router.replace('/admin/operations');
+      router.replace('/admin/mesa-operaciones');
       return;
     }
 
     setUser(user);
 
-    // Cargar perfil del solicitante
+    // Cargar perfil del cliente
     const { data: prof } = await supabase
       .from('profiles')
       .select('*')
@@ -80,11 +78,11 @@ export default function ProfilePage() {
       });
     }
 
-    // Cargar solo las solicitudes del cliente autenticado
+    // Cargar SOLAMENTE las órdenes asociadas estrictamente a este usuario
     const { data: srvsCliente } = await supabase
       .from('service_requests')
       .select('*')
-      .or(`customer_id.eq.${user.id},user_id.eq.${user.id},client_id.eq.${user.id}`)
+      .eq('client_id', user.id)
       .order('created_at', { ascending: false });
 
     setMyServices(srvsCliente || []);
@@ -121,17 +119,22 @@ export default function ProfilePage() {
     );
   }
 
+  // Filtrar si hay una cita en curso o pendiente
+  const citaActiva = myServices.find((s) =>
+    ['PENDING', 'PENDING_DISPATCH', 'ASSIGNED', 'IN_PROGRESS'].includes(s.status)
+  );
+
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 pb-20 relative overflow-hidden font-sans selection:bg-emerald-500 selection:text-white">
+    <div className="min-h-screen bg-slate-950 text-slate-100 pb-20 relative overflow-hidden font-sans selection:bg-emerald-500 selection:text-white">
       <Navbar />
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8 relative z-10">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-8 relative z-10">
         
-        {/* ENCABEZADO CLIENTE */}
+        {/* ENCABEZADO PERFIL */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-6">
           <div>
-            <h1 className="text-3xl font-black text-white tracking-tight">Mi Perfil</h1>
-            <p className="text-sm text-slate-400 mt-1">
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Mi Perfil</h1>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1">
               Gestiona tus solicitudes de asistencia, recibos fiscales y acceso a la sala en vivo.
             </p>
           </div>
@@ -145,12 +148,50 @@ export default function ProfilePage() {
           </Link>
         </div>
 
-        {/* LISTADO DE SERVICIOS DEL CLIENTE */}
+        {/* BANNER DIRECTO SI TIENE CITA ACTIVA */}
+        {citaActiva && (
+          <div className="bg-slate-900/90 border border-emerald-500/40 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-emerald-400 text-xs font-black tracking-wider uppercase">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                Cita en Curso Activa
+              </span>
+              <span className="text-[10px] font-mono font-bold bg-emerald-950 border border-emerald-500/30 text-emerald-400 px-2.5 py-1 rounded-full">
+                {citaActiva.status}
+              </span>
+            </div>
+
+            <div className="space-y-1 text-xs">
+              <p className="text-lg font-black text-white">
+                Paciente: {citaActiva.recipient_name || 'Paciente Registrado'}
+              </p>
+              <p className="text-slate-400 flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>{citaActiva.facility_or_location}</span>
+              </p>
+              <p className="text-slate-400 flex items-center gap-1.5 font-mono">
+                <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>{citaActiva.scheduled_date} • {citaActiva.scheduled_time || '08:00'}</span>
+              </p>
+            </div>
+
+            <Link
+              href={`/services/live?id=${citaActiva.id}`}
+              className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition"
+            >
+              <Radio className="w-4 h-4 animate-pulse" />
+              <span>Entrar a la Sala Operativa en Vivo (Chat y PINs)</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        )}
+
+        {/* LISTADO DE SOLICITUDES DEL CLIENTE */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-black text-white flex items-center gap-2">
-              <Activity className="w-5 h-5 text-emerald-400" />
-              <span>Mis Solicitudes de Acompañamiento</span>
+            <h2 className="text-base font-black text-white flex items-center gap-2">
+              <Activity className="w-4 h-4 text-emerald-400" />
+              <span>Mis Solicitudes Registradas</span>
             </h2>
             <span className="text-xs font-mono text-slate-400">
               Total: {myServices.length}
@@ -158,147 +199,79 @@ export default function ProfilePage() {
           </div>
 
           {myServices.length === 0 ? (
-            <div className="bg-slate-950/60 border border-slate-800 rounded-3xl p-8 text-center space-y-3">
-              <Calendar className="w-8 h-8 text-slate-600 mx-auto" />
-              <p className="text-xs text-slate-400">No tienes servicios activos en este momento.</p>
-              <Link
-                href="/services/new"
-                className="inline-flex items-center gap-1.5 bg-emerald-500 text-slate-950 font-black text-xs px-4 py-2 rounded-xl transition"
-              >
-                <span>Solicitar Acompañante Ahora</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+            <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 text-center space-y-2">
+              <Calendar className="w-6 h-6 text-slate-600 mx-auto" />
+              <p className="text-xs text-slate-400">No tienes servicios registrados en este momento.</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {myServices.map((srv) => {
-                const checkinPin = srv.checkin_pin || srv.id.replace(/\D/g, '').slice(0, 4) || '2491';
-                const checkoutPin = srv.checkout_pin || srv.id.replace(/\D/g, '').slice(2, 6) || '8421';
-
-                return (
-                  <div 
-                    key={srv.id}
-                    className="bg-slate-950/90 border border-slate-800 hover:border-slate-700 rounded-3xl p-5 sm:p-6 space-y-4 transition shadow-lg"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-xs text-slate-400">
-                          ORDEN #{srv.id.slice(0, 8).toUpperCase()}
-                        </span>
-                        <span className="text-slate-600">•</span>
-                        <span className="text-xs font-bold text-white">
-                          {srv.recipient_name || srv.client_name || 'Paciente'}
-                        </span>
-                      </div>
-
-                      <span className="bg-slate-900 text-emerald-400 border border-emerald-500/30 text-[10px] font-mono px-2.5 py-1 rounded-full font-bold">
+            <div className="space-y-3">
+              {myServices.map((srv) => (
+                <div 
+                  key={srv.id}
+                  className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] text-slate-400">
+                        #{srv.id.slice(0, 8).toUpperCase()}
+                      </span>
+                      <span className="font-bold text-white">
+                        {srv.recipient_name || 'Paciente'}
+                      </span>
+                      <span className="bg-slate-950 text-emerald-400 border border-slate-800 text-[10px] font-mono px-2 py-0.5 rounded">
                         {srv.status}
                       </span>
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                      {/* DETALLES DE CITA */}
-                      <div className="space-y-1.5 text-slate-300">
-                        <p className="flex items-center gap-2 text-white font-bold">
-                          <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          <span>{srv.scheduled_date || srv.requested_date} • {srv.scheduled_time || 'Horario coordinado'}</span>
-                        </p>
-                        <p className="flex items-start gap-2 text-slate-400">
-                          <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                          <span className="line-clamp-2">{srv.facility_or_location || srv.address || 'Ubicación coordinada'}</span>
-                        </p>
-                      </div>
-
-                      {/* TARIFA */}
-                      <div className="space-y-1 bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800/80 flex flex-col justify-center">
-                        <span className="text-[11px] text-slate-400">Total Liquidado</span>
-                        <p className="text-lg font-black text-emerald-400 font-mono">
-                          RD$ {Number(srv.rate_total || 2700).toLocaleString()}
-                        </p>
-                        <p className="text-[10px] text-slate-500">
-                          Tarifa transparente de asistencia
-                        </p>
-                      </div>
-
-                      {/* DOBLE PIN */}
-                      <div className="bg-slate-900/80 border border-slate-800 p-3 rounded-2xl flex flex-col justify-between space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-white flex items-center gap-1.5">
-                            <KeyRound className="w-3.5 h-3.5 text-emerald-400" />
-                            PINs Antifraude
-                          </span>
-                          <span className="text-[9px] bg-slate-950 text-emerald-400 font-mono px-1.5 py-0.5 rounded border border-slate-800">
-                            VALIDACIÓN
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 text-center">
-                          <div className="bg-slate-950 p-2 rounded-xl border border-slate-800/80">
-                            <span className="text-[9px] text-slate-400 font-bold block">1. LLEGADA</span>
-                            <span className="font-mono text-base font-black text-emerald-400 tracking-wider">
-                              {checkinPin}
-                            </span>
-                          </div>
-                          <div className="bg-slate-950 p-2 rounded-xl border border-slate-800/80">
-                            <span className="text-[9px] text-slate-400 font-bold block">2. SALIDA</span>
-                            <span className="font-mono text-base font-black text-amber-400 tracking-wider">
-                              {checkoutPin}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* BOTONES */}
-                    <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2 border-t border-slate-800/60">
-                      <Link
-                        href={`/services/receipt?id=${srv.id}`}
-                        className="bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition"
-                      >
-                        <FileText className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Ver Recibo Digital</span>
-                      </Link>
-
-                      <Link
-                        href={`/services/live?id=${srv.id}`}
-                        className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition"
-                      >
-                        <Radio className="w-3.5 h-3.5" />
-                        <span>Abrir Sala en Vivo</span>
-                      </Link>
-                    </div>
+                    <p className="text-slate-400 text-[11px]">
+                      {srv.scheduled_date} • {srv.facility_or_location}
+                    </p>
                   </div>
-                );
-              })}
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Link
+                      href={`/services/receipt?id=${srv.id}`}
+                      className="bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 px-3 py-1.5 rounded-xl font-bold text-[11px] flex items-center gap-1 transition"
+                    >
+                      <FileText className="w-3 h-3 text-emerald-400" /> Recibo
+                    </Link>
+                    <Link
+                      href={`/services/live?id=${srv.id}`}
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-3.5 py-1.5 rounded-xl text-[11px] flex items-center gap-1 transition"
+                    >
+                      <Radio className="w-3 h-3" /> Sala en Vivo
+                    </Link>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
 
-        {/* FORMULARIO DE EDICIÓN DE DATOS */}
+        {/* DATOS DE CONTACTO Y PERFIL */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-800">
-          <div className="bg-slate-950/80 border border-slate-800 p-6 rounded-3xl shadow-xl flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-20 h-20 rounded-full bg-slate-900 border-2 border-emerald-500/40 text-emerald-400 flex items-center justify-center text-2xl font-black">
+          <div className="bg-slate-900/60 border border-slate-800 p-6 rounded-3xl flex flex-col items-center justify-center text-center space-y-3">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-xl font-black">
               {fullName ? fullName.slice(0, 2).toUpperCase() : 'US'}
             </div>
             <div>
-              <h3 className="font-bold text-white text-base">{fullName || 'Usuario'}</h3>
+              <h3 className="font-bold text-white text-sm">{fullName || 'Usuario'}</h3>
               <p className="text-xs text-slate-400 font-mono mt-0.5">{profile?.email}</p>
             </div>
           </div>
 
-          <div className="md:col-span-2 bg-slate-950/80 border border-slate-800 p-7 rounded-3xl shadow-xl space-y-5">
-            <h3 className="text-base font-bold text-white border-b border-slate-800/80 pb-3 flex items-center gap-2">
+          <div className="md:col-span-2 bg-slate-900/60 border border-slate-800 p-6 rounded-3xl space-y-4">
+            <h3 className="text-sm font-bold text-white border-b border-slate-800/80 pb-2.5 flex items-center gap-2">
               <UserCheck className="w-4 h-4 text-emerald-400" /> Datos de Contacto
             </h3>
 
-            <form onSubmit={handleGuardar} className="space-y-4 text-xs">
+            <form onSubmit={handleGuardar} className="space-y-3.5 text-xs">
               <div>
                 <label className="font-bold text-slate-400 block mb-1">Correo electrónico</label>
                 <input 
                   type="email" 
                   disabled 
                   value={profile?.email || ''} 
-                  className="w-full bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-slate-500 font-medium cursor-not-allowed font-mono"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-500 font-medium cursor-not-allowed font-mono text-xs"
                 />
               </div>
 
@@ -310,7 +283,7 @@ export default function ProfilePage() {
                   value={fullName} 
                   onChange={(e) => setFullName(e.target.value)} 
                   placeholder="Ej: Carmen Gómez"
-                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl p-3 text-white font-medium outline-none focus:border-emerald-500 transition"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-medium outline-none focus:border-emerald-500 transition text-xs"
                 />
               </div>
 
@@ -321,11 +294,11 @@ export default function ProfilePage() {
                   value={phone} 
                   onChange={(e) => setPhone(e.target.value)} 
                   placeholder="Ej: 809-555-0100"
-                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl p-3 text-white font-medium outline-none focus:border-emerald-500 transition"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-medium outline-none focus:border-emerald-500 transition text-xs"
                 />
               </div>
 
-              <div className="flex justify-between items-center pt-4 border-t border-slate-800/80">
+              <div className="flex justify-between items-center pt-3 border-t border-slate-800/80">
                 <button 
                   type="button"
                   onClick={async () => {
@@ -340,7 +313,7 @@ export default function ProfilePage() {
                 <button 
                   type="submit" 
                   disabled={saving}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition text-xs disabled:opacity-50"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition text-xs disabled:opacity-50"
                 >
                   <Save className="w-3.5 h-3.5" /> {saving ? 'Guardando...' : 'Guardar Cambios'}
                 </button>

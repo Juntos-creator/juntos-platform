@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -11,7 +11,9 @@ import {
   Lock, 
   ArrowRight, 
   ShieldCheck, 
-  AlertCircle 
+  AlertCircle,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 
 export default function LoginPage() {
@@ -21,15 +23,30 @@ export default function LoginPage() {
   const [role, setRole] = useState<'CLIENT' | 'COMPANION'>('CLIENT');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Cargar correo recordado si existe
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedEmail = localStorage.getItem('juntos_remember_email');
+      const savedRole = localStorage.getItem('juntos_remember_role');
+      if (savedEmail) {
+        setEmail(savedEmail);
+        setRememberMe(true);
+      }
+      if (savedRole === 'COMPANION' || savedRole === 'CLIENT') {
+        setRole(savedRole);
+      }
+    }
+  }, []);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setErrorMsg(null);
 
-    // 1. Limpieza de correo obligatoria en minúsculas
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
@@ -40,9 +57,8 @@ export default function LoginPage() {
       });
 
       if (error) {
-        // Mostrar mensaje exacto si falta confirmación de correo
         if (error.message.toLowerCase().includes('email not confirmed')) {
-          throw new Error('Tu correo aún no está confirmado. Ve a Supabase > Authentication > Users y confirma el usuario, o desactiva "Confirm email" en Providers.');
+          throw new Error('Tu correo aún no está confirmado. Confirma tu usuario en Supabase Auth.');
         } else if (error.message.toLowerCase().includes('invalid login credentials')) {
           throw new Error('Contraseña incorrecta o correo no registrado.');
         } else {
@@ -51,17 +67,53 @@ export default function LoginPage() {
       }
 
       if (data?.user) {
-        const userEmail = data.user.email?.toLowerCase();
-        const userRole = data.user.user_metadata?.role;
+        // Guardar o limpiar preferencia de "Recordarme"
+        if (typeof window !== 'undefined') {
+          if (rememberMe) {
+            localStorage.setItem('juntos_remember_email', cleanEmail);
+            localStorage.setItem('juntos_remember_role', role);
+          } else {
+            localStorage.removeItem('juntos_remember_email');
+            localStorage.removeItem('juntos_remember_role');
+          }
+        }
 
-        // Redirección por tipo de usuario
-        if (userEmail === 'odel_kiss@hotmail.com' || userRole === 'ADMIN') {
-          router.push('/admin/operations');
+        const user = data.user;
+        const userEmail = user.email?.toLowerCase();
+
+        // 1. Consultar rol en la base de datos
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        const resolvedRole = profile?.role || user.user_metadata?.role;
+
+        // Redirección Admin
+        if (userEmail === 'odel_kiss@hotmail.com' || resolvedRole === 'ADMIN' || resolvedRole === 'AUDITOR') {
+          router.push('/admin/mesa-operaciones');
           return;
         }
 
-        if (role === 'COMPANION' || userRole === 'COMPANION') {
+        // Redirección Acompañante
+        if (role === 'COMPANION' || resolvedRole === 'COMPANION' || resolvedRole === 'ACOMPANANTE') {
           router.push('/companion');
+          return;
+        }
+
+        // 2. Redirección Cliente: verificar cita activa
+        const { data: activeService } = await supabase
+          .from('service_requests')
+          .select('id, status')
+          .eq('client_id', user.id)
+          .in('status', ['PENDING', 'PENDING_DISPATCH', 'ASSIGNED', 'IN_PROGRESS'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (activeService) {
+          router.push(`/services/live?id=${activeService.id}`);
         } else {
           router.push('/services/new');
         }
@@ -102,12 +154,12 @@ export default function LoginPage() {
           <p className="text-xs text-slate-400">Selecciona tu categoría de usuario</p>
         </div>
 
-        {/* SELECTOR DE 2 COLUMNAS */}
+        {/* SELECTOR DE ROLES */}
         <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-950 border border-slate-800 rounded-2xl">
           <button
             type="button"
             onClick={() => { setRole('CLIENT'); setErrorMsg(null); }}
-            className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ${
+            className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
               role === 'CLIENT'
                 ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
                 : 'text-slate-400 hover:text-white'
@@ -120,7 +172,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => { setRole('COMPANION'); setErrorMsg(null); }}
-            className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ${
+            className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
               role === 'COMPANION'
                 ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
                 : 'text-slate-400 hover:text-white'
@@ -142,7 +194,7 @@ export default function LoginPage() {
           <div className="space-y-1.5">
             <label className="font-bold text-slate-300 block">Correo electrónico *</label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+              <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3 pointer-events-none" />
               <input
                 type="email"
                 required
@@ -162,7 +214,7 @@ export default function LoginPage() {
               </span>
             </div>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+              <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3 pointer-events-none" />
               <input
                 type="password"
                 required
@@ -174,10 +226,25 @@ export default function LoginPage() {
             </div>
           </div>
 
+          {/* OPCIÓN: RECORDAR EN ESTE DISPOSITIVO */}
+          <div 
+            onClick={() => setRememberMe(!rememberMe)}
+            className="flex items-center gap-2.5 pt-1 cursor-pointer select-none text-slate-300 hover:text-white transition"
+          >
+            {rememberMe ? (
+              <CheckSquare className="w-4 h-4 text-emerald-400" />
+            ) : (
+              <Square className="w-4 h-4 text-slate-600" />
+            )}
+            <span className="text-xs font-medium">
+              Recordar mi sesión en este dispositivo
+            </span>
+          </div>
+
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 mt-2"
+            className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 mt-2 cursor-pointer"
           >
             <span>
               {loading 
@@ -206,7 +273,7 @@ export default function LoginPage() {
 
       <div className="mt-6 flex items-center gap-1.5 text-[11px] text-slate-500 font-mono">
         <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-        <span>Acceso seguro cifrado SSL 256-bit • JUNTOS ASISTENCIA RD</span>
+        <span>Conexión segura y cifrada • JUNTOS ASISTENCIA RD</span>
       </div>
 
     </div>
