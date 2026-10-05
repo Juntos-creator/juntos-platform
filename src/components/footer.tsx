@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ShieldCheck, Phone, Mail, MapPin, HeartHandshake } from 'lucide-react';
+import { ShieldCheck, Phone, Mail, MapPin } from 'lucide-react';
 
 export function Footer() {
   return (
@@ -7,10 +7,10 @@ export function Footer() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 space-y-8">
         
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* COLUMNA 1: IDENTIDAD */}
+          {/* IDENTIDAD Y OPERADOR */}
           <div className="space-y-3 md:col-span-1">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-lg">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-lg shadow-lg shadow-emerald-500/20">
                 J
               </div>
               <span className="text-xl font-black tracking-tight text-white">JUNTOS</span>
@@ -21,12 +21,14 @@ export function Footer() {
             <p className="text-slate-400 text-[11px] leading-relaxed">
               Plataforma privada de asistencia presencial y acompañamiento logístico no clínico para citas médicas y diligencias en República Dominicana.
             </p>
-            <div className="text-[10px] font-mono text-slate-500">
-              JUNTOS ASISTENCIA SRL • RNC en formalización DGII
+            <div className="text-[10px] font-mono text-slate-400 bg-slate-900 border border-slate-800 p-2.5 rounded-xl space-y-0.5">
+              <p className="text-white font-bold">JUNTOS Asistencia RD</p>
+              <p className="text-slate-300">Titular y Operador: Odelkis Domínguez</p>
+              <p className="text-slate-500">Facturación y comprobantes NCF disponibles</p>
             </div>
           </div>
 
-          {/* COLUMNA 2: PROTOCOLO Y SEGURIDAD */}
+          {/* PROTOCOLO Y SEGURIDAD */}
           <div className="space-y-2">
             <h4 className="text-white font-bold uppercase tracking-wider text-[11px]">Seguridad y Protocolo</h4>
             <ul className="space-y-1.5 text-[11px]">
@@ -34,19 +36,19 @@ export function Footer() {
                 <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
                 <span>Certificado No Antecedentes PGR</span>
               </li>
-              <li>Soporte strictly no clínico (Ley 42-01)</li>
+              <li>Soporte estrictamente no clínico (Ley 42-01)</li>
               <li>Identificación mediante código PIN único</li>
               <li>Cobertura: Gran Santo Domingo y Santiago</li>
             </ul>
           </div>
 
-          {/* COLUMNA 3: LEGAL Y NORMATIVAS */}
+          {/* MARCO LEGAL */}
           <div className="space-y-2">
-            <h4 className="text-white font-bold uppercase tracking-wider text-[11px]">Marco Legal</h4>
+            <h4 className="text-white font-bold uppercase tracking-wider text-[11px]">Marco Legal Dominicano</h4>
             <ul className="space-y-1.5 text-[11px]">
               <li>
                 <Link href="/terminos" className="hover:text-emerald-400 transition">
-                  Términos del Servicio y Tarifas
+                  Términos de Servicio y Tarifas
                 </Link>
               </li>
               <li>
@@ -56,23 +58,30 @@ export function Footer() {
               </li>
               <li>
                 <Link href="/cancelacion" className="hover:text-emerald-400 transition">
-                  Cancelación y Reembolsos
+                  Políticas de Cancelación y Reembolso
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* COLUMNA 4: CONTACTO DIRECTO */}
+          {/* CONTACTO DIRECTO */}
           <div className="space-y-2">
             <h4 className="text-white font-bold uppercase tracking-wider text-[11px]">Mesa Central de Despacho</h4>
             <div className="space-y-1.5 text-[11px]">
               <div className="flex items-center gap-2">
                 <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>+1 (809) 541-2000 / WhatsApp</span>
+                <a 
+                  href="https://wa.me/18297818886" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="hover:text-emerald-400 transition"
+                >
+                  +1 (829) 781-8886 / WhatsApp
+                </a>
               </div>
               <div className="flex items-center gap-2">
                 <Mail className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>operaciones@juntos.do</span>
+                <span>odelkis.cantante@gmail.com</span>
               </div>
               <div className="flex items-center gap-2">
                 <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -86,8 +95,8 @@ export function Footer() {
         </div>
 
         <div className="pt-6 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 gap-3">
-          <p>© {new Date().getFullYear()} JUNTOS Asistencia RD. Todos los derechos reservados.</p>
-          <p className="font-mono text-[10px]">Cifrado SSL 256-bit • Pagos con tarjeta vía procesador bancario certificado</p>
+          <p>© {new Date().getFullYear()} JUNTOS Asistencia RD. Operado por Odelkis Domínguez. Todos los derechos reservados.</p>
+          <p className="font-mono text-[10px]">Cifrado SSL 256-bit • Cumplimiento Ley 172-13 y Ley 42-01</p>
         </div>
 
       </div>
