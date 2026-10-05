@@ -1,11 +1,8 @@
+'use client';
+
 import { Navbar } from '@/components/navbar';
 import { Footer } from '@/components/footer';
-import { ShieldAlert, CheckCircle, Scale } from 'lucide-react';
-
-export const metadata = {
-  title: 'Términos y Condiciones de Uso | JUNTOS Asistencia RD',
-  description: 'Condiciones de contratación, tarifas y alcance de asistencia no clínica conforme a la Ley General de Salud 42-01.'
-};
+import { Scale } from 'lucide-react';
 
 export default function TerminosPage() {
   return (
@@ -29,31 +26,24 @@ export default function TerminosPage() {
               JUNTOS Asistencia es una plataforma tecnológica y de coordinación de personal para el <strong>acompañamiento humano, soporte logístico, movilidad asistida y apoyo en trámites presenciales</strong>. 
             </p>
             <p>
-              En estricto cumplimiento con la <strong>Ley General de Salud No. 42-01</strong> de la República Dominicana, los acompañantes <strong>NO realizan actos médicos, diagnósticos, curaciones invasivas ni prescripción ni administración parenteral de medicamentos</strong>. El servicio no sustituye la atención médica especializada, servicio de ambulancia ni internamiento clínico.
+              En estricto cumplimiento con la <strong>Ley General de Salud No. 42-01</strong> de la República Dominicana, los acompañantes <strong>NO realizan actos médicos, diagnósticos, curaciones invasivas ni administración parenteral de medicamentos</strong>. El servicio no sustituye la atención médica especializada ni el transporte de emergencia.
             </p>
           </section>
 
           <section className="space-y-2">
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider">2. Verificación de Antecedentes y Personal</h2>
+            <h2 className="text-sm font-bold text-white uppercase tracking-wider">2. Verificación de Personal</h2>
             <p>
-              Todos los acompañantes postulados en la plataforma deben presentar obligatoriamente su <strong>Certificado de No Antecedentes Penales emitido por la Procuraduría General de la República (PGR)</strong> con una vigencia no mayor a 90 días al momento de la admisión, el cual es sujeto a renovación periódica semestral. JUNTOS verifica la autenticidad del documento mediante el código de barras oficial de la PGR.
+              Los acompañantes registrados presentan Certificado de No Antecedentes Penales emitido por la Procuraduría General de la República (PGR) verificado previo a su activación.
             </p>
           </section>
 
           <section className="space-y-2">
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider">3. Tarifas, Mínimo de Horas y Cobertura</h2>
+            <h2 className="text-sm font-bold text-white uppercase tracking-wider">3. Tarifas y Horarios</h2>
             <ul className="list-disc pl-5 space-y-1">
-              <li><strong>Tarifa Estándar Diurna:</strong> RD$ 900 / hora (o su equivalente aproximado de ~$15 USD para clientes de la diáspora con tarjetas internacionales).</li>
-              <li><strong>Mínimo de Contratación:</strong> Cada servicio requiere un mínimo de dos (2) horas para cubrir los costos de traslado y desplazamiento del acompañante asignado.</li>
-              <li><strong>Horario Operativo:</strong> De 7:00 AM a 7:00 PM. Servicios en horario nocturno o fuera del polígono metropolitano (Gran Santo Domingo y Santiago) requieren previa cotización con la Mesa Central de Despacho.</li>
+              <li><strong>Tarifa Diurna:</strong> RD$ 900 / hora (~$15 USD).</li>
+              <li><strong>Mínimo de Contratación:</strong> Dos (2) horas para cobertura de desplazamiento.</li>
+              <li><strong>Horario Operativo:</strong> 7:00 AM a 7:00 PM en Gran Santo Domingo y Santiago.</li>
             </ul>
-          </section>
-
-          <section className="space-y-2">
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider">4. Protocolo Antifraude de Inicio y Cierre (PIN)</h2>
-            <p>
-              Para garantizar que el servicio se preste efectivamente en tiempo y forma, cada solicitud genera dos códigos PIN numéricos únicos y confidenciales. El cliente o familiar entrega el PIN de inicio al acompañante al encontrarse en el centro de salud o domicilio, y el PIN de cierre al concluir el servicio.
-            </p>
           </section>
 
         </div>
