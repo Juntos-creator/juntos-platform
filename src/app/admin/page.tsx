@@ -163,10 +163,9 @@ export default function AdminDashboardPage() {
 
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
 
-        {/* TARJETAS DE MÉTRICAS EJECUTIVAS */}
+        {/* TARJETAS DE MÉTRICAS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           
-          {/* Solicitudes Totales */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <div>
@@ -182,7 +181,6 @@ export default function AdminDashboardPage() {
             </p>
           </div>
 
-          {/* En curso */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <div>
@@ -201,7 +199,6 @@ export default function AdminDashboardPage() {
             </Link>
           </div>
 
-          {/* Facturado */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <div>
@@ -217,7 +214,6 @@ export default function AdminDashboardPage() {
             <p className="text-xs text-slate-500 font-medium mt-4">Transacciones en línea DOP</p>
           </div>
 
-          {/* Postulaciones RRHH */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
               <div>
@@ -238,7 +234,7 @@ export default function AdminDashboardPage() {
 
         </div>
 
-        {/* BANDEJA Y PERFIL */}
+        {/* LISTA Y PERFIL */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
@@ -287,7 +283,6 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* TARJETA DEL PERFIL DE ADMINISTRADOR */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
             <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
               <div className="w-12 h-12 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-sm">
