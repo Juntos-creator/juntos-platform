@@ -179,7 +179,7 @@ function LiveRoomContent() {
         setClientProfile(cli);
       }
 
-      // Cargar Mensajes directamente desde service_messages
+      // Cargar Mensajes iniciales directamente desde service_messages
       const { data: msgs } = await supabase
         .from('service_messages')
         .select('*')
@@ -193,12 +193,29 @@ function LiveRoomContent() {
     loadData();
   }, [rawId, supabase]);
 
-  // Suscripción Realtime Unificada para Chat y Estado del Servicio
+  // Suscripción Realtime Unificada + Polling de Respaldo Continuo (cada 2 segundos)
   useEffect(() => {
     if (!service?.id) return;
 
     const currentServiceId = service.id;
 
+    // Función de sondeo periódico de respaldo
+    async function fetchChatUpdates() {
+      const { data } = await supabase
+        .from('service_messages')
+        .select('*')
+        .or(`service_id.eq.${currentServiceId},service_request_id.eq.${currentServiceId}`)
+        .order('created_at', { ascending: true });
+
+      if (data && data.length > 0) {
+        setChatMessages(data);
+      }
+    }
+
+    // 1. Polling de respaldo cada 2 segundos
+    const pollInterval = setInterval(fetchChatUpdates, 2000);
+
+    // 2. Suscripción instantánea mediante WebSocket Realtime
     const channel = supabase
       .channel(`live_room_chat_${currentServiceId}`)
       .on(
@@ -232,6 +249,7 @@ function LiveRoomContent() {
       .subscribe();
 
     return () => {
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
   }, [service?.id, supabase]);
