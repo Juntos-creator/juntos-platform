@@ -19,7 +19,9 @@ import {
   LogOut, 
   ArrowRight,
   HandMetal,
-  Check
+  Check,
+  Banknote,
+  Award
 } from 'lucide-react';
 
 export default function CompanionDashboardPage() {
@@ -124,8 +126,6 @@ export default function CompanionDashboardPage() {
       .from('service_requests')
       .update({
         companion_id: currentUser.id,
-        companion_name: profile?.full_name || currentUser.email,
-        companion_phone: profile?.phone || '8095550192',
         status: 'ASSIGNED'
       })
       .eq('id', orderId);
@@ -149,7 +149,7 @@ export default function CompanionDashboardPage() {
       : (activeOrder.pin_end || activeOrder.checkout_pin);
 
     if (pinInput.trim() !== String(pinEsperado).trim()) {
-      setPinError(`PIN de ${tipo === 'INICIO' ? 'encuentro' : 'salida'} incorrecto. Pídeselo al paciente.`);
+      setPinError(`PIN de ${tipo === 'INICIO' ? 'encuentro' : 'salida'} incorrecto. Pídeselo al solicitante.`);
       setActionLoading(false);
       return;
     }
@@ -186,6 +186,11 @@ export default function CompanionDashboardPage() {
     if (currentUser) await fetchAllServices(currentUser.id);
     setActionLoading(false);
   }
+
+  // Total acumulado por el acompañante (RD$ 750 por servicio)
+  const totalGanancias = pastOrders.reduce((acc, curr) => {
+    return acc + Number(curr.companion_fee || 750);
+  }, 0);
 
   if (loading) {
     return (
@@ -247,6 +252,35 @@ export default function CompanionDashboardPage() {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
 
+        {/* RESUMEN FINANCIERO (CONCILIACIÓN OFICIAL JUNTOS) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-1">
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Servicios Concluidos</span>
+            <div className="flex items-center gap-2">
+              <Award className="w-5 h-5 text-emerald-400" />
+              <p className="text-2xl font-black text-white">{pastOrders.length}</p>
+            </div>
+          </div>
+          
+          <div className="bg-slate-900/80 border border-emerald-500/30 rounded-2xl p-4 space-y-1 shadow-lg shadow-emerald-950/20">
+            <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">Balance Acumulado</span>
+            <div className="flex items-center gap-2">
+              <Banknote className="w-5 h-5 text-emerald-400" />
+              <p className="text-2xl font-black text-emerald-400 font-mono">
+                RD$ {totalGanancias.toLocaleString()}
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-1 col-span-2 sm:col-span-1">
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Tarifa por Turno</span>
+            <div className="flex items-baseline gap-1.5">
+              <p className="text-2xl font-black text-white font-mono">RD$ 750</p>
+              <span className="text-[10px] font-bold text-slate-500 uppercase">fijo / servicio</span>
+            </div>
+          </div>
+        </div>
+
         {/* 1. SERVICIO ACTIVO ASIGNADO */}
         {activeOrder ? (
           <div className={`rounded-3xl border p-6 space-y-6 shadow-2xl transition ${
@@ -279,10 +313,10 @@ export default function CompanionDashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
                 <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">
-                  Información del Solicitante / Paciente
+                  Información del Solicitante / Usuario
                 </span>
                 <h3 className="text-lg font-black text-white">
-                  {activeOrder.recipient_name || activeOrder.client_name || activeOrder.for_who_name || 'Paciente'}
+                  {activeOrder.recipient_name || activeOrder.client_name || activeOrder.for_who_name || 'Usuario Asignado'}
                 </h3>
                 <div className="flex items-center gap-3 pt-1">
                   <a
@@ -339,7 +373,7 @@ export default function CompanionDashboardPage() {
               {activeOrder.status === 'ASSIGNED' ? (
                 <div className="space-y-3">
                   <p className="text-xs text-slate-400">
-                    Pídele al paciente su <strong>PIN de Encuentro</strong> para comenzar la jornada:
+                    Pídele al solicitante su <strong>PIN de Encuentro</strong> para comenzar la jornada:
                   </p>
                   <div className="flex gap-2 max-w-sm">
                     <input
@@ -366,7 +400,7 @@ export default function CompanionDashboardPage() {
                     <span>Servicio en progreso presencial</span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Pídele el <strong>PIN de Salida</strong> para finalizar la orden:
+                    Pídele el <strong>PIN de Salida</strong> para finalizar la orden y acreditar tus RD$ 750:
                   </p>
                   <div className="flex gap-2 max-w-sm">
                     <input
@@ -392,7 +426,7 @@ export default function CompanionDashboardPage() {
           </div>
         ) : null}
 
-        {/* 2. SOLICITUDES DISPONIBLES EN TIEMPO REAL (CREADAS DESDE EL CELULAR) */}
+        {/* 2. SOLICITUDES DISPONIBLES EN TIEMPO REAL */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <div className="flex items-center gap-2">
@@ -425,10 +459,13 @@ export default function CompanionDashboardPage() {
                       <span className="text-slate-500 text-[11px]">
                         {new Date(ord.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
+                      <span className="bg-emerald-950 text-emerald-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded">
+                        Pago: RD$ 750
+                      </span>
                     </div>
 
                     <p className="text-sm font-bold text-white">
-                      {ord.recipient_name || ord.client_name || ord.for_who_name || 'Paciente'}
+                      {ord.recipient_name || ord.client_name || ord.for_who_name || 'Usuario'}
                     </p>
 
                     <p className="text-slate-400 flex items-center gap-1 text-[11px]">
@@ -451,7 +488,7 @@ export default function CompanionDashboardPage() {
           </div>
         </div>
 
-        {/* 3. HISTORIAL DE SERVICIOS */}
+        {/* 3. HISTORIAL DE SERVICIOS Y PAGOS */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <h3 className="text-sm font-black text-white uppercase tracking-wider">Historial de Turnos Completados</h3>
@@ -466,12 +503,14 @@ export default function CompanionDashboardPage() {
                 <div key={ord.id} className="py-3 flex justify-between items-center text-xs">
                   <div>
                     <span className="font-mono text-[10px] text-slate-500">#{ord.id.slice(0, 8).toUpperCase()}</span>
-                    <p className="font-bold text-white">{ord.recipient_name || ord.client_name || 'Paciente'}</p>
+                    <p className="font-bold text-white">{ord.recipient_name || ord.client_name || 'Usuario'}</p>
                     <p className="text-[11px] text-slate-400">📍 {ord.facility_or_location || ord.address}</p>
                   </div>
                   <div className="text-right">
-                    <span className="text-emerald-400 font-mono font-bold">RD$ {Number(ord.rate_total || 1800).toLocaleString()}</span>
-                    <span className="text-[10px] text-slate-500 block">Completado</span>
+                    <span className="text-emerald-400 font-mono font-bold block">
+                      +RD$ {Number(ord.companion_fee || 750).toLocaleString()}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono">Acreditado</span>
                   </div>
                 </div>
               ))
