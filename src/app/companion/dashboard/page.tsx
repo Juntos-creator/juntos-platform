@@ -40,7 +40,7 @@ export default function CompanionDashboardPage() {
   const [pinSuccess, setPinSuccess] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Chat en Vivo
+  // Chat en Vivo sincronizado
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMsg, setSendingMsg] = useState(false);
@@ -89,7 +89,7 @@ export default function CompanionDashboardPage() {
     };
   }, [router, supabase, currentUser?.id]);
 
-  // Cargar y suscribir al Chat en tiempo real cuando hay orden activa
+  // Sincronización del Chat en tiempo real con el celular
   useEffect(() => {
     if (!activeOrder?.id) {
       setMessages([]);
@@ -108,8 +108,9 @@ export default function CompanionDashboardPage() {
 
     loadChatMessages();
 
+    // Canal bidireccional en vivo
     const msgChannel = supabase
-      .channel(`chat-${activeOrder.id}`)
+      .channel(`chat-sync-${activeOrder.id}`)
       .on(
         'postgres_changes',
         {
@@ -119,7 +120,11 @@ export default function CompanionDashboardPage() {
           filter: `service_request_id=eq.${activeOrder.id}`
         },
         (payload) => {
-          setMessages((prev) => [...prev, payload.new]);
+          setMessages((prev) => {
+            const existe = prev.some((m) => m.id === payload.new.id);
+            if (existe) return prev;
+            return [...prev, payload.new];
+          });
         }
       )
       .subscribe();
@@ -160,7 +165,7 @@ export default function CompanionDashboardPage() {
     }
   }
 
-  // Tomar servicio
+  // Tomar un pedido
   async function handleTomarServicio(orderId: string) {
     if (activeOrder) {
       alert(`Ya tienes un servicio en curso (#${activeOrder.id.slice(0, 8).toUpperCase()}). Debes finalizarlo antes.`);
@@ -198,17 +203,20 @@ export default function CompanionDashboardPage() {
     const texto = newMessage.trim();
     setNewMessage('');
 
+    const remitente = profile?.full_name || currentUser.email?.split('@')[0] || 'Acompañante';
+
     const { error } = await supabase
       .from('service_messages')
       .insert({
         service_request_id: activeOrder.id,
         sender_id: currentUser.id,
-        sender_name: profile?.full_name || currentUser.email?.split('@')[0] || 'Acompañante',
+        sender_name: remitente,
         message: texto
       });
 
     if (error) {
       console.error('Error al enviar mensaje:', error.message);
+      alert('No se pudo enviar el mensaje: ' + error.message);
     }
     setSendingMsg(false);
   }
@@ -246,7 +254,7 @@ export default function CompanionDashboardPage() {
 
       if (!error) {
         setPinInput('');
-        setPinSuccess('¡Check-In completado con éxito! Servicio en progreso.');
+        setPinSuccess('¡Check-In completado con éxito! Servicio en curso.');
         if (currentUser) await fetchAllServices(currentUser.id);
       } else {
         setPinError('Error: ' + error.message);
@@ -264,7 +272,7 @@ export default function CompanionDashboardPage() {
 
       if (!error) {
         setPinInput('');
-        setPinSuccess('¡Servicio finalizado con éxito! RD$ 750 acreditados.');
+        setPinSuccess('¡Servicio finalizado con éxito! RD$ 750 acreditados a tu balance.');
         setActiveOrder(null);
         if (currentUser) await fetchAllServices(currentUser.id);
       } else {
@@ -278,7 +286,7 @@ export default function CompanionDashboardPage() {
   // Protocolo SOS
   async function handleActivarSOS() {
     if (!activeOrder) return;
-    if (!confirm('🚨 ¿DESEAS ACTIVAR EL PROTOCOLO SOS? Alertará de urgencia a la Central.')) return;
+    if (!confirm('🚨 ¿DESEAS ACTIVAR EL PROTOCOLO SOS? Esto alertará a la Central.')) return;
 
     setActionLoading(true);
     await supabase
@@ -291,14 +299,14 @@ export default function CompanionDashboardPage() {
   }
 
   const totalGanancias = pastOrders.reduce((acc, curr) => acc + Number(curr.companion_fee || 750), 0);
-  const destinoUbicacion = activeOrder?.facility_or_location || activeOrder?.address || 'Destino asignado';
+  const destinoUbicacion = activeOrder?.facility_or_location || activeOrder?.address || 'Destino coordinado';
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3 font-sans">
         <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin" />
         <p className="text-xs font-mono tracking-widest uppercase">
-          Sincronizando consola operativa...
+          Sincronizando sala de operaciones en vivo...
         </p>
       </div>
     );
@@ -476,8 +484,8 @@ export default function CompanionDashboardPage() {
               </div>
             </div>
 
-            {/* CHAT OPERATIVO EN VIVO */}
-            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
+            {/* CHAT OPERATIVO EN VIVO (SINCRONIZADO CON EL CELULAR) */}
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-inner">
               <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                 <div className="flex items-center gap-2">
                   <MessageCircle className="w-4 h-4 text-emerald-400" />
@@ -485,18 +493,19 @@ export default function CompanionDashboardPage() {
                     Chat Operativo del Servicio
                   </h4>
                 </div>
-                <span className="text-[10px] font-mono bg-emerald-950 border border-emerald-500/40 text-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <span className="text-[10px] font-mono bg-emerald-950 border border-emerald-500/40 text-emerald-400 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   EN VIVO
                 </span>
               </div>
 
-              {/* Mensajes del chat */}
-              <div className="h-44 overflow-y-auto space-y-2 pr-1 font-sans text-xs">
+              {/* Contenedor de mensajes */}
+              <div className="h-48 overflow-y-auto space-y-2.5 pr-1 font-sans text-xs">
                 {messages.length === 0 ? (
-                  <p className="text-slate-500 text-center py-12 text-[11px]">
-                    No hay mensajes aún. Escribe para coordinar el encuentro.
-                  </p>
+                  <div className="text-slate-500 text-center py-12 text-[11px] space-y-1">
+                    <p>No hay mensajes en este servicio.</p>
+                    <p className="text-[10px] text-slate-600">Escribe aquí para comunicarte con el usuario en su móvil.</p>
+                  </div>
                 ) : (
                   messages.map((m) => {
                     const esMio = m.sender_id === currentUser?.id;
@@ -505,14 +514,14 @@ export default function CompanionDashboardPage() {
                         key={m.id}
                         className={`flex flex-col ${esMio ? 'items-end' : 'items-start'}`}
                       >
-                        <span className="text-[10px] text-slate-400 font-mono mb-0.5">
+                        <span className="text-[9px] text-slate-400 font-mono mb-0.5 px-1">
                           {m.sender_name || (esMio ? 'Tú' : 'Usuario')}
                         </span>
                         <div
-                          className={`px-3 py-2 rounded-2xl max-w-[80%] break-words ${
+                          className={`px-3.5 py-2 rounded-2xl max-w-[80%] break-words text-xs ${
                             esMio
-                              ? 'bg-emerald-500 text-slate-950 font-bold rounded-br-none'
-                              : 'bg-slate-900 border border-slate-800 text-white rounded-bl-none'
+                              ? 'bg-emerald-500 text-slate-950 font-bold rounded-br-none shadow-md'
+                              : 'bg-slate-900 border border-slate-800 text-white rounded-bl-none shadow'
                           }`}
                         >
                           {m.message}
@@ -525,18 +534,18 @@ export default function CompanionDashboardPage() {
               </div>
 
               {/* Formulario de envío */}
-              <form onSubmit={handleSendMessage} className="flex gap-2 pt-1 border-t border-slate-800">
+              <form onSubmit={handleSendMessage} className="flex gap-2 pt-2 border-t border-slate-800">
                 <input
                   type="text"
                   placeholder="Escribe un mensaje al solicitante..."
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-emerald-500"
+                  className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-emerald-500 transition"
                 />
                 <button
                   type="submit"
                   disabled={sendingMsg || !newMessage.trim()}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1 transition disabled:opacity-50 cursor-pointer"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer shadow-lg shadow-emerald-500/20"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Enviar</span>
