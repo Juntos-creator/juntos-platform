@@ -2,12 +2,18 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.juntos.app',
-  appName: 'Juntos',
+  appName: 'JUNTOS Asistencia RD',
   webDir: 'public',
   server: {
-    // Si tu URL de Vercel tiene otro nombre, cámbiala aquí:
     url: 'https://juntos-platform.vercel.app',
-    cleartext: true
+    cleartext: false
+  },
+  plugins: {
+    SplashScreen: {
+      launchShowDuration: 2000,
+      backgroundColor: '#020617', // Fondo corporativo slate-950
+      showSpinner: false
+    }
   }
 };
 
