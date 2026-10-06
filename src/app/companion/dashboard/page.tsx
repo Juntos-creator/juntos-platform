@@ -114,27 +114,55 @@ export default function CompanionDashboardPage() {
     }
   }
 
-  // 1. Tomar un pedido
+  // 1. Tomar un pedido con diagnóstico directo
   async function handleTomarServicio(orderId: string) {
-    if (!currentUser) return;
+    if (activeOrder) {
+      alert(`Ya tienes el servicio #${activeOrder.id.slice(0, 8).toUpperCase()} en curso. Debes finalizarlo antes de aceptar uno nuevo.`);
+      return;
+    }
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const sessionUser = sessionData?.session?.user || currentUser;
+
+    if (!sessionUser) {
+      alert('Error de sesión: No se identificó el usuario. Por favor recarga la página o inicia sesión de nuevo.');
+      return;
+    }
+
     setActionLoading(true);
     setPinError(null);
     setPinSuccess(null);
 
-    const { error } = await supabase
-      .from('service_requests')
-      .update({
-        companion_id: currentUser.id,
-        status: 'ASSIGNED'
-      })
-      .eq('id', orderId);
+    try {
+      const { data, error } = await supabase
+        .from('service_requests')
+        .update({
+          companion_id: sessionUser.id,
+          status: 'ASSIGNED'
+        })
+        .eq('id', orderId)
+        .select();
 
-    if (!error) {
-      await fetchAllServices(currentUser.id);
-    } else {
-      alert('Error al tomar el servicio: ' + error.message);
+      if (error) {
+        alert('Error devuelto por Supabase: ' + error.message);
+        setActionLoading(false);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        alert('Aviso de RLS: Supabase no actualizó ninguna fila. Ejecuta el script SQL en el Editor para autorizar la actualización de service_requests.');
+        setActionLoading(false);
+        return;
+      }
+
+      // Asignar de inmediato localmente para mostrar la tarjeta superior sin demora
+      setActiveOrder(data[0]);
+      await fetchAllServices(sessionUser.id);
+    } catch (err: any) {
+      alert('Excepción al tomar el servicio: ' + (err.message || err));
+    } finally {
+      setActionLoading(false);
     }
-    setActionLoading(false);
   }
 
   // 2. Validar PIN presencial (Check-In y Check-Out)
@@ -144,7 +172,6 @@ export default function CompanionDashboardPage() {
     setPinSuccess(null);
     setActionLoading(true);
 
-    // Obtener los códigos esperados con fallback seguro
     const pinEsperadoEncuentro = String(
       activeOrder.pin_start || 
       activeOrder.checkin_pin || 
@@ -162,7 +189,6 @@ export default function CompanionDashboardPage() {
     const ingresado = pinInput.trim();
     const esperado = tipo === 'INICIO' ? pinEsperadoEncuentro : pinEsperadoSalida;
 
-    // Validación que contempla el PIN registrado o el código de respaldo
     const esValido = (ingresado === esperado) || 
       (tipo === 'INICIO' && ingresado === '1234') || 
       (tipo === 'FINAL' && ingresado === '5678');
@@ -174,7 +200,6 @@ export default function CompanionDashboardPage() {
     }
 
     if (tipo === 'INICIO') {
-      // Iniciar el servicio (Pasa a IN_PROGRESS)
       const { error } = await supabase
         .from('service_requests')
         .update({ 
@@ -186,12 +211,11 @@ export default function CompanionDashboardPage() {
       if (!error) {
         setPinInput('');
         setPinSuccess('¡Check-In completado con éxito! El servicio está en curso.');
-        await fetchAllServices(currentUser.id);
+        if (currentUser) await fetchAllServices(currentUser.id);
       } else {
         setPinError('Error de sincronización: ' + error.message);
       }
     } else {
-      // Finalizar servicio (Pasa a COMPLETED y acredita los RD$ 750)
       const { error } = await supabase
         .from('service_requests')
         .update({ 
@@ -206,7 +230,7 @@ export default function CompanionDashboardPage() {
         setPinInput('');
         setPinSuccess('¡Servicio finalizado con éxito! RD$ 750 acreditados a tu balance.');
         setActiveOrder(null);
-        await fetchAllServices(currentUser.id);
+        if (currentUser) await fetchAllServices(currentUser.id);
       } else {
         setPinError('Error de sincronización: ' + error.message);
       }
@@ -324,7 +348,7 @@ export default function CompanionDashboardPage() {
           </div>
         </div>
 
-        {/* FEEDBACK DE ÉXITO TRAS COMPLETAR CHECK-IN/OUT */}
+        {/* FEEDBACK TRAS VALIDACIÓN DE PIN */}
         {pinSuccess && (
           <div className="bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs p-4 rounded-2xl flex items-center gap-2.5 shadow-lg">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
@@ -540,11 +564,11 @@ export default function CompanionDashboardPage() {
 
                   <button
                     onClick={() => handleTomarServicio(ord.id)}
-                    disabled={actionLoading || !!activeOrder}
+                    disabled={actionLoading}
                     className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                   >
                     <Check className="w-4 h-4" />
-                    <span>{activeOrder ? 'Servicio en curso activo' : 'Aceptar y Tomar Servicio'}</span>
+                    <span>Aceptar y Tomar Servicio</span>
                   </button>
                 </div>
               ))
