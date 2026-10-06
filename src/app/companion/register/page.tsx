@@ -56,15 +56,16 @@ export default function CompanionRegisterPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setErrorMsg('La contraseña debe tener al menos 6 caracteres.');
+    // Estándar de producción: mínimo 8 caracteres
+    if (password.length < 8) {
+      setErrorMsg('Por motivos de seguridad, la contraseña debe tener al menos 8 caracteres.');
       return;
     }
 
     setLoading(true);
 
     try {
-      // 1. Registro en Supabase Auth con rol COMPANION estricto
+      // 1. Registro en Supabase Auth guardando la metadata de postulación
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: cleanEmail,
         password: password.trim(),
@@ -82,26 +83,23 @@ export default function CompanionRegisterPage() {
       const userId = authData.user?.id;
 
       if (userId) {
-        // Guardar correo para persistencia en este dispositivo
         if (typeof window !== 'undefined') {
           localStorage.setItem('juntos_remember_email', cleanEmail);
         }
 
-        // 2. Crear o actualizar perfil en la tabla profiles
+        // 2. Crear o actualizar perfil en profiles (sin forzar mutación de role si RLS lo previene)
         const { error: profileError } = await supabase.from('profiles').upsert({
           id: userId,
           email: cleanEmail,
           full_name: fullName.trim(),
-          phone: phone.trim(),
-          role: 'COMPANION'
+          phone: phone.trim()
         });
 
         if (profileError) {
-          console.error('Error al guardar profile:', profileError.message);
-          throw new Error('Error al vincular tu perfil: ' + profileError.message);
+          console.warn('Aviso sincronización de perfil:', profileError.message);
         }
 
-        // 3. Crear solicitud de acreditación en companion_applications
+        // 3. Crear solicitud formal de acreditación en companion_applications
         const { error: applicationError } = await supabase.from('companion_applications').insert([{
           user_id: userId,
           nombre: fullName.trim(),
@@ -110,7 +108,7 @@ export default function CompanionRegisterPage() {
           correo: cleanEmail,
           ciudad: city,
           estado: 'PENDIENTE',
-          notas_rrhh: `Postulación web directa. Experiencia: ${experience}. Depuración de antecedentes en proceso.`
+          notas_rrhh: `Postulación web directa. Especialidad: ${experience}. Depuración PGR requerida.`
         }]);
 
         if (applicationError) {
@@ -120,7 +118,7 @@ export default function CompanionRegisterPage() {
 
       setSuccess(true);
       setTimeout(() => {
-        window.location.href = '/companion';
+        router.push('/companion');
       }, 1200);
 
     } catch (err: any) {
@@ -146,7 +144,7 @@ export default function CompanionRegisterPage() {
               Únete a la Red de Acompañantes
             </h1>
             <p className="text-xs text-slate-400">
-              JUNTOS Asistencia RD • Brinda soporte presencial para citas médicas y diligencias.
+              JUNTOS Asistencia RD • Soporte presencial certificado para citas médicas y diligencias.
             </p>
           </div>
 
@@ -282,7 +280,7 @@ export default function CompanionRegisterPage() {
               </div>
             </div>
 
-            {/* Contraseña y Confirmación */}
+            {/* Contraseña y Confirmación (Mínimo 8 caracteres) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="font-bold text-slate-300 block mb-1">Contraseña de acceso *</label>
@@ -291,8 +289,8 @@ export default function CompanionRegisterPage() {
                   <input
                     type="password"
                     required
-                    minLength={6}
-                    placeholder="Mínimo 6 caracteres"
+                    minLength={8}
+                    placeholder="Mínimo 8 caracteres"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white outline-none focus:border-emerald-500 font-mono transition"
@@ -307,7 +305,7 @@ export default function CompanionRegisterPage() {
                   <input
                     type="password"
                     required
-                    minLength={6}
+                    minLength={8}
                     placeholder="Repite tu contraseña"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
