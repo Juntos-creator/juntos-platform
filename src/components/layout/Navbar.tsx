@@ -89,7 +89,7 @@ export function Navbar() {
                   Mi Panel Institucional
                 </Link>
                 <Link href="/services/new?type=institution" className="hover:text-juntos-green transition-colors">
-                  Solicitar para Paciente
+                  Solicitar para Usuario
                 </Link>
               </>
             )}

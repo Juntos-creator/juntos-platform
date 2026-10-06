@@ -538,7 +538,7 @@ function LiveRoomContent() {
               </div>
 
               <div className="border-t border-slate-800/80 pt-3 text-xs text-slate-300 space-y-1">
-                <p><strong className="text-white">Paciente:</strong> {service.recipient_name || service.client_name || 'No especificado'}</p>
+                <p><strong className="text-white">Usuario:</strong> {service.recipient_name || service.client_name || 'No especificado'}</p>
                 <p><strong className="text-white">Punto de Encuentro:</strong> {service.facility_or_location || service.address || 'Distrito Nacional'}</p>
                 <p><strong className="text-white">Familiar Responsable:</strong> {clientProfile?.full_name || 'Contacto Registrado'} ({clientProfile?.phone || service.recipient_phone || '809-541-2000'})</p>
               </div>

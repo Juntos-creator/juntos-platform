@@ -276,15 +276,15 @@ export default function OperacionesPage() {
   }
 
   // 8. Mensajería WhatsApp
-  function handleWhatsApp(tipo: 'PACIENTE' | 'ACOMPANANTE') {
+  function handleWhatsApp(tipo: 'Usuario' | 'ACOMPANANTE') {
     if (!selectedService) return;
-    const telefono = tipo === 'PACIENTE' ? selectedService.client_phone : selectedService.companion_phone;
+    const telefono = tipo === 'Usuario' ? selectedService.client_phone : selectedService.companion_phone;
     if (!telefono) return;
 
     const num = telefono.replace(/[^0-9]/g, '');
     const telFinal = num.length === 10 ? '1' + num : num;
 
-    const mensaje = tipo === 'PACIENTE'
+    const mensaje = tipo === 'Usuario'
       ? `🟢 *JUNTOS ASISTENCIA RD - Mesa de Operaciones*\n\nHola *${selectedService.client_name}*, te confirmamos tu servicio:\n📍 *Punto:* ${selectedService.address}\n👤 *Acompañante:* ${selectedService.companion_name || 'En despacho'}\n🔑 *PIN de Encuentro:* ${selectedService.checkin_pin}\n🔑 *PIN de Salida:* ${selectedService.checkout_pin}`
       : `🟢 *JUNTOS ASISTENCIA RD - Despacho Operativo*\n\nEstimado/a *${selectedService.companion_name}*, tienes un servicio asignado:\n📍 *Destino:* ${selectedService.address}\n👤 *Solicitante:* ${selectedService.client_name}\n📞 *Contacto:* ${selectedService.client_phone}`;
 
@@ -646,7 +646,7 @@ export default function OperacionesPage() {
                   </a>
 
                   <button
-                    onClick={() => handleWhatsApp('PACIENTE')}
+                    onClick={() => handleWhatsApp('Usuario')}
                     className="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 p-2.5 rounded-xl text-center font-bold text-emerald-400 transition cursor-pointer"
                   >
                     <MessageCircle className="w-3.5 h-3.5 inline mr-1" /> WhatsApp Usuario

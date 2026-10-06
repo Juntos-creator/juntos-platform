@@ -163,7 +163,7 @@ export default function ProfilePage() {
 
             <div className="space-y-1 text-xs">
               <p className="text-lg font-black text-white">
-                Paciente: {citaActiva.recipient_name || 'Paciente Registrado'}
+                Usuario: {citaActiva.recipient_name || 'Usuario Registrado'}
               </p>
               <p className="text-slate-400 flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -216,7 +216,7 @@ export default function ProfilePage() {
                         #{srv.id.slice(0, 8).toUpperCase()}
                       </span>
                       <span className="font-bold text-white">
-                        {srv.recipient_name || 'Paciente'}
+                        {srv.recipient_name || 'Usuario'}
                       </span>
                       <span className="bg-slate-950 text-emerald-400 border border-slate-800 text-[10px] font-mono px-2 py-0.5 rounded">
                         {srv.status}

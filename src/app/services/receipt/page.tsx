@@ -126,8 +126,8 @@ function ReceiptContent() {
 
             <div className="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-4 space-y-2">
               <div className="flex justify-between">
-                <span className="text-slate-400">Paciente / Receptor:</span>
-                <span className="font-bold text-white">{service?.recipient_name || service?.client_name || 'Paciente'}</span>
+                <span className="text-slate-400">Usuario / Receptor:</span>
+                <span className="font-bold text-white">{service?.recipient_name || service?.client_name || 'Usuario'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Punto de Asistencia:</span>

@@ -406,7 +406,7 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
                   {service.status === 'ASSIGNED' && (
                     <form onSubmit={handleVerifyCheckin} className="space-y-2">
                       <label className="text-xs font-bold text-slate-300 block">
-                        Ingresa el PIN de Check-In (dictado por el paciente al encontrarse):
+                        Ingresa el PIN de Check-In (dictado por el Usuario al encontrarse):
                       </label>
                       <div className="flex gap-2">
                         <input

@@ -4,7 +4,7 @@ export async function POST(req: Request) {
   try {
     const { 
       telefono, 
-      nombrePaciente, 
+      nombreUsuario, 
       nombreSolicitante, 
       fecha, 
       direccion, 
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       cleanPhone = '1' + cleanPhone; // Código de país RD (+1)
     }
 
-    const mensaje = `🟢 *JUNTOS - Acompañamiento Confirmado*\n\nHola *${nombrePaciente}*, te confirmamos tu servicio de asistencia:\n\n📅 *Fecha:* ${fecha}\n📍 *Punto:* ${direccion}\n👤 *Acompañante:* ${nombreAcompanante || 'Personal en camino'}\n\nProgramado por: ${nombreSolicitante || 'Familiar'}.\nCualquier duda, nuestro equipo de soporte está disponible.`;
+    const mensaje = `🟢 *JUNTOS - Acompañamiento Confirmado*\n\nHola *${nombreUsuario}*, te confirmamos tu servicio de asistencia:\n\n📅 *Fecha:* ${fecha}\n📍 *Punto:* ${direccion}\n👤 *Acompañante:* ${nombreAcompanante || 'Personal en camino'}\n\nProgramado por: ${nombreSolicitante || 'Familiar'}.\nCualquier duda, nuestro equipo de soporte está disponible.`;
 
     // Si usas Twilio:
     if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {

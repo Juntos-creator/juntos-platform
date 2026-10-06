@@ -130,7 +130,7 @@ export default function TrackingPage() {
                       {userRole !== 'COMPANION' && <ShieldCheck className="w-4 h-4 text-juntos-blue" />}
                   </h3>
                   <p className="text-sm text-slate-500">
-                      {userRole === 'COMPANION' ? 'Paciente (78 años)' : 'Enfermera Auxiliar • 5.0 ⭐'}
+                      {userRole === 'COMPANION' ? 'Usuario (78 años)' : 'Enfermera Auxiliar • 5.0 ⭐'}
                   </p>
                 </div>
               </div>
@@ -168,7 +168,7 @@ export default function TrackingPage() {
                   <Phone className="w-4 h-4 mr-2" /> Llamar
                 </Button>
                 
-                {/* Idealmente, solo el acompañante o el admin deberían poder hacer Check-in/out para evitar errores del paciente */}
+                {/* Idealmente, solo el acompañante o el admin deberían poder hacer Check-in/out para evitar errores del Usuario */}
                 {userRole === 'COMPANION' && encounterState === 'waiting' && (
                   <Button 
                     className="w-2/3 h-14 text-white font-bold bg-juntos-blue hover:bg-juntos-blue/90"
@@ -187,10 +187,10 @@ export default function TrackingPage() {
                   </Button>
                 )}
                 
-                {/* Si soy paciente y está esperando o iniciado, le muestro que espere */}
+                {/* Si soy Usuario y está esperando o iniciado, le muestro que espere */}
                 {userRole !== 'COMPANION' && encounterState !== 'finished' && (
                     <div className="hidden">
-                        {/* El paciente no controla el check-in, lo ve cuando el acompañante lo hace */}
+                        {/* El Usuario no controla el check-in, lo ve cuando el acompañante lo hace */}
                     </div>
                 )}
 
