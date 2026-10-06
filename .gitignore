@@ -20,3 +20,6 @@ next-env.d.ts
 *.rar
 *.zip
 
+.env.local
+*.rar
+*.zip
