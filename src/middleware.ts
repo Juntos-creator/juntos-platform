@@ -21,9 +21,7 @@ export async function middleware(request: NextRequest) {
             request.cookies.set(name, value)
           );
           response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
+            request,
           });
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
@@ -33,38 +31,46 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // 1. Obtener usuario de forma segura en el servidor
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
+  const path = request.nextUrl.pathname;
 
-  // 2. Proteger la ruta crítica /admin y cualquier subruta (/admin/*)
-  if (pathname.startsWith('/admin')) {
-    if (!user) {
-      const loginUrl = new URL('/login', request.url);
-      loginUrl.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(loginUrl);
-    }
+  // 1. RUTAS COMPLETAMENTE PÚBLICAS (Nunca deben redirigir a /login)
+  const isPublicRoute =
+    path === '/' ||
+    path.startsWith('/login') ||
+    path.startsWith('/register') ||
+    path.startsWith('/auth') ||
+    path.startsWith('/privacidad') ||
+    path.startsWith('/terminos');
 
-    // 3. Validar rol de administrador en la tabla 'profiles'
+  // Si no está autenticado y quiere entrar a una ruta protegida
+  if (!user && !isPublicRoute) {
+    const redirectUrl = new URL('/login', request.url);
+    redirectUrl.searchParams.set('redirect', path);
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  // 2. Si ya está autenticado e intenta ir a /login o /register, NO bloquear el Home (/)
+  // Solo redirigir si intenta entrar a login/register teniendo sesión activa
+  if (user && (path === '/login' || path === '/register')) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
 
-    if (!profile || (profile.role !== 'ADMIN' && profile.role !== 'AUDITOR')) {
-      return NextResponse.redirect(new URL('/', request.url));
-    }
-  }
+    const role = profile?.role || user.user_metadata?.role;
 
-  // 4. Proteger rutas de creación de servicios para usuarios no autenticados
-  if (pathname.startsWith('/services/new') || pathname.startsWith('/services/live')) {
-    if (!user) {
-      const loginUrl = new URL('/login', request.url);
-      loginUrl.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(loginUrl);
+    if (role === 'ADMIN' || user.email?.toLowerCase() === 'odel_kiss@hotmail.com') {
+      return NextResponse.redirect(new URL('/admin/operations', request.url));
     }
+    if (role === 'COMPANION' || role === 'ACOMPANANTE') {
+      return NextResponse.redirect(new URL('/companion/dashboard', request.url));
+    }
+    return NextResponse.redirect(new URL('/profile', request.url));
   }
 
   return response;
@@ -73,10 +79,10 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Aplica a todas las rutas excepto:
+     * Aplica el middleware a todas las rutas excepto:
      * - _next/static (archivos estáticos)
      * - _next/image (optimización de imágenes)
-     * - favicon.ico y archivos multimedia
+     * - favicon.ico, sitemap, robots, imágenes públicas
      */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
