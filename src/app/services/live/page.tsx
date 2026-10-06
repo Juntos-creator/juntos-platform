@@ -183,7 +183,7 @@ function LiveRoomContent() {
       const { data: msgs } = await supabase
         .from('service_messages')
         .select('*')
-        .or(`service_id.eq.${targetId},service_request_id.eq.${targetId}`)
+        .or(`service_id.eq.${srv.id},service_request_id.eq.${srv.id}`)
         .order('created_at', { ascending: true });
 
       setChatMessages(msgs || []);
@@ -197,8 +197,10 @@ function LiveRoomContent() {
   useEffect(() => {
     if (!service?.id) return;
 
+    const currentServiceId = service.id;
+
     const channel = supabase
-      .channel(`live_channel_${service.id}`)
+      .channel(`live_room_chat_${currentServiceId}`)
       .on(
         'postgres_changes',
         { 
@@ -208,7 +210,7 @@ function LiveRoomContent() {
         },
         (payload) => {
           const msg = payload.new;
-          if (msg.service_id === service.id || msg.service_request_id === service.id) {
+          if (msg.service_id === currentServiceId || msg.service_request_id === currentServiceId) {
             setChatMessages((prev) => {
               if (prev.some(m => m.id === msg.id)) return prev;
               const filtered = prev.filter(m => !m.id.toString().startsWith('temp_'));
@@ -219,7 +221,7 @@ function LiveRoomContent() {
       )
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'service_requests', filter: `id=eq.${service.id}` },
+        { event: 'UPDATE', schema: 'public', table: 'service_requests', filter: `id=eq.${currentServiceId}` },
         (payload) => {
           setService(payload.new);
           if (payload.new.status === 'IN_PROGRESS') {
@@ -306,8 +308,9 @@ function LiveRoomContent() {
   // 2. ENVIAR MENSAJE AL CHAT
   async function handleSendMessage(e: React.FormEvent) {
     e.preventDefault();
-    if (!newMessage.trim() || !service || !currentUser) return;
+    if (!newMessage.trim() || !service?.id || !currentUser) return;
 
+    const targetServiceId = service.id;
     const texto = newMessage.trim();
     setNewMessage('');
     setSendingMsg(true);
@@ -316,8 +319,8 @@ function LiveRoomContent() {
     const tempId = `temp_${Date.now()}`;
     const tempMsg = {
       id: tempId,
-      service_id: service.id,
-      service_request_id: service.id,
+      service_id: targetServiceId,
+      service_request_id: targetServiceId,
       sender_id: currentUser.id,
       sender_name: senderName,
       message: texto,
@@ -330,8 +333,8 @@ function LiveRoomContent() {
       const { error } = await supabase
         .from('service_messages')
         .insert([{
-          service_id: service.id,
-          service_request_id: service.id,
+          service_id: targetServiceId,
+          service_request_id: targetServiceId,
           sender_id: currentUser.id,
           sender_name: senderName,
           message: texto
