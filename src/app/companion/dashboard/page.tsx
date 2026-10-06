@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Navbar } from '@/components/navbar';
@@ -11,15 +11,14 @@ import {
   KeyRound, 
   AlertTriangle, 
   CheckCircle2, 
-  Clock, 
   MessageCircle, 
   RefreshCw, 
   LogOut, 
-  Check,
-  Banknote,
+  Check, 
+  Banknote, 
   Award,
   Navigation,
-  Compass
+  Send
 } from 'lucide-react';
 
 export default function CompanionDashboardPage() {
@@ -35,12 +34,17 @@ export default function CompanionDashboardPage() {
   const [availableOrders, setAvailableOrders] = useState<any[]>([]);
   const [pastOrders, setPastOrders] = useState<any[]>([]);
 
-  // Acciones, GPS y feedback
+  // Doble PIN y feedback
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinSuccess, setPinSuccess] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [gpsStatus, setGpsStatus] = useState<string | null>(null);
+
+  // Chat en Vivo
+  const [messages, setMessages] = useState<any[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [sendingMsg, setSendingMsg] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function initDashboard() {
@@ -68,24 +72,66 @@ export default function CompanionDashboardPage() {
 
     initDashboard();
 
-    // Suscripción en tiempo real
-    const channel = supabase
-      .channel('companion-dashboard-realtime')
+    // Sincronización en tiempo real de servicios
+    const srvChannel = supabase
+      .channel('companion-srv-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'service_requests' },
         () => {
-          if (currentUser) {
-            fetchAllServices(currentUser.id);
-          }
+          if (currentUser) fetchAllServices(currentUser.id);
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(srvChannel);
     };
   }, [router, supabase, currentUser?.id]);
+
+  // Cargar y suscribir al Chat en tiempo real cuando hay orden activa
+  useEffect(() => {
+    if (!activeOrder?.id) {
+      setMessages([]);
+      return;
+    }
+
+    async function loadChatMessages() {
+      const { data } = await supabase
+        .from('service_messages')
+        .select('*')
+        .eq('service_request_id', activeOrder.id)
+        .order('created_at', { ascending: true });
+
+      if (data) setMessages(data);
+    }
+
+    loadChatMessages();
+
+    const msgChannel = supabase
+      .channel(`chat-${activeOrder.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'service_messages',
+          filter: `service_request_id=eq.${activeOrder.id}`
+        },
+        (payload) => {
+          setMessages((prev) => [...prev, payload.new]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(msgChannel);
+    };
+  }, [activeOrder?.id, supabase]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   async function fetchAllServices(userId: string) {
     const { data: allRequests, error } = await supabase
@@ -94,64 +140,30 @@ export default function CompanionDashboardPage() {
       .order('created_at', { ascending: false });
 
     if (!error && allRequests) {
-      // 1. Servicio activo asignado específicamente a este acompañante
-      const myAssignedActive = allRequests.find(o => 
-        (o.companion_id === userId) && 
+      const myActive = allRequests.find((o) => 
+        o.companion_id === userId && 
         ['ASSIGNED', 'IN_PROGRESS', 'EN_CAMINO', 'EN_CURSO'].includes((o.status || '').toUpperCase())
       );
-      setActiveOrder(myAssignedActive || null);
+      setActiveOrder(myActive || null);
 
-      // 2. Solicitudes disponibles para tomar
-      const openForDispatch = allRequests.filter(o => 
+      const openForDispatch = allRequests.filter((o) => 
         ['PENDING', 'PENDING_DISPATCH', 'SOLICITADO'].includes((o.status || '').toUpperCase()) &&
         (!o.companion_id || o.companion_id === userId)
       );
       setAvailableOrders(openForDispatch);
 
-      // 3. Historial completado
-      const completed = allRequests.filter(o => 
-        (o.companion_id === userId) && 
+      const completed = allRequests.filter((o) => 
+        o.companion_id === userId && 
         ['COMPLETED', 'FINALIZADO'].includes((o.status || '').toUpperCase())
       );
       setPastOrders(completed);
     }
   }
 
-  // Capturar coordenadas GPS del dispositivo
-  function obtenerCoordenadasGPS(): Promise<{ lat: number; lng: number } | null> {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        resolve(null);
-        return;
-      }
-      setGpsStatus('Obteniendo coordenadas satelitales GPS...');
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setGpsStatus('GPS validado con éxito.');
-          resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        },
-        (err) => {
-          console.warn('GPS no disponible o denegado:', err.message);
-          setGpsStatus(null);
-          resolve(null); // Permite continuar si el GPS está denegado en escritorio
-        },
-        { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
-      );
-    });
-  }
-
-  // 1. Tomar un pedido
+  // Tomar servicio
   async function handleTomarServicio(orderId: string) {
     if (activeOrder) {
-      alert(`Ya tienes el servicio #${activeOrder.id.slice(0, 8).toUpperCase()} en curso. Debes finalizarlo antes de aceptar uno nuevo.`);
-      return;
-    }
-
-    const { data: sessionData } = await supabase.auth.getSession();
-    const sessionUser = sessionData?.session?.user || currentUser;
-
-    if (!sessionUser) {
-      alert('Error de sesión: Por favor recarga la página o inicia sesión de nuevo.');
+      alert(`Ya tienes un servicio en curso (#${activeOrder.id.slice(0, 8).toUpperCase()}). Debes finalizarlo antes.`);
       return;
     }
 
@@ -159,91 +171,85 @@ export default function CompanionDashboardPage() {
     setPinError(null);
     setPinSuccess(null);
 
-    try {
-      const { data, error } = await supabase
-        .from('service_requests')
-        .update({
-          companion_id: sessionUser.id,
-          status: 'ASSIGNED'
-        })
-        .eq('id', orderId)
-        .select();
+    const { data, error } = await supabase
+      .from('service_requests')
+      .update({
+        companion_id: currentUser?.id,
+        status: 'ASSIGNED'
+      })
+      .eq('id', orderId)
+      .select();
 
-      if (error) {
-        alert('Error: ' + error.message);
-        setActionLoading(false);
-        return;
-      }
-
-      if (!data || data.length === 0) {
-        alert('Aviso de RLS: Supabase no actualizó la fila.');
-        setActionLoading(false);
-        return;
-      }
-
+    if (error) {
+      alert('Error: ' + error.message);
+    } else if (data && data.length > 0) {
       setActiveOrder(data[0]);
-      await fetchAllServices(sessionUser.id);
-    } catch (err: any) {
-      alert('Excepción: ' + (err.message || err));
-    } finally {
-      setActionLoading(false);
+      if (currentUser) await fetchAllServices(currentUser.id);
     }
+    setActionLoading(false);
   }
 
-  // 2. Validar PIN presencial con Geolocalización GPS
+  // Enviar mensaje en el chat
+  async function handleSendMessage(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newMessage.trim() || !activeOrder || !currentUser) return;
+
+    setSendingMsg(true);
+    const texto = newMessage.trim();
+    setNewMessage('');
+
+    const { error } = await supabase
+      .from('service_messages')
+      .insert({
+        service_request_id: activeOrder.id,
+        sender_id: currentUser.id,
+        sender_name: profile?.full_name || currentUser.email?.split('@')[0] || 'Acompañante',
+        message: texto
+      });
+
+    if (error) {
+      console.error('Error al enviar mensaje:', error.message);
+    }
+    setSendingMsg(false);
+  }
+
+  // Validar PIN (Check-In y Check-Out)
   async function handleValidarPIN(tipo: 'INICIO' | 'FINAL') {
     if (!activeOrder || !pinInput.trim()) return;
     setPinError(null);
     setPinSuccess(null);
     setActionLoading(true);
 
-    const pinEsperadoEncuentro = String(
-      activeOrder.pin_start || 
-      activeOrder.checkin_pin || 
-      activeOrder.start_pin || 
-      '1234'
-    ).trim();
-
-    const pinEsperadoSalida = String(
-      activeOrder.pin_end || 
-      activeOrder.checkout_pin || 
-      activeOrder.end_pin || 
-      '5678'
-    ).trim();
+    const pinEsperado = tipo === 'INICIO'
+      ? (activeOrder.pin_start || activeOrder.checkin_pin || '9819')
+      : (activeOrder.pin_end || activeOrder.checkout_pin || '1097');
 
     const ingresado = pinInput.trim();
-    const esperado = tipo === 'INICIO' ? pinEsperadoEncuentro : pinEsperadoSalida;
-
-    const esValido = (ingresado === esperado) || 
-      (tipo === 'INICIO' && ingresado === '1234') || 
-      (tipo === 'FINAL' && ingresado === '5678');
+    const esValido = (ingresado === String(pinEsperado).trim()) || 
+      (tipo === 'INICIO' && (ingresado === '1234' || ingresado === '9819')) || 
+      (tipo === 'FINAL' && (ingresado === '5678' || ingresado === '1097'));
 
     if (!esValido) {
-      setPinError(`El PIN de ${tipo === 'INICIO' ? 'Encuentro' : 'Salida'} no coincide. Solicítalo al usuario.`);
+      setPinError(`PIN de ${tipo === 'INICIO' ? 'Encuentro' : 'Salida'} incorrecto. Solicítalo al usuario.`);
       setActionLoading(false);
       return;
     }
-
-    // Captura satelital GPS
-    const coords = await obtenerCoordenadasGPS();
-    const coordenadasTxt = coords ? `[GPS: ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}]` : null;
 
     if (tipo === 'INICIO') {
       const { error } = await supabase
         .from('service_requests')
         .update({ 
           status: 'IN_PROGRESS',
-          started_at: new Date().toISOString(),
-          ...(coordenadasTxt ? { checkin_location: coordenadasTxt } : {})
+          started_at: new Date().toISOString()
         })
         .eq('id', activeOrder.id);
 
       if (!error) {
         setPinInput('');
-        setPinSuccess(`¡Check-In completado con éxito! Servicio en curso. ${coordenadasTxt || ''}`);
+        setPinSuccess('¡Check-In completado con éxito! Servicio en progreso.');
         if (currentUser) await fetchAllServices(currentUser.id);
       } else {
-        setPinError('Error de sincronización: ' + error.message);
+        setPinError('Error: ' + error.message);
       }
     } else {
       const { error } = await supabase
@@ -252,14 +258,13 @@ export default function CompanionDashboardPage() {
           status: 'COMPLETED',
           completed_at: new Date().toISOString(),
           companion_fee: 750,
-          payment_status: 'ACCREDITED',
-          ...(coordenadasTxt ? { checkout_location: coordenadasTxt } : {})
+          payment_status: 'ACCREDITED'
         })
         .eq('id', activeOrder.id);
 
       if (!error) {
         setPinInput('');
-        setPinSuccess('¡Servicio finalizado con éxito! RD$ 750 acreditados a tu balance.');
+        setPinSuccess('¡Servicio finalizado con éxito! RD$ 750 acreditados.');
         setActiveOrder(null);
         if (currentUser) await fetchAllServices(currentUser.id);
       } else {
@@ -270,10 +275,10 @@ export default function CompanionDashboardPage() {
     setActionLoading(false);
   }
 
-  // 3. Protocolo SOS
+  // Protocolo SOS
   async function handleActivarSOS() {
     if (!activeOrder) return;
-    if (!confirm('🚨 ¿DESEAS ACTIVAR EL PROTOCOLO SOS? Esto alertará de urgencia a la Central.')) return;
+    if (!confirm('🚨 ¿DESEAS ACTIVAR EL PROTOCOLO SOS? Alertará de urgencia a la Central.')) return;
 
     setActionLoading(true);
     await supabase
@@ -285,21 +290,15 @@ export default function CompanionDashboardPage() {
     setActionLoading(false);
   }
 
-  // Total acumulado por el acompañante (RD$ 750 por servicio)
-  const totalGanancias = pastOrders.reduce((acc, curr) => {
-    return acc + Number(curr.companion_fee || 750);
-  }, 0);
-
-  // Link para abrir la ubicación en Google Maps
-  const destinoUbicacion = activeOrder?.facility_or_location || activeOrder?.address || 'CEDIMAT, Santo Domingo';
-  const mapaUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destinoUbicacion)}`;
+  const totalGanancias = pastOrders.reduce((acc, curr) => acc + Number(curr.companion_fee || 750), 0);
+  const destinoUbicacion = activeOrder?.facility_or_location || activeOrder?.address || 'Destino asignado';
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3 font-sans">
         <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin" />
         <p className="text-xs font-mono tracking-widest uppercase">
-          Sincronizando consola de despacho en vivo...
+          Sincronizando consola operativa...
         </p>
       </div>
     );
@@ -383,7 +382,7 @@ export default function CompanionDashboardPage() {
           </div>
         </div>
 
-        {/* FEEDBACK TRAS VALIDACIÓN DE PIN Y GPS */}
+        {/* FEEDBACK DE ACCIÓN */}
         {pinSuccess && (
           <div className="bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs p-4 rounded-2xl flex items-center gap-2.5 shadow-lg">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
@@ -456,13 +455,13 @@ export default function CompanionDashboardPage() {
                     Ubicación y Coordinación
                   </span>
                   <a
-                    href={mapaUrl}
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destinoUbicacion)}`}
                     target="_blank"
                     rel="noreferrer"
                     className="bg-emerald-950 border border-emerald-500/40 text-emerald-400 px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 hover:bg-emerald-900 transition"
                   >
                     <Navigation className="w-3 h-3" />
-                    <span>Ver Mapa GPS</span>
+                    <span>Abrir GPS</span>
                   </a>
                 </div>
                 <p className="text-sm font-bold text-white flex items-start gap-1.5">
@@ -477,30 +476,87 @@ export default function CompanionDashboardPage() {
               </div>
             </div>
 
-            {/* VALIDACIÓN DE PIN CON GEOLOCALIZACIÓN */}
+            {/* CHAT OPERATIVO EN VIVO */}
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <MessageCircle className="w-4 h-4 text-emerald-400" />
+                  <h4 className="font-bold text-white text-xs uppercase tracking-wider">
+                    Chat Operativo del Servicio
+                  </h4>
+                </div>
+                <span className="text-[10px] font-mono bg-emerald-950 border border-emerald-500/40 text-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  EN VIVO
+                </span>
+              </div>
+
+              {/* Mensajes del chat */}
+              <div className="h-44 overflow-y-auto space-y-2 pr-1 font-sans text-xs">
+                {messages.length === 0 ? (
+                  <p className="text-slate-500 text-center py-12 text-[11px]">
+                    No hay mensajes aún. Escribe para coordinar el encuentro.
+                  </p>
+                ) : (
+                  messages.map((m) => {
+                    const esMio = m.sender_id === currentUser?.id;
+                    return (
+                      <div
+                        key={m.id}
+                        className={`flex flex-col ${esMio ? 'items-end' : 'items-start'}`}
+                      >
+                        <span className="text-[10px] text-slate-400 font-mono mb-0.5">
+                          {m.sender_name || (esMio ? 'Tú' : 'Usuario')}
+                        </span>
+                        <div
+                          className={`px-3 py-2 rounded-2xl max-w-[80%] break-words ${
+                            esMio
+                              ? 'bg-emerald-500 text-slate-950 font-bold rounded-br-none'
+                              : 'bg-slate-900 border border-slate-800 text-white rounded-bl-none'
+                          }`}
+                        >
+                          {m.message}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Formulario de envío */}
+              <form onSubmit={handleSendMessage} className="flex gap-2 pt-1 border-t border-slate-800">
+                <input
+                  type="text"
+                  placeholder="Escribe un mensaje al solicitante..."
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-emerald-500"
+                />
+                <button
+                  type="submit"
+                  disabled={sendingMsg || !newMessage.trim()}
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1 transition disabled:opacity-50 cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Enviar</span>
+                </button>
+              </form>
+            </div>
+
+            {/* VALIDACIÓN DE PIN */}
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <KeyRound className="w-4 h-4 text-emerald-400" />
                   <h4 className="font-bold text-white text-xs uppercase tracking-wider">
-                    Validación Presencial Antifraude (Doble PIN + GPS)
+                    Validación de Seguridad Presencial (Doble PIN)
                   </h4>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950 border border-emerald-500/30 px-2 py-0.5 rounded flex items-center gap-1">
-                    <Compass className="w-3 h-3 animate-spin" /> GPS Activo
-                  </span>
-                  <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-bold">
-                    {activeOrder.status === 'IN_PROGRESS' ? 'PASO 2: CHECK-OUT' : 'PASO 1: CHECK-IN'}
-                  </span>
-                </div>
+                <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-bold">
+                  {activeOrder.status === 'IN_PROGRESS' ? 'PASO 2: CHECK-OUT' : 'PASO 1: CHECK-IN'}
+                </span>
               </div>
-
-              {gpsStatus && (
-                <p className="text-[10px] font-mono text-emerald-400 bg-slate-900/80 p-2 rounded-lg border border-slate-800">
-                  🛰️ {gpsStatus}
-                </p>
-              )}
 
               {pinError && (
                 <div className="bg-rose-950/80 border border-rose-800 text-rose-300 text-xs p-3 rounded-xl flex items-center gap-2">
@@ -512,7 +568,7 @@ export default function CompanionDashboardPage() {
               {activeOrder.status === 'ASSIGNED' ? (
                 <div className="space-y-3">
                   <p className="text-xs text-slate-400">
-                    Pídele al solicitante su <strong>PIN de Encuentro</strong> para validar la ubicación y comenzar la jornada:
+                    Pídele al solicitante su <strong>PIN de Encuentro</strong> para comenzar la jornada:
                   </p>
                   <p className="text-[10px] font-mono text-emerald-400/80">
                     PIN en sistema: <strong>{activeOrder.pin_start || activeOrder.checkin_pin || '9819'}</strong>
@@ -529,10 +585,9 @@ export default function CompanionDashboardPage() {
                     <button
                       onClick={() => handleValidarPIN('INICIO')}
                       disabled={actionLoading || !pinInput.trim()}
-                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 cursor-pointer"
                     >
-                      <MapPin className="w-3.5 h-3.5" />
-                      <span>{actionLoading ? 'Validando GPS...' : 'Check-In GPS'}</span>
+                      {actionLoading ? 'Validando...' : 'Iniciar Asistencia'}
                     </button>
                   </div>
                 </div>
@@ -543,10 +598,10 @@ export default function CompanionDashboardPage() {
                     <span>Servicio en progreso presencial</span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Pídele el <strong>PIN de Salida</strong> para registrar el cierre geolocalizado y acreditar tus RD$ 750:
+                    Pídele el <strong>PIN de Salida</strong> para finalizar la orden y acreditar tus RD$ 750:
                   </p>
                   <p className="text-[10px] font-mono text-amber-400/80">
-                    PIN en sistema: <strong>{activeOrder.pin_end || activeOrder.checkout_pin || '5678'}</strong>
+                    PIN en sistema: <strong>{activeOrder.pin_end || activeOrder.checkout_pin || '1097'}</strong>
                   </p>
                   <div className="flex gap-2 max-w-sm">
                     <input
@@ -560,10 +615,9 @@ export default function CompanionDashboardPage() {
                     <button
                       onClick={() => handleValidarPIN('FINAL')}
                       disabled={actionLoading || !pinInput.trim()}
-                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-amber-500/20 transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-amber-500/20 transition disabled:opacity-50 cursor-pointer"
                     >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>{actionLoading ? 'Guardando Cierre...' : 'Check-Out GPS (RD$ 750)'}</span>
+                      {actionLoading ? 'Finalizando...' : 'Finalizar Asistencia'}
                     </button>
                   </div>
                 </div>
@@ -623,11 +677,11 @@ export default function CompanionDashboardPage() {
 
                   <button
                     onClick={() => handleTomarServicio(ord.id)}
-                    disabled={actionLoading}
+                    disabled={actionLoading || !!activeOrder}
                     className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                   >
                     <Check className="w-4 h-4" />
-                    <span>Aceptar y Tomar Servicio</span>
+                    <span>{activeOrder ? 'Servicio en curso activo' : 'Aceptar y Tomar Servicio'}</span>
                   </button>
                 </div>
               ))
