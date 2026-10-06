@@ -27,7 +27,6 @@ import {
   Info 
 } from 'lucide-react';
 
-// Validación oficial de Cédula Dominicana (Módulo 10 JCE)
 function validarCedulaDominicana(cedula: string): boolean {
   const clean = cedula.replace(/[^0-9]/g, '');
   if (clean.length !== 11) return false;
@@ -47,7 +46,6 @@ function validarCedulaDominicana(cedula: string): boolean {
   return verifier === parseInt(clean[10], 10);
 }
 
-// Validación de 30 días hábiles
 function validarVigencia30DiasHabiles(fechaEmisionStr: string): boolean {
   if (!fechaEmisionStr) return false;
   const fechaEmision = new Date(fechaEmisionStr + 'T00:00:00');
@@ -78,10 +76,8 @@ export default function RegistroAcompanante(): JSX.Element {
   const [esAdmin, setEsAdmin] = useState(false);
   const [mostrarRequisitos, setMostrarRequisitos] = useState(true);
 
-  // Estados del formulario
   const [tipoDocumento, setTipoDocumento] = useState<'CEDULA' | 'PASAPORTE'>('CEDULA');
   
-  // Fase 1: Identidad & Domicilio
   const [datosIdentidad, setDatosIdentidad] = useState({
     nombre: '',
     fechaNacimiento: '',
@@ -99,7 +95,6 @@ export default function RegistroAcompanante(): JSX.Element {
     contactoEmergenciaTelefono: '',
   });
 
-  // Fase 2: Documentos KYC
   const [docFrontal, setDocFrontal] = useState<File | null>(null);
   const [docDorsal, setDocDorsal] = useState<File | null>(null);
   const [permisoTrabajo, setPermisoTrabajo] = useState<File | null>(null);
@@ -115,7 +110,6 @@ export default function RegistroAcompanante(): JSX.Element {
   const [certAcademia, setCertAcademia] = useState<File | null>(null);
   const [codigoAcademia, setCodigoAcademia] = useState('');
 
-  // Fase 3: Referencias & Nómina
   const [datosLaborales, setDatosLaborales] = useState({
     experienciaAnios: '1-3',
     habilidadesEspeciales: 'Cuidado geriátrico básico, Movilización, Control de medicamentos',
@@ -137,7 +131,6 @@ export default function RegistroAcompanante(): JSX.Element {
     numeroCuentaBanco: '',
   });
 
-  // Fase 4: Acceso, Contrato, Biometría y Firma
   const [credenciales, setCredenciales] = useState({
     email: '',
     password: '',
@@ -150,7 +143,6 @@ export default function RegistroAcompanante(): JSX.Element {
   const [verificandoBiometria, setVerificandoBiometria] = useState(false);
   const [firma, setFirma] = useState(false);
 
-  // Cámara
   const [camaraActiva, setCamaraActiva] = useState<'frontal' | 'dorsal' | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -164,7 +156,7 @@ export default function RegistroAcompanante(): JSX.Element {
           .from('profiles')
           .select('role')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
         if (profile?.role === 'ADMIN') {
           setEsAdmin(true);
         }
@@ -256,7 +248,7 @@ export default function RegistroAcompanante(): JSX.Element {
               rp: { name: 'JUNTOS Asistencia RD' },
               user: {
                 id: userIdArr,
-                name: credenciales.email.trim() || 'acompanante@juntos.do',
+                name: credenciales.email.trim().toLowerCase() || 'acompanante@juntos.do',
                 displayName: datosIdentidad.nombre.trim() || 'Acompañante'
               },
               pubKeyCredParams: [{ alg: -7, type: 'public-key' }, { alg: -257, type: 'public-key' }],
@@ -416,14 +408,18 @@ export default function RegistroAcompanante(): JSX.Element {
   };
 
   const guardarExpedienteEnBD = async (userId: string, supabaseClient: any) => {
+    const cleanMail = credenciales.email.trim().toLowerCase();
+    const cleanNombre = datosIdentidad.nombre.trim();
+    const cleanPhone = datosIdentidad.telefonoWhatsapp.trim();
+
     const expedienteCompletoKYC = {
       user_id: userId,
-      nombre: datosIdentidad.nombre.trim(),
+      nombre: cleanNombre,
       tipo_documento: tipoDocumento,
       numero_documento: datosIdentidad.numeroDocumento.trim(),
       nacionalidad: datosIdentidad.nacionalidad,
       fecha_nacimiento: datosIdentidad.fechaNacimiento,
-      telefono_whatsapp: datosIdentidad.telefonoWhatsapp.trim(),
+      telefono_whatsapp: cleanPhone,
       telefono_secundario: datosIdentidad.telefonoSecundario.trim(),
       domicilio_direccion: datosIdentidad.direccionCalle.trim(),
       domicilio_sector: datosIdentidad.sector.trim(),
@@ -462,8 +458,9 @@ export default function RegistroAcompanante(): JSX.Element {
       codigo_academia: codigoAcademia.trim(),
       fecha_antecedentes_pgr: fechaAntecedentes || null,
       fecha_cert_profesional: fechaProfesional || null,
+      estado: 'PENDIENTE',
       estado_depuracion: 'PENDIENTE_MESA_RRHH',
-      firma_digital: datosIdentidad.nombre.trim(),
+      firma_digital: cleanNombre,
       contrato_servicios_firmado: true,
       exoneracion_responsabilidad_firmada: true,
       adhesion_seguro_accidentes: true,
@@ -472,17 +469,21 @@ export default function RegistroAcompanante(): JSX.Element {
       fecha_solicitud: new Date().toISOString(),
     };
 
+    // 1. Guardar en profiles
     await supabaseClient.from('profiles').upsert({
       id: userId,
-      email: credenciales.email.trim(),
-      full_name: datosIdentidad.nombre.trim(),
-      phone: datosIdentidad.telefonoWhatsapp.trim(),
+      email: cleanMail,
+      full_name: cleanNombre,
+      phone: cleanPhone,
       role: 'COMPANION',
       status: 'PENDIENTE_REVISION',
-      metadata: expedienteCompletoKYC,
     });
 
-    await supabaseClient.from('companion_applications').insert([expedienteCompletoKYC]).select();
+    // 2. Guardar en companion_applications
+    await supabaseClient.from('companion_applications').upsert({
+      ...expedienteCompletoKYC,
+      user_id: userId,
+    });
   };
 
   const handleSubmitFinal = async (e: React.FormEvent) => {
@@ -495,12 +496,12 @@ export default function RegistroAcompanante(): JSX.Element {
     }
 
     if (!aceptaContrato || !aceptaExoneracion || !aceptaSeguro) {
-      setErrorMsg('Debes aceptar las 3 casillas legales obligatorias (Contrato de servicios, Exoneración civil y Seguro de personas).');
+      setErrorMsg('Debes aceptar las 3 casillas legales obligatorias.');
       return;
     }
 
     if (!biometriaVerificada) {
-      setErrorMsg('Debes completar la verificación biométrica (Face ID / Huella digital) antes de remitir el expediente.');
+      setErrorMsg('Debes completar la verificación biométrica.');
       return;
     }
 
@@ -511,46 +512,52 @@ export default function RegistroAcompanante(): JSX.Element {
 
     setLoading(true);
     const supabase = createClient();
+    const cleanEmail = credenciales.email.trim().toLowerCase();
 
-    const { data, error } = await supabase.auth.signUp({
-      email: credenciales.email.trim(),
-      password: credenciales.password.trim(),
-    });
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: credenciales.password.trim(),
+      });
 
-    if (error) {
-      if (error.message.toLowerCase().includes('already registered')) {
-        const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-          email: credenciales.email.trim(),
-          password: credenciales.password.trim(),
-        });
+      if (error) {
+        if (error.message.toLowerCase().includes('already registered')) {
+          const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password: credenciales.password.trim(),
+          });
 
-        if (loginError) {
-          setErrorMsg('Este correo ya está registrado con otra contraseña. Inicia sesión con la contraseña correcta para firmar.');
-          setLoading(false);
-          return;
+          if (loginError) {
+            setErrorMsg('Este correo ya está registrado con otra contraseña. Inicia sesión correctamente.');
+            setLoading(false);
+            return;
+          }
+
+          if (loginData?.user) {
+            await guardarExpedienteEnBD(loginData.user.id, supabase);
+            setLoading(false);
+            // REDIRECCIÓN DIRECTA A LA SALA DE OPERACIONES
+            router.replace('/companion/dashboard');
+            return;
+          }
         }
 
-        if (loginData?.user) {
-          await guardarExpedienteEnBD(loginData.user.id, supabase);
-          setLoading(false);
-          alert('¡Expediente, contrato firmado y validación biométrica asociados exitosamente a tu cuenta! La Mesa de RRHH ha recibido tu postulación.');
-          router.push('/companion/onboarding');
-          return;
-        }
+        setErrorMsg(error.message);
+        setLoading(false);
+        return;
       }
 
-      setErrorMsg(error.message);
+      if (data.user) {
+        await guardarExpedienteEnBD(data.user.id, supabase);
+      }
+
       setLoading(false);
-      return;
+      // REDIRECCIÓN DIRECTA A LA SALA DE OPERACIONES
+      router.replace('/companion/dashboard');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Error al procesar el expediente.');
+      setLoading(false);
     }
-
-    if (data.user) {
-      await guardarExpedienteEnBD(data.user.id, supabase);
-    }
-
-    setLoading(false);
-    alert('¡Expediente KYC, contrato de servicios y acreditación biométrica completados con éxito! Copia legal enviada al correo registrado.');
-    router.push('/companion/onboarding');
   };
 
   const stepsInfo = [
@@ -563,7 +570,6 @@ export default function RegistroAcompanante(): JSX.Element {
   return (
     <div className="w-full max-w-xl mx-auto space-y-6 text-slate-100 font-sans">
       
-      {/* BARRA ADMIN */}
       {esAdmin && (
         <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between text-xs">
           <span className="font-bold text-amber-400">🛠️ Auditoría de RRHH (Admin)</span>
@@ -577,7 +583,6 @@ export default function RegistroAcompanante(): JSX.Element {
         </div>
       )}
 
-      {/* ENCABEZADO */}
       <div className="space-y-1">
         <div className="inline-flex items-center gap-2 bg-emerald-950/60 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-bold text-emerald-400 mb-2">
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -587,7 +592,6 @@ export default function RegistroAcompanante(): JSX.Element {
         <p className="text-xs text-slate-400">Validación legal, domicilio y depuración PGR conforme a la Ley 172-13.</p>
       </div>
 
-      {/* RECUADRO INSTRUCTIVO: DOCUMENTOS REQUERIDOS PREVIOS */}
       <div className="bg-slate-900/90 border border-emerald-500/40 rounded-2xl overflow-hidden shadow-xl transition-all">
         <button
           type="button"
@@ -651,7 +655,6 @@ export default function RegistroAcompanante(): JSX.Element {
         )}
       </div>
 
-      {/* STEPPER PROGRESO */}
       <div className="grid grid-cols-4 gap-2">
         {stepsInfo.map(step => (
           <div key={step.num} className="space-y-1.5">
@@ -667,7 +670,6 @@ export default function RegistroAcompanante(): JSX.Element {
         ))}
       </div>
 
-      {/* MENSAJE DE ERROR */}
       {errorMsg && (
         <div className="p-3 bg-rose-950/60 border border-rose-800 text-rose-300 text-xs rounded-xl flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
@@ -675,7 +677,6 @@ export default function RegistroAcompanante(): JSX.Element {
         </div>
       )}
 
-      {/* MODAL CÁMARA */}
       {camaraActiva && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-4">
           <div className="relative w-full max-w-md bg-slate-950 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col items-center">
@@ -694,10 +695,8 @@ export default function RegistroAcompanante(): JSX.Element {
         </div>
       )}
 
-      {/* FORMULARIO */}
       <form onSubmit={fase === 4 ? handleSubmitFinal : handleAvanzar} className="space-y-5 text-xs">
         
-        {/* FASE 1: IDENTIDAD Y DOMICILIO */}
         {fase === 1 && (
           <div className="space-y-4">
             <div>
@@ -799,7 +798,6 @@ export default function RegistroAcompanante(): JSX.Element {
               </div>
             </div>
 
-            {/* DOMICILIO RESIDENCIAL */}
             <div className="pt-3 border-t border-slate-800 space-y-3">
               <div className="flex items-center gap-2 text-emerald-400 font-bold">
                 <Home className="w-4 h-4" />
@@ -850,7 +848,6 @@ export default function RegistroAcompanante(): JSX.Element {
               </div>
             </div>
 
-            {/* CONTACTO DE EMERGENCIA */}
             <div className="pt-3 border-t border-slate-800 space-y-3">
               <div className="flex items-center gap-2 text-rose-400 font-bold">
                 <AlertCircle className="w-4 h-4" />
@@ -883,7 +880,6 @@ export default function RegistroAcompanante(): JSX.Element {
           </div>
         )}
 
-        {/* FASE 2: DOCUMENTOS Y CERTIFICACIONES */}
         {fase === 2 && (
           <div className="space-y-4">
             <div className="space-y-2">
@@ -989,7 +985,6 @@ export default function RegistroAcompanante(): JSX.Element {
           </div>
         )}
 
-        {/* FASE 3: REFERENCIAS Y DATOS BANCARIOS */}
         {fase === 3 && (
           <div className="space-y-4">
             <div className="space-y-1">
@@ -1097,7 +1092,6 @@ export default function RegistroAcompanante(): JSX.Element {
           </div>
         )}
 
-        {/* FASE 4: CONTRATO, DESCARGO LEGAL, BIOMETRÍA Y FIRMA */}
         {fase === 4 && (
           <div className="space-y-4">
             <div className="space-y-1">
@@ -1108,9 +1102,9 @@ export default function RegistroAcompanante(): JSX.Element {
                   type="email" 
                   required
                   className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                  placeholder="correo@ejemplo.com"
-                  value={credenciales.email}
-                  onChange={e => setCredenciales({...credenciales, email: e.target.value})}
+                  placeholder="correo@ejemplo.com" 
+                  value={credenciales.email} 
+                  onChange={e => setCredenciales({...credenciales, email: e.target.value})} 
                 />
               </div>
               <p className="text-[10px] text-slate-400">Una copia fiel y certificada de este contrato rubricado será enviada a esta dirección de correo.</p>
@@ -1124,14 +1118,13 @@ export default function RegistroAcompanante(): JSX.Element {
                   type="password" 
                   required
                   className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                  placeholder="Mínimo 6 caracteres"
-                  value={credenciales.password}
-                  onChange={e => setCredenciales({...credenciales, password: e.target.value})}
+                  placeholder="Mínimo 6 caracteres" 
+                  value={credenciales.password} 
+                  onChange={e => setCredenciales({...credenciales, password: e.target.value})} 
                 />
               </div>
             </div>
 
-            {/* CONTRATO MARCO Y DESCARGO DE RESPONSABILIDAD */}
             <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -1154,7 +1147,6 @@ export default function RegistroAcompanante(): JSX.Element {
                 <p className="mt-1">4. PÓLIZA COLECTIVA DE SEGURO: El acompañante acepta y autoriza su incorporación a la póliza colectiva de seguro de accidentes y personas contratada para resguardar la cobertura del servicio presencial.</p>
               </div>
 
-              {/* TRES CASILLAS OBLIGATORIAS DE LEY */}
               <div className="space-y-2 pt-1 text-[11px] text-slate-300">
                 <label className="flex items-start gap-2.5 cursor-pointer">
                   <input 
@@ -1191,7 +1183,6 @@ export default function RegistroAcompanante(): JSX.Element {
               </div>
             </div>
 
-            {/* VALIDACIÓN BIOMÉTRICA (FACE ID / TOUCH ID / HUELLA) */}
             <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center space-y-2">
               <div className="flex items-center gap-2 text-xs font-bold text-white">
                 <Fingerprint className="w-4 h-4 text-emerald-400" />
@@ -1217,7 +1208,6 @@ export default function RegistroAcompanante(): JSX.Element {
               )}
             </div>
 
-            {/* ZONA DE ESTAMPADO DE FIRMA */}
             <div className="border border-slate-800 bg-slate-950/80 rounded-2xl p-4 flex flex-col items-center justify-center min-h-[130px] text-center">
               {!firma ? (
                 <button 
@@ -1255,7 +1245,6 @@ export default function RegistroAcompanante(): JSX.Element {
           </div>
         )}
 
-        {/* NAVEGACIÓN */}
         <div className="flex gap-3 pt-3">
           {fase > 1 && (
             <button 
@@ -1276,7 +1265,7 @@ export default function RegistroAcompanante(): JSX.Element {
               {loading 
                 ? 'Procesando expediente...' 
                 : fase === 4 
-                ? 'Firmar y Enviar Expediente a RRHH' 
+                ? 'Firmar y Entrar a la Sala de Operaciones' 
                 : 'Continuar a Siguiente Fase'}
             </span>
             <ArrowRight className="w-4 h-4" />
