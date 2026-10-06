@@ -75,7 +75,7 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
       if (srv) {
         setService(srv);
 
-        // Si ya está completado y no tiene reseña, abrir el modal de 5 estrellas
+        // Si ya está completado y no tiene calificación, abrir modal
         if (srv.status === 'COMPLETED' && !srv.rating) {
           setShowRatingModal(true);
         }
@@ -102,7 +102,7 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
         }
       }
 
-      // 2. Cargar Mensajes Previos (tolerante a ambos esquemas de tabla)
+      // 2. Cargar Mensajes Previos (compatibilidad con ambas tablas)
       const { data: msgs } = await supabase
         .from('service_messages')
         .select('*')
@@ -216,7 +216,6 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
 
       setService((prev: any) => ({ ...prev, status: 'COMPLETED' }));
       setInputCheckoutPin('');
-      // Abrir inmediatamente el modal de calificación 5 estrellas
       setShowRatingModal(true);
     } catch (err: any) {
       setPinError(err.message);
@@ -233,10 +232,10 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
     const text = newMessage.trim();
     setNewMessage('');
 
-    // Insertar en la tabla unificada de mensajería
     await supabase.from('service_messages').insert([
       {
         service_request_id: serviceId,
+        service_id: serviceId,
         sender_id: currentUser.id,
         sender_name: senderName,
         message: text
@@ -509,7 +508,7 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
                   <button
                     type="button"
                     onClick={() => setShowRatingModal(true)}
-                    className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2.5 rounded-xl text-xs transition"
+                    className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2.5 rounded-xl text-xs transition cursor-pointer"
                   >
                     ★ Calificar Servicio (5 Estrellas)
                   </button>
@@ -565,7 +564,7 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
               />
               <button
                 type="submit"
-                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 p-2.5 rounded-xl transition"
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 p-2.5 rounded-xl transition cursor-pointer"
               >
                 <Send className="w-4 h-4" />
               </button>

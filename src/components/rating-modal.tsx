@@ -57,7 +57,7 @@ export function RatingModal({
 
       setSubmitted(true);
 
-      // 3. Redirección automática manteniendo la sesión
+      // 3. Redirección automática manteniendo la sesión activa
       setTimeout(() => {
         onClose();
         router.push(redirectTo);
@@ -98,7 +98,7 @@ export function RatingModal({
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded-full inline-block mb-2">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-2.5 py-0.5 rounded-full inline-block mb-2">
                 SERVICIO COMPLETADO
               </span>
               <h3 className="text-base font-black text-white uppercase tracking-wider">
