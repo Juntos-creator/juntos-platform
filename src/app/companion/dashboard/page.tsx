@@ -18,7 +18,8 @@ import {
   Banknote, 
   Award,
   Navigation,
-  Send
+  Send,
+  Compass
 } from 'lucide-react';
 
 export default function CompanionDashboardPage() {
@@ -33,21 +34,22 @@ export default function CompanionDashboardPage() {
   const [activeOrder, setActiveOrder] = useState<any | null>(null);
   const [availableOrders, setAvailableOrders] = useState<any[]>([]);
   const [pastOrders, setPastOrders] = useState<any[]>([]);
-  const [chatTargetOrder, setChatTargetOrder] = useState<any | null>(null);
+  const [selectedChatOrder, setSelectedChatOrder] = useState<any | null>(null);
 
   // Doble PIN y feedback
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinSuccess, setPinSuccess] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState<string | null>(null);
 
-  // Chat Asíncrono
+  // Chat asíncrono
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMsg, setSendingMsg] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Inicialización de sesión y perfiles
+  // 1. Inicialización de sesión y perfil
   useEffect(() => {
     let isMounted = true;
 
@@ -60,9 +62,7 @@ export default function CompanionDashboardPage() {
         return;
       }
 
-      if (isMounted) {
-        setCurrentUser(session.user);
-      }
+      if (isMounted) setCurrentUser(session.user);
 
       const { data: prof } = await supabase
         .from('profiles')
@@ -70,9 +70,7 @@ export default function CompanionDashboardPage() {
         .eq('id', session.user.id)
         .maybeSingle();
 
-      if (isMounted) {
-        setProfile(prof);
-      }
+      if (isMounted) setProfile(prof);
 
       await fetchAllServices(session.user.id);
       if (isMounted) setLoading(false);
@@ -80,7 +78,7 @@ export default function CompanionDashboardPage() {
 
     initDashboard();
 
-    // Suscripción asíncrona a cambios en servicios
+    // Sincronización en tiempo real de servicios
     const srvChannel = supabase
       .channel('companion-srv-realtime')
       .on(
@@ -101,7 +99,7 @@ export default function CompanionDashboardPage() {
     };
   }, [router, supabase]);
 
-  // 2. Consulta asíncrona de servicios
+  // 2. Consulta de turnos
   async function fetchAllServices(userId: string) {
     const { data: allRequests, error } = await supabase
       .from('service_requests')
@@ -127,25 +125,25 @@ export default function CompanionDashboardPage() {
       );
       setPastOrders(completed);
 
-      // Mantener el objetivo del chat: si hay orden activa la toma; si no, toma la última completada
-      setChatTargetOrder(myActive || completed[0] || null);
+      // Si no hay un chat enfocado manualmente, vincular la orden activa o la última concluida
+      setSelectedChatOrder((prev: any) => prev || myActive || completed[0] || null);
     }
   }
 
-  // 3. Suscripción y carga asíncrona del chat
+  // 3. Suscripción y carga en tiempo real del Chat
   useEffect(() => {
-    if (!chatTargetOrder?.id) {
+    if (!selectedChatOrder?.id) {
       setMessages([]);
       return;
     }
 
     let isSubscribed = true;
 
-    async function loadMessagesAsync() {
+    async function loadChatMessages() {
       const { data, error } = await supabase
         .from('service_messages')
         .select('*')
-        .eq('service_request_id', chatTargetOrder.id)
+        .or(`service_request_id.eq.${selectedChatOrder.id},service_id.eq.${selectedChatOrder.id}`)
         .order('created_at', { ascending: true });
 
       if (!error && data && isSubscribed) {
@@ -153,17 +151,17 @@ export default function CompanionDashboardPage() {
       }
     }
 
-    loadMessagesAsync();
+    loadChatMessages();
 
     const msgChannel = supabase
-      .channel(`chat-realtime-${chatTargetOrder.id}`)
+      .channel(`chat-realtime-${selectedChatOrder.id}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'service_messages',
-          filter: `service_request_id=eq.${chatTargetOrder.id}`
+          filter: `service_request_id=eq.${selectedChatOrder.id}`
         },
         (payload) => {
           if (isSubscribed) {
@@ -180,16 +178,39 @@ export default function CompanionDashboardPage() {
       isSubscribed = false;
       supabase.removeChannel(msgChannel);
     };
-  }, [chatTargetOrder?.id, supabase]);
+  }, [selectedChatOrder?.id, supabase]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Tomar un pedido
+  // Capturar coordenadas GPS de alta precisión
+  function capturarGPS(): Promise<{ lat: number; lng: number } | null> {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve(null);
+        return;
+      }
+      setGpsStatus('Obteniendo coordenadas satelitales GPS...');
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setGpsStatus('GPS validado con éxito.');
+          resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        (err) => {
+          console.warn('GPS no disponible:', err.message);
+          setGpsStatus(null);
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
+      );
+    });
+  }
+
+  // Tomar un servicio mediante el endpoint seguro /api/services/claim
   async function handleTomarServicio(orderId: string) {
     if (activeOrder) {
-      alert(`Ya tienes un servicio en curso (#${activeOrder.id.slice(0, 8).toUpperCase()}). Finalízalo primero.`);
+      alert(`Tienes el servicio #${activeOrder.id.slice(0, 8).toUpperCase()} en curso.`);
       return;
     }
 
@@ -197,29 +218,30 @@ export default function CompanionDashboardPage() {
     setPinError(null);
     setPinSuccess(null);
 
-    const { data, error } = await supabase
-      .from('service_requests')
-      .update({
-        companion_id: currentUser?.id,
-        status: 'ASSIGNED'
-      })
-      .eq('id', orderId)
-      .select();
+    try {
+      const res = await fetch('/api/services/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serviceId: orderId })
+      });
 
-    if (error) {
-      alert('Error: ' + error.message);
-    } else if (data && data.length > 0) {
-      setActiveOrder(data[0]);
-      setChatTargetOrder(data[0]);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setActiveOrder(data.service);
+      setSelectedChatOrder(data.service);
       if (currentUser) await fetchAllServices(currentUser.id);
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    } finally {
+      setActionLoading(false);
     }
-    setActionLoading(false);
   }
 
-  // Envío asíncrono de mensajes
+  // Envío seguro de mensajes al chat
   async function handleSendMessage(e: React.FormEvent) {
     e.preventDefault();
-    if (!newMessage.trim() || !chatTargetOrder || !currentUser) return;
+    if (!newMessage.trim() || !selectedChatOrder || !currentUser) return;
 
     setSendingMsg(true);
     const content = newMessage.trim();
@@ -227,86 +249,69 @@ export default function CompanionDashboardPage() {
 
     const senderName = profile?.full_name || currentUser.email?.split('@')[0] || 'Acompañante';
 
-    const { error } = await supabase
-      .from('service_messages')
-      .insert({
-        service_request_id: chatTargetOrder.id,
-        sender_id: currentUser.id,
-        sender_name: senderName,
-        message: content
-      });
+    const payload = {
+      service_request_id: selectedChatOrder.id,
+      service_id: selectedChatOrder.id,
+      sender_id: currentUser.id,
+      sender_name: senderName,
+      message: content
+    };
+
+    const { error } = await supabase.from('service_messages').insert([payload]);
 
     if (error) {
-      alert('Error enviando mensaje: ' + error.message);
+      await supabase.from('service_chat_messages').insert([payload]);
     }
+
     setSendingMsg(false);
   }
 
-  // Validación asíncrona de PIN
+  // Validación estricta de PIN Server-Side (Check-In / Check-Out)
   async function handleValidarPIN(tipo: 'INICIO' | 'FINAL') {
     if (!activeOrder || !pinInput.trim()) return;
     setPinError(null);
     setPinSuccess(null);
     setActionLoading(true);
 
-    const pinEsperado = tipo === 'INICIO'
-      ? (activeOrder.pin_start || activeOrder.checkin_pin || '9819')
-      : (activeOrder.pin_end || activeOrder.checkout_pin || '1097');
+    try {
+      const coords = await capturarGPS();
+      const endpoint = tipo === 'INICIO' ? '/api/services/checkin' : '/api/services/checkout';
 
-    const ingresado = pinInput.trim();
-    const esValido = (ingresado === String(pinEsperado).trim()) || 
-      (tipo === 'INICIO' && (ingresado === '1234' || ingresado === '9819')) || 
-      (tipo === 'FINAL' && (ingresado === '5678' || ingresado === '1097'));
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serviceId: activeOrder.id,
+          pin: pinInput.trim(),
+          latitude: coords?.lat,
+          longitude: coords?.lng
+        })
+      });
 
-    if (!esValido) {
-      setPinError(`PIN de ${tipo === 'INICIO' ? 'Encuentro' : 'Salida'} incorrecto.`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setPinInput('');
+      setPinSuccess(data.message || (tipo === 'INICIO' ? 'Check-In validado con éxito.' : 'Check-Out completado con éxito.'));
+
+      if (tipo === 'FINAL') {
+        setActiveOrder(null);
+      }
+
+      if (currentUser) {
+        await fetchAllServices(currentUser.id);
+      }
+    } catch (err: any) {
+      setPinError(err.message);
+    } finally {
       setActionLoading(false);
-      return;
     }
-
-    if (tipo === 'INICIO') {
-      const { error } = await supabase
-        .from('service_requests')
-        .update({ 
-          status: 'IN_PROGRESS',
-          started_at: new Date().toISOString()
-        })
-        .eq('id', activeOrder.id);
-
-      if (!error) {
-        setPinInput('');
-        setPinSuccess('¡Check-In completado! Servicio en progreso.');
-        if (currentUser) await fetchAllServices(currentUser.id);
-      } else {
-        setPinError('Error: ' + error.message);
-      }
-    } else {
-      const { error } = await supabase
-        .from('service_requests')
-        .update({ 
-          status: 'COMPLETED',
-          completed_at: new Date().toISOString(),
-          companion_fee: 750,
-          payment_status: 'ACCREDITED'
-        })
-        .eq('id', activeOrder.id);
-
-      if (!error) {
-        setPinInput('');
-        setPinSuccess('¡Servicio finalizado con éxito! RD$ 750 acreditados.');
-        if (currentUser) await fetchAllServices(currentUser.id);
-      } else {
-        setPinError('Error de sincronización: ' + error.message);
-      }
-    }
-
-    setActionLoading(false);
   }
 
   // Protocolo SOS
   async function handleActivarSOS() {
     if (!activeOrder) return;
-    if (!confirm('🚨 ¿ACTIVAR PROTOCOLO SOS?')) return;
+    if (!confirm('🚨 ¿DESEAS ACTIVAR EL PROTOCOLO SOS? Esto alertará de urgencia a la Central.')) return;
 
     setActionLoading(true);
     await supabase
@@ -319,7 +324,8 @@ export default function CompanionDashboardPage() {
   }
 
   const totalGanancias = pastOrders.reduce((acc, curr) => acc + Number(curr.companion_fee || 750), 0);
-  const destinoUbicacion = activeOrder?.facility_or_location || activeOrder?.address || 'Destino asignado';
+  const destinoUbicacion = activeOrder?.facility_or_location || activeOrder?.address || 'CEDIMAT, Santo Domingo';
+  const mapaUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destinoUbicacion)}`;
 
   if (loading) {
     return (
@@ -418,7 +424,7 @@ export default function CompanionDashboardPage() {
           </div>
         )}
 
-        {/* 1. SERVICIO ACTIVO (SI EXISTE) */}
+        {/* 1. SERVICIO ACTIVO ASIGNADO */}
         {activeOrder ? (
           <div className={`rounded-3xl border p-6 space-y-6 shadow-2xl transition ${
             activeOrder.emergency_status === 'SOS_ACTIVE'
@@ -482,7 +488,7 @@ export default function CompanionDashboardPage() {
                     Ubicación y Coordinación
                   </span>
                   <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destinoUbicacion)}`}
+                    href={mapaUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="bg-emerald-950 border border-emerald-500/40 text-emerald-400 px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 hover:bg-emerald-900 transition"
@@ -503,19 +509,30 @@ export default function CompanionDashboardPage() {
               </div>
             </div>
 
-            {/* VALIDACIÓN DE PIN */}
+            {/* VALIDACIÓN DE PIN SERVER-SIDE */}
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <KeyRound className="w-4 h-4 text-emerald-400" />
                   <h4 className="font-bold text-white text-xs uppercase tracking-wider">
-                    Validación de Seguridad Presencial (Doble PIN)
+                    Validación Presencial Antifraude (Doble PIN Server-Side)
                   </h4>
                 </div>
-                <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-bold">
-                  {activeOrder.status === 'IN_PROGRESS' ? 'PASO 2: CHECK-OUT' : 'PASO 1: CHECK-IN'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950 border border-emerald-500/30 px-2 py-0.5 rounded flex items-center gap-1">
+                    <Compass className="w-3 h-3 animate-spin" /> GPS Activo
+                  </span>
+                  <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-bold">
+                    {activeOrder.status === 'IN_PROGRESS' ? 'PASO 2: CHECK-OUT' : 'PASO 1: CHECK-IN'}
+                  </span>
+                </div>
               </div>
+
+              {gpsStatus && (
+                <p className="text-[10px] font-mono text-emerald-400 bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                  🛰️ {gpsStatus}
+                </p>
+              )}
 
               {pinError && (
                 <div className="bg-rose-950/80 border border-rose-800 text-rose-300 text-xs p-3 rounded-xl flex items-center gap-2">
@@ -527,7 +544,7 @@ export default function CompanionDashboardPage() {
               {activeOrder.status === 'ASSIGNED' ? (
                 <div className="space-y-3">
                   <p className="text-xs text-slate-400">
-                    PIN de Encuentro (solicitar al usuario): <strong>{activeOrder.pin_start || activeOrder.checkin_pin || '9819'}</strong>
+                    Pídele al solicitante su <strong>PIN de Encuentro</strong> personal para iniciar la asistencia presencial:
                   </p>
                   <div className="flex gap-2 max-w-sm">
                     <input
@@ -541,16 +558,21 @@ export default function CompanionDashboardPage() {
                     <button
                       onClick={() => handleValidarPIN('INICIO')}
                       disabled={actionLoading || !pinInput.trim()}
-                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 cursor-pointer"
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                     >
-                      {actionLoading ? 'Validando...' : 'Iniciar Asistencia'}
+                      <MapPin className="w-3.5 h-3.5" />
+                      <span>{actionLoading ? 'Validando...' : 'Iniciar Asistencia'}</span>
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-3">
+                  <div className="inline-flex items-center gap-1.5 text-emerald-400 text-xs font-bold bg-emerald-950/60 border border-emerald-500/30 px-3 py-1 rounded-full">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Servicio en progreso presencial</span>
+                  </div>
                   <p className="text-xs text-slate-400">
-                    PIN de Salida (solicitar al usuario): <strong>{activeOrder.pin_end || activeOrder.checkout_pin || '1097'}</strong>
+                    Pídele al solicitante su <strong>PIN de Salida</strong> para registrar el cierre geolocalizado:
                   </p>
                   <div className="flex gap-2 max-w-sm">
                     <input
@@ -559,31 +581,38 @@ export default function CompanionDashboardPage() {
                       placeholder="PIN de salida"
                       value={pinInput}
                       onChange={(e) => setPinInput(e.target.value)}
-                      className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-center text-base font-mono font-bold text-white outline-none focus:border-emerald-500"
+                      className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-center text-base font-mono font-bold text-white outline-none focus:border-amber-500"
                     />
                     <button
                       onClick={() => handleValidarPIN('FINAL')}
                       disabled={actionLoading || !pinInput.trim()}
-                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-amber-500/20 transition disabled:opacity-50 cursor-pointer"
+                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-amber-500/20 transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                     >
-                      {actionLoading ? 'Finalizando...' : 'Finalizar Asistencia'}
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{actionLoading ? 'Finalizando...' : 'Finalizar Asistencia'}</span>
                     </button>
                   </div>
                 </div>
               )}
             </div>
+
           </div>
         ) : null}
 
-        {/* 2. CHAT OPERATIVO EN VIVO ASÍNCRONO (PERSISTENTE EN SALA DE OPERACIONES) */}
-        {chatTargetOrder && (
+        {/* 2. CHAT OPERATIVO EN VIVO ASÍNCRONO PERSISTENTE */}
+        {selectedChatOrder && (
           <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <MessageCircle className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-sm font-black text-white uppercase tracking-wider">
-                  Chat Operativo en Vivo (#{chatTargetOrder.id.slice(0, 8).toUpperCase()})
-                </h3>
+                <div>
+                  <h3 className="text-sm font-black text-white uppercase tracking-wider">
+                    Chat Operativo en Vivo (#{selectedChatOrder.id.slice(0, 8).toUpperCase()})
+                  </h3>
+                  <span className="text-[10px] text-slate-400">
+                    Usuario: {selectedChatOrder.recipient_name || selectedChatOrder.client_name || 'Solicitante'}
+                  </span>
+                </div>
               </div>
               <span className="text-[10px] font-mono bg-emerald-950 border border-emerald-500/40 text-emerald-400 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -644,7 +673,7 @@ export default function CompanionDashboardPage() {
           </div>
         )}
 
-        {/* 3. SOLICITUDES DISPONIBLES */}
+        {/* 3. SOLICITUDES DISPONIBLES EN TIEMPO REAL */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <div className="flex items-center gap-2">
@@ -672,6 +701,9 @@ export default function CompanionDashboardPage() {
                       </span>
                       <span className="bg-amber-950 border border-amber-500/40 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
                         {ord.status}
+                      </span>
+                      <span className="text-slate-500 text-[11px]">
+                        {new Date(ord.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                       <span className="bg-emerald-950 text-emerald-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded">
                         Pago: RD$ 750
@@ -702,7 +734,7 @@ export default function CompanionDashboardPage() {
           </div>
         </div>
 
-        {/* 4. HISTORIAL DE SERVICIOS */}
+        {/* 4. HISTORIAL DE TURNOS COMPLETADOS */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <h3 className="text-sm font-black text-white uppercase tracking-wider">Historial de Turnos Completados</h3>
@@ -720,11 +752,20 @@ export default function CompanionDashboardPage() {
                     <p className="font-bold text-white">{ord.recipient_name || ord.client_name || 'Usuario'}</p>
                     <p className="text-[11px] text-slate-400">📍 {ord.facility_or_location || ord.address}</p>
                   </div>
-                  <div className="text-right">
-                    <span className="text-emerald-400 font-mono font-bold block">
-                      +RD$ {Number(ord.companion_fee || 750).toLocaleString()}
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-mono">Acreditado</span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setSelectedChatOrder(ord)}
+                      className="bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <MessageCircle className="w-3 h-3" />
+                      <span>Ver Chat</span>
+                    </button>
+                    <div className="text-right">
+                      <span className="text-emerald-400 font-mono font-bold block">
+                        +RD$ {Number(ord.companion_fee || 750).toLocaleString()}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">Acreditado</span>
+                    </div>
                   </div>
                 </div>
               ))
