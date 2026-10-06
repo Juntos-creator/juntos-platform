@@ -25,13 +25,17 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [resetSuccess, setResetSuccess] = useState(false);
 
-  // Cargar correo recordado en este dispositivo
+  // Cargar credenciales guardadas en este dispositivo
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedEmail = localStorage.getItem('juntos_remember_email');
+      const savedPassword = localStorage.getItem('juntos_remember_password');
       if (savedEmail) {
         setEmail(savedEmail);
         setRememberMe(true);
+      }
+      if (savedPassword) {
+        setPassword(savedPassword);
       }
     }
   }, []);
@@ -84,12 +88,14 @@ export default function LoginPage() {
       }
 
       if (data?.user) {
-        // Guardar o limpiar correo en localStorage
+        // Manejar persistencia local explícita de credenciales
         if (typeof window !== 'undefined') {
           if (rememberMe) {
             localStorage.setItem('juntos_remember_email', cleanEmail);
+            localStorage.setItem('juntos_remember_password', cleanPassword);
           } else {
             localStorage.removeItem('juntos_remember_email');
+            localStorage.removeItem('juntos_remember_password');
           }
         }
 
@@ -105,7 +111,7 @@ export default function LoginPage() {
 
         const role = profile?.role || user.user_metadata?.role;
 
-        // 1. Administrador: super-usuario con acceso directo a operaciones
+        // 1. Administrador
         if (userEmail === 'odel_kiss@hotmail.com' || role === 'ADMIN') {
           window.location.href = '/admin/operations';
           return;
@@ -113,11 +119,11 @@ export default function LoginPage() {
 
         // 2. Personal Acompañante
         if (role === 'COMPANION' || role === 'ACOMPANANTE') {
-          window.location.href = '/companion';
+          window.location.href = '/companion/dashboard';
           return;
         }
 
-        // 3. Cliente / Solicitante (CUSTOMER o CLIENT): verificar cita activa
+        // 3. Cliente / Solicitante: verificar cita activa
         const { data: activeService } = await supabase
           .from('service_requests')
           .select('id')
@@ -182,13 +188,19 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4 text-xs">
+        {/* Formulario con método POST y atributos estándar para el Gestor de Contraseñas */}
+        <form onSubmit={handleLogin} method="post" autoComplete="on" className="space-y-4 text-xs">
           <div className="space-y-1.5">
-            <label className="font-bold text-slate-300 block">Correo electrónico *</label>
+            <label htmlFor="email" className="font-bold text-slate-300 block">
+              Correo electrónico *
+            </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3 pointer-events-none" />
               <input
+                id="email"
+                name="email"
                 type="email"
+                autoComplete="username"
                 required
                 placeholder="correo@ejemplo.com"
                 value={email}
@@ -200,7 +212,9 @@ export default function LoginPage() {
 
           <div className="space-y-1.5">
             <div className="flex justify-between items-center">
-              <label className="font-bold text-slate-300">Contraseña *</label>
+              <label htmlFor="password" className="font-bold text-slate-300">
+                Contraseña *
+              </label>
               <button
                 type="button"
                 onClick={handleResetPassword}
@@ -212,7 +226,10 @@ export default function LoginPage() {
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3 pointer-events-none" />
               <input
+                id="password"
+                name="password"
                 type="password"
+                autoComplete="current-password"
                 required
                 placeholder="••••••••"
                 value={password}
@@ -233,7 +250,7 @@ export default function LoginPage() {
               <Square className="w-4 h-4 text-slate-600" />
             )}
             <span className="text-xs font-medium">
-              Recordar mi cuenta en este dispositivo
+              Recordar correo y contraseña en este dispositivo
             </span>
           </div>
 
