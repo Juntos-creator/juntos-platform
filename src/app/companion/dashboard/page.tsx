@@ -33,6 +33,7 @@ export default function CompanionDashboardPage() {
   const [activeOrder, setActiveOrder] = useState<any | null>(null);
   const [availableOrders, setAvailableOrders] = useState<any[]>([]);
   const [pastOrders, setPastOrders] = useState<any[]>([]);
+  const [chatTargetOrder, setChatTargetOrder] = useState<any | null>(null);
 
   // Doble PIN y feedback
   const [pinInput, setPinInput] = useState('');
@@ -40,104 +41,67 @@ export default function CompanionDashboardPage() {
   const [pinSuccess, setPinSuccess] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Chat en Vivo sincronizado
+  // Chat Asíncrono
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMsg, setSendingMsg] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // 1. Inicialización de sesión y perfiles
   useEffect(() => {
+    let isMounted = true;
+
     async function initDashboard() {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
 
-      if (!user) {
+      if (!session?.user) {
         router.replace('/login');
         return;
       }
 
-      setCurrentUser(user);
+      if (isMounted) {
+        setCurrentUser(session.user);
+      }
 
       const { data: prof } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id)
+        .eq('id', session.user.id)
         .maybeSingle();
 
-      setProfile(prof);
+      if (isMounted) {
+        setProfile(prof);
+      }
 
-      await fetchAllServices(user.id);
-      setLoading(false);
+      await fetchAllServices(session.user.id);
+      if (isMounted) setLoading(false);
     }
 
     initDashboard();
 
-    // Sincronización en tiempo real de servicios
+    // Suscripción asíncrona a cambios en servicios
     const srvChannel = supabase
       .channel('companion-srv-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'service_requests' },
-        () => {
-          if (currentUser) fetchAllServices(currentUser.id);
+        async () => {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            await fetchAllServices(session.user.id);
+          }
         }
       )
       .subscribe();
 
     return () => {
+      isMounted = false;
       supabase.removeChannel(srvChannel);
     };
-  }, [router, supabase, currentUser?.id]);
+  }, [router, supabase]);
 
-  // Sincronización del Chat en tiempo real con el celular
-  useEffect(() => {
-    if (!activeOrder?.id) {
-      setMessages([]);
-      return;
-    }
-
-    async function loadChatMessages() {
-      const { data } = await supabase
-        .from('service_messages')
-        .select('*')
-        .eq('service_request_id', activeOrder.id)
-        .order('created_at', { ascending: true });
-
-      if (data) setMessages(data);
-    }
-
-    loadChatMessages();
-
-    // Canal bidireccional en vivo
-    const msgChannel = supabase
-      .channel(`chat-sync-${activeOrder.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'service_messages',
-          filter: `service_request_id=eq.${activeOrder.id}`
-        },
-        (payload) => {
-          setMessages((prev) => {
-            const existe = prev.some((m) => m.id === payload.new.id);
-            if (existe) return prev;
-            return [...prev, payload.new];
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(msgChannel);
-    };
-  }, [activeOrder?.id, supabase]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
+  // 2. Consulta asíncrona de servicios
   async function fetchAllServices(userId: string) {
     const { data: allRequests, error } = await supabase
       .from('service_requests')
@@ -162,13 +126,70 @@ export default function CompanionDashboardPage() {
         ['COMPLETED', 'FINALIZADO'].includes((o.status || '').toUpperCase())
       );
       setPastOrders(completed);
+
+      // Mantener el objetivo del chat: si hay orden activa la toma; si no, toma la última completada
+      setChatTargetOrder(myActive || completed[0] || null);
     }
   }
+
+  // 3. Suscripción y carga asíncrona del chat
+  useEffect(() => {
+    if (!chatTargetOrder?.id) {
+      setMessages([]);
+      return;
+    }
+
+    let isSubscribed = true;
+
+    async function loadMessagesAsync() {
+      const { data, error } = await supabase
+        .from('service_messages')
+        .select('*')
+        .eq('service_request_id', chatTargetOrder.id)
+        .order('created_at', { ascending: true });
+
+      if (!error && data && isSubscribed) {
+        setMessages(data);
+      }
+    }
+
+    loadMessagesAsync();
+
+    const msgChannel = supabase
+      .channel(`chat-realtime-${chatTargetOrder.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'service_messages',
+          filter: `service_request_id=eq.${chatTargetOrder.id}`
+        },
+        (payload) => {
+          if (isSubscribed) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === payload.new.id)) return prev;
+              return [...prev, payload.new];
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isSubscribed = false;
+      supabase.removeChannel(msgChannel);
+    };
+  }, [chatTargetOrder?.id, supabase]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   // Tomar un pedido
   async function handleTomarServicio(orderId: string) {
     if (activeOrder) {
-      alert(`Ya tienes un servicio en curso (#${activeOrder.id.slice(0, 8).toUpperCase()}). Debes finalizarlo antes.`);
+      alert(`Ya tienes un servicio en curso (#${activeOrder.id.slice(0, 8).toUpperCase()}). Finalízalo primero.`);
       return;
     }
 
@@ -189,39 +210,39 @@ export default function CompanionDashboardPage() {
       alert('Error: ' + error.message);
     } else if (data && data.length > 0) {
       setActiveOrder(data[0]);
+      setChatTargetOrder(data[0]);
       if (currentUser) await fetchAllServices(currentUser.id);
     }
     setActionLoading(false);
   }
 
-  // Enviar mensaje en el chat
+  // Envío asíncrono de mensajes
   async function handleSendMessage(e: React.FormEvent) {
     e.preventDefault();
-    if (!newMessage.trim() || !activeOrder || !currentUser) return;
+    if (!newMessage.trim() || !chatTargetOrder || !currentUser) return;
 
     setSendingMsg(true);
-    const texto = newMessage.trim();
+    const content = newMessage.trim();
     setNewMessage('');
 
-    const remitente = profile?.full_name || currentUser.email?.split('@')[0] || 'Acompañante';
+    const senderName = profile?.full_name || currentUser.email?.split('@')[0] || 'Acompañante';
 
     const { error } = await supabase
       .from('service_messages')
       .insert({
-        service_request_id: activeOrder.id,
+        service_request_id: chatTargetOrder.id,
         sender_id: currentUser.id,
-        sender_name: remitente,
-        message: texto
+        sender_name: senderName,
+        message: content
       });
 
     if (error) {
-      console.error('Error al enviar mensaje:', error.message);
-      alert('No se pudo enviar el mensaje: ' + error.message);
+      alert('Error enviando mensaje: ' + error.message);
     }
     setSendingMsg(false);
   }
 
-  // Validar PIN (Check-In y Check-Out)
+  // Validación asíncrona de PIN
   async function handleValidarPIN(tipo: 'INICIO' | 'FINAL') {
     if (!activeOrder || !pinInput.trim()) return;
     setPinError(null);
@@ -238,7 +259,7 @@ export default function CompanionDashboardPage() {
       (tipo === 'FINAL' && (ingresado === '5678' || ingresado === '1097'));
 
     if (!esValido) {
-      setPinError(`PIN de ${tipo === 'INICIO' ? 'Encuentro' : 'Salida'} incorrecto. Solicítalo al usuario.`);
+      setPinError(`PIN de ${tipo === 'INICIO' ? 'Encuentro' : 'Salida'} incorrecto.`);
       setActionLoading(false);
       return;
     }
@@ -254,7 +275,7 @@ export default function CompanionDashboardPage() {
 
       if (!error) {
         setPinInput('');
-        setPinSuccess('¡Check-In completado con éxito! Servicio en curso.');
+        setPinSuccess('¡Check-In completado! Servicio en progreso.');
         if (currentUser) await fetchAllServices(currentUser.id);
       } else {
         setPinError('Error: ' + error.message);
@@ -272,8 +293,7 @@ export default function CompanionDashboardPage() {
 
       if (!error) {
         setPinInput('');
-        setPinSuccess('¡Servicio finalizado con éxito! RD$ 750 acreditados a tu balance.');
-        setActiveOrder(null);
+        setPinSuccess('¡Servicio finalizado con éxito! RD$ 750 acreditados.');
         if (currentUser) await fetchAllServices(currentUser.id);
       } else {
         setPinError('Error de sincronización: ' + error.message);
@@ -286,7 +306,7 @@ export default function CompanionDashboardPage() {
   // Protocolo SOS
   async function handleActivarSOS() {
     if (!activeOrder) return;
-    if (!confirm('🚨 ¿DESEAS ACTIVAR EL PROTOCOLO SOS? Esto alertará a la Central.')) return;
+    if (!confirm('🚨 ¿ACTIVAR PROTOCOLO SOS?')) return;
 
     setActionLoading(true);
     await supabase
@@ -299,7 +319,7 @@ export default function CompanionDashboardPage() {
   }
 
   const totalGanancias = pastOrders.reduce((acc, curr) => acc + Number(curr.companion_fee || 750), 0);
-  const destinoUbicacion = activeOrder?.facility_or_location || activeOrder?.address || 'Destino coordinado';
+  const destinoUbicacion = activeOrder?.facility_or_location || activeOrder?.address || 'Destino asignado';
 
   if (loading) {
     return (
@@ -398,14 +418,13 @@ export default function CompanionDashboardPage() {
           </div>
         )}
 
-        {/* 1. SERVICIO ACTIVO ASIGNADO */}
+        {/* 1. SERVICIO ACTIVO (SI EXISTE) */}
         {activeOrder ? (
           <div className={`rounded-3xl border p-6 space-y-6 shadow-2xl transition ${
             activeOrder.emergency_status === 'SOS_ACTIVE'
               ? 'bg-rose-950/60 border-rose-600 ring-2 ring-rose-500'
               : 'bg-slate-900/90 border-emerald-500/40'
           }`}>
-            
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-4">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
@@ -484,75 +503,6 @@ export default function CompanionDashboardPage() {
               </div>
             </div>
 
-            {/* CHAT OPERATIVO EN VIVO (SINCRONIZADO CON EL CELULAR) */}
-            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-inner">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                <div className="flex items-center gap-2">
-                  <MessageCircle className="w-4 h-4 text-emerald-400" />
-                  <h4 className="font-bold text-white text-xs uppercase tracking-wider">
-                    Chat Operativo del Servicio
-                  </h4>
-                </div>
-                <span className="text-[10px] font-mono bg-emerald-950 border border-emerald-500/40 text-emerald-400 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  EN VIVO
-                </span>
-              </div>
-
-              {/* Contenedor de mensajes */}
-              <div className="h-48 overflow-y-auto space-y-2.5 pr-1 font-sans text-xs">
-                {messages.length === 0 ? (
-                  <div className="text-slate-500 text-center py-12 text-[11px] space-y-1">
-                    <p>No hay mensajes en este servicio.</p>
-                    <p className="text-[10px] text-slate-600">Escribe aquí para comunicarte con el usuario en su móvil.</p>
-                  </div>
-                ) : (
-                  messages.map((m) => {
-                    const esMio = m.sender_id === currentUser?.id;
-                    return (
-                      <div
-                        key={m.id}
-                        className={`flex flex-col ${esMio ? 'items-end' : 'items-start'}`}
-                      >
-                        <span className="text-[9px] text-slate-400 font-mono mb-0.5 px-1">
-                          {m.sender_name || (esMio ? 'Tú' : 'Usuario')}
-                        </span>
-                        <div
-                          className={`px-3.5 py-2 rounded-2xl max-w-[80%] break-words text-xs ${
-                            esMio
-                              ? 'bg-emerald-500 text-slate-950 font-bold rounded-br-none shadow-md'
-                              : 'bg-slate-900 border border-slate-800 text-white rounded-bl-none shadow'
-                          }`}
-                        >
-                          {m.message}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Formulario de envío */}
-              <form onSubmit={handleSendMessage} className="flex gap-2 pt-2 border-t border-slate-800">
-                <input
-                  type="text"
-                  placeholder="Escribe un mensaje al solicitante..."
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-emerald-500 transition"
-                />
-                <button
-                  type="submit"
-                  disabled={sendingMsg || !newMessage.trim()}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer shadow-lg shadow-emerald-500/20"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Enviar</span>
-                </button>
-              </form>
-            </div>
-
             {/* VALIDACIÓN DE PIN */}
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
               <div className="flex items-center justify-between">
@@ -577,10 +527,7 @@ export default function CompanionDashboardPage() {
               {activeOrder.status === 'ASSIGNED' ? (
                 <div className="space-y-3">
                   <p className="text-xs text-slate-400">
-                    Pídele al solicitante su <strong>PIN de Encuentro</strong> para comenzar la jornada:
-                  </p>
-                  <p className="text-[10px] font-mono text-emerald-400/80">
-                    PIN en sistema: <strong>{activeOrder.pin_start || activeOrder.checkin_pin || '9819'}</strong>
+                    PIN de Encuentro (solicitar al usuario): <strong>{activeOrder.pin_start || activeOrder.checkin_pin || '9819'}</strong>
                   </p>
                   <div className="flex gap-2 max-w-sm">
                     <input
@@ -602,15 +549,8 @@ export default function CompanionDashboardPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="inline-flex items-center gap-1.5 text-emerald-400 text-xs font-bold bg-emerald-950/60 border border-emerald-500/30 px-3 py-1 rounded-full">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Servicio en progreso presencial</span>
-                  </div>
                   <p className="text-xs text-slate-400">
-                    Pídele el <strong>PIN de Salida</strong> para finalizar la orden y acreditar tus RD$ 750:
-                  </p>
-                  <p className="text-[10px] font-mono text-amber-400/80">
-                    PIN en sistema: <strong>{activeOrder.pin_end || activeOrder.checkout_pin || '1097'}</strong>
+                    PIN de Salida (solicitar al usuario): <strong>{activeOrder.pin_end || activeOrder.checkout_pin || '1097'}</strong>
                   </p>
                   <div className="flex gap-2 max-w-sm">
                     <input
@@ -632,11 +572,79 @@ export default function CompanionDashboardPage() {
                 </div>
               )}
             </div>
-
           </div>
         ) : null}
 
-        {/* 2. SOLICITUDES DISPONIBLES EN TIEMPO REAL */}
+        {/* 2. CHAT OPERATIVO EN VIVO ASÍNCRONO (PERSISTENTE EN SALA DE OPERACIONES) */}
+        {chatTargetOrder && (
+          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-sm font-black text-white uppercase tracking-wider">
+                  Chat Operativo en Vivo (#{chatTargetOrder.id.slice(0, 8).toUpperCase()})
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono bg-emerald-950 border border-emerald-500/40 text-emerald-400 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                CANAL ACTIVO
+              </span>
+            </div>
+
+            <div className="h-52 overflow-y-auto space-y-2.5 pr-2 font-sans text-xs bg-slate-950 p-4 rounded-2xl border border-slate-800/80">
+              {messages.length === 0 ? (
+                <div className="text-slate-500 text-center py-12 text-[11px] space-y-1">
+                  <p>No hay mensajes registrados en este servicio.</p>
+                  <p className="text-[10px] text-slate-600">Escribe aquí para coordinar con el usuario en su móvil.</p>
+                </div>
+              ) : (
+                messages.map((m) => {
+                  const esMio = m.sender_id === currentUser?.id;
+                  return (
+                    <div
+                      key={m.id}
+                      className={`flex flex-col ${esMio ? 'items-end' : 'items-start'}`}
+                    >
+                      <span className="text-[9px] text-slate-400 font-mono mb-0.5 px-1">
+                        {m.sender_name || (esMio ? 'Tú' : 'Usuario')}
+                      </span>
+                      <div
+                        className={`px-3.5 py-2 rounded-2xl max-w-[80%] break-words text-xs ${
+                          esMio
+                            ? 'bg-emerald-500 text-slate-950 font-bold rounded-br-none shadow-md'
+                            : 'bg-slate-900 border border-slate-800 text-white rounded-bl-none shadow'
+                        }`}
+                      >
+                        {m.message}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <form onSubmit={handleSendMessage} className="flex gap-2 pt-1">
+              <input
+                type="text"
+                placeholder="Escribe un mensaje al solicitante..."
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-emerald-500 transition"
+              />
+              <button
+                type="submit"
+                disabled={sendingMsg || !newMessage.trim()}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer shadow-lg shadow-emerald-500/20"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Enviar</span>
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* 3. SOLICITUDES DISPONIBLES */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <div className="flex items-center gap-2">
@@ -653,7 +661,6 @@ export default function CompanionDashboardPage() {
               <div className="py-8 text-center text-slate-500 text-xs space-y-1">
                 <Radio className="w-7 h-7 text-slate-700 mx-auto mb-1 animate-pulse" />
                 <p>No hay solicitudes pendientes de asignación en este momento.</p>
-                <p className="text-[11px] text-slate-600">Cuando registres una orden en el celular, se mostrará aquí automáticamente.</p>
               </div>
             ) : (
               availableOrders.map((ord) => (
@@ -666,9 +673,6 @@ export default function CompanionDashboardPage() {
                       <span className="bg-amber-950 border border-amber-500/40 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
                         {ord.status}
                       </span>
-                      <span className="text-slate-500 text-[11px]">
-                        {new Date(ord.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
                       <span className="bg-emerald-950 text-emerald-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded">
                         Pago: RD$ 750
                       </span>
@@ -680,7 +684,7 @@ export default function CompanionDashboardPage() {
 
                     <p className="text-slate-400 flex items-center gap-1 text-[11px]">
                       <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                      {ord.facility_or_location || ord.address || ord.pickup_address || 'Santo Domingo'}
+                      {ord.facility_or_location || ord.address || 'Santo Domingo'}
                     </p>
                   </div>
 
@@ -698,7 +702,7 @@ export default function CompanionDashboardPage() {
           </div>
         </div>
 
-        {/* 3. HISTORIAL DE SERVICIOS Y PAGOS */}
+        {/* 4. HISTORIAL DE SERVICIOS */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <h3 className="text-sm font-black text-white uppercase tracking-wider">Historial de Turnos Completados</h3>
