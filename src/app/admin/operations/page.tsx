@@ -91,6 +91,7 @@ export default function OperacionesPage() {
 
       const esAdmin = 
         profile?.role === 'ADMIN' || 
+        profile?.role === 'OPERATOR' ||
         user.user_metadata?.role === 'ADMIN' || 
         user.email?.toLowerCase() === 'odel_kiss@hotmail.com';
 
@@ -116,14 +117,16 @@ export default function OperacionesPage() {
       .select('*')
       .order('created_at', { ascending: false });
 
-    // Cargar perfiles para mapear nombres y teléfonos de acompañantes
+    // Cargar perfiles de acompañantes
     const { data: acompanantes } = await supabase
       .from('profiles')
-      .select('id, full_name, phone, status')
+      .select('id, full_name, phone, status, is_available')
       .eq('role', 'COMPANION');
       
-    // Solo aquellos aprobados pueden recibir despacho manual
-    const soloAprobados = (acompanantes || []).filter(a => a.status === 'APROBADO');
+    // Acompañantes aptos para despacho (validados tanto por 'APROBADO' como por 'ACTIVE')
+    const soloAprobados = (acompanantes || []).filter(a => 
+      ['APROBADO', 'ACTIVE'].includes((a.status || '').toUpperCase())
+    );
     setAcompanantesActivos(soloAprobados);
 
     if (srvData && srvData.length > 0) {
@@ -158,11 +161,31 @@ export default function OperacionesPage() {
       setServicios([]);
     }
 
+    // Consulta de Expedientes KYC
     const { data: apps } = await supabase
       .from('companion_applications')
       .select('*')
       .order('created_at', { ascending: false });
-    setExpedientes(apps || []);
+
+    if (apps && apps.length > 0) {
+      setExpedientes(apps);
+    } else {
+      // Fallback: si no hay filas en companion_applications, mostrar acompañantes de profiles
+      const perfilesPendientes = (acompanantes || []).map((p: any) => ({
+        id: p.id,
+        user_id: p.id,
+        nombre: p.full_name,
+        full_name: p.full_name,
+        telefono_whatsapp: p.phone,
+        domicilio_sector: 'Santo Domingo',
+        tipo_documento: 'CEDULA',
+        numero_documento: 'Pendiente',
+        estado_depuracion: p.status === 'APROBADO' ? 'APROBADO' : 'PENDIENTE',
+        estado: p.status === 'APROBADO' ? 'APROBADO' : 'PENDIENTE',
+        created_at: new Date().toISOString()
+      }));
+      setExpedientes(perfilesPendientes);
+    }
 
     setLoading(false);
   }
@@ -208,7 +231,7 @@ export default function OperacionesPage() {
     setUpdating(false);
   }
 
-  // 5. Asignar Personal (Solo modifica companion_id y status para evitar errores de schema)
+  // 5. Asignar Personal
   async function handleAsignarPersonal() {
     if (!acompananteSeleccionado || !selectedService) return;
     const pers = acompanantesActivos.find(a => a.id === acompananteSeleccionado);
@@ -296,15 +319,17 @@ export default function OperacionesPage() {
     if (!confirm(`¿Confirmas la acreditación oficial de ${exp.nombre || exp.full_name}?`)) return;
     setUpdating(true);
 
-    await supabase
-      .from('companion_applications')
-      .update({ estado_depuracion: 'APROBADO', estado: 'APROBADO' })
-      .eq('id', exp.id);
+    try {
+      await supabase
+        .from('companion_applications')
+        .update({ estado_depuracion: 'APROBADO', estado: 'APROBADO' })
+        .eq('id', exp.id);
+    } catch (_) {}
 
     await supabase
       .from('profiles')
-      .update({ status: 'APROBADO', role: 'COMPANION' })
-      .eq('id', exp.user_id);
+      .update({ status: 'APROBADO', role: 'COMPANION', is_available: true })
+      .eq('id', exp.user_id || exp.id);
 
     await cargarDatos();
     setUpdating(false);
@@ -316,19 +341,21 @@ export default function OperacionesPage() {
     if (!motivo) return;
 
     setUpdating(true);
-    await supabase
-      .from('companion_applications')
-      .update({ 
-        estado_depuracion: 'RECHAZADO', 
-        estado: 'RECHAZADO',
-        observaciones_rrhh: motivo 
-      })
-      .eq('id', exp.id);
+    try {
+      await supabase
+        .from('companion_applications')
+        .update({ 
+          estado_depuracion: 'RECHAZADO', 
+          estado: 'RECHAZADO',
+          observaciones_rrhh: motivo 
+        })
+        .eq('id', exp.id);
+    } catch (_) {}
 
     await supabase
       .from('profiles')
-      .update({ status: 'RECHAZADO' })
-      .eq('id', exp.user_id);
+      .update({ status: 'RECHAZADO', is_available: false })
+      .eq('id', exp.user_id || exp.id);
 
     await cargarDatos();
     setUpdating(false);
@@ -578,7 +605,7 @@ export default function OperacionesPage() {
                   </div>
                 </div>
 
-                {/* DOBLE PIN Y FINANZAS (CONCILIACIÓN RD$ 1,350) */}
+                {/* DOBLE PIN Y FINANZAS */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-slate-900/90 border border-emerald-500/30 rounded-2xl p-4 space-y-2">
                     <div className="flex justify-between items-center border-b border-slate-800 pb-2">
@@ -748,7 +775,7 @@ export default function OperacionesPage() {
                         <td className="p-3">
                           <strong className="text-white block">{exp.nombre || exp.full_name}</strong>
                           <span className="text-[10px] text-slate-500 font-mono">
-                            {new Date(exp.created_at || exp.fecha_solicitud || Date.now()).toLocaleDateString()}
+                            {new Date(exp.created_at || Date.now()).toLocaleDateString()}
                           </span>
                         </td>
                         <td className="p-3 font-mono">
@@ -827,7 +854,7 @@ export default function OperacionesPage() {
                 <option value="">-- Elige un acompañante --</option>
                 {acompanantesActivos.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.full_name} ({a.phone})
+                    {a.full_name} ({a.phone || 'Sin tel.'})
                   </option>
                 ))}
               </select>

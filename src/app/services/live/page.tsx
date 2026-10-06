@@ -1,28 +1,22 @@
 'use client';
 
-import { Suspense, useEffect, useState, useRef } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Navbar } from '@/components/navbar';
+import ServiceChatRoom from '@/components/chat/ServiceChatRoom';
 import { 
-  ShieldCheck, 
-  MapPin, 
-  Calendar, 
-  Clock, 
   Phone, 
-  MessageSquare, 
   KeyRound, 
   CheckCircle2, 
   AlertTriangle, 
-  Send, 
   Radio, 
   UserPlus,
   X,
   Edit3,
   CalendarPlus,
-  Lock,
-  Unlock
+  Star
 } from 'lucide-react';
 
 function LiveRoomContent() {
@@ -44,11 +38,12 @@ function LiveRoomContent() {
   const [pinActionLoading, setPinActionLoading] = useState(false);
   const [pinFeedback, setPinFeedback] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
-  // Chat Operativo
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [sendingMsg, setSendingMsg] = useState(false);
-  const chatBottomRef = useRef<HTMLDivElement>(null);
+  // Estados de Calificación
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingValue, setRatingValue] = useState(5);
+  const [ratingComment, setRatingComment] = useState('');
+  const [savingRating, setSavingRating] = useState(false);
+  const [ratingDone, setRatingDone] = useState(false);
 
   // Modal para Asignar / Cambiar Acompañante
   const [showEditCompanionModal, setShowEditCompanionModal] = useState(false);
@@ -70,7 +65,6 @@ function LiveRoomContent() {
       }
       setCurrentUser(user);
 
-      // Obtener rol del usuario actual
       const { data: userProfile } = await supabase
         .from('profiles')
         .select('role')
@@ -83,7 +77,6 @@ function LiveRoomContent() {
 
       let targetId = rawId?.trim();
 
-      // Fallback 1: Buscar orden más reciente del usuario
       if (!targetId) {
         const { data: userLatest } = await supabase
           .from('service_requests')
@@ -96,7 +89,6 @@ function LiveRoomContent() {
         if (userLatest) targetId = userLatest.id;
       }
 
-      // Fallback 2: Buscar orden más reciente global (para Admin / Acompañante)
       if (!targetId) {
         const { data: globalLatest } = await supabase
           .from('service_requests')
@@ -132,14 +124,16 @@ function LiveRoomContent() {
         setPinMode('CHECKOUT');
       }
 
-      // Cargar lista de acompañantes registrados
+      if (srv.rating || srv.reviewed_at) {
+        setRatingDone(true);
+      }
+
       const { data: compList } = await supabase
         .from('profiles')
         .select('id, full_name, phone, role')
         .in('role', ['COMPANION', 'ACOMPANANTE']);
       setAllCompanions(compList || []);
 
-      // Cargar acompañante asignado
       const companionId = srv.assigned_companion_id || srv.companion_id;
       let compInfo: any = null;
       if (companionId) {
@@ -151,24 +145,13 @@ function LiveRoomContent() {
         compInfo = comp;
       }
 
-      const nombreAcomp = 
-        compInfo?.full_name || 
-        srv.companion_name || 
-        (companionId ? 'Acompañante Asignado' : 'Por asignar por Mesa Central');
-
-      const telAcomp = 
-        compInfo?.phone || 
-        srv.companion_phone || 
-        '809-541-2000';
-
       setCompanion({
         id: companionId,
-        full_name: nombreAcomp,
-        phone: telAcomp
+        full_name: compInfo?.full_name || srv.companion_name || (companionId ? 'Acompañante Asignado' : 'Por asignar por Mesa Central'),
+        phone: compInfo?.phone || srv.companion_phone || '809-541-2000'
       });
       setSelectedCompanionId(companionId || '');
 
-      // Cargar datos del solicitante/familiar
       const customerId = srv.client_id || srv.customer_id || srv.user_id;
       if (customerId) {
         const { data: cli } = await supabase
@@ -179,94 +162,51 @@ function LiveRoomContent() {
         setClientProfile(cli);
       }
 
-      // Cargar Mensajes iniciales directamente desde service_messages
-      const { data: msgs } = await supabase
-        .from('service_messages')
-        .select('*')
-        .or(`service_id.eq.${srv.id},service_request_id.eq.${srv.id}`)
-        .order('created_at', { ascending: true });
-
-      setChatMessages(msgs || []);
       setLoading(false);
     }
 
     loadData();
   }, [rawId, supabase]);
 
-  // Suscripción Realtime Unificada + Polling de Respaldo Continuo (cada 2 segundos)
+  // Escuchar cambios de estado en Realtime
   useEffect(() => {
     if (!service?.id) return;
 
-    const currentServiceId = service.id;
-
-    // Función de sondeo periódico de respaldo
-    async function fetchChatUpdates() {
-      const { data } = await supabase
-        .from('service_messages')
-        .select('*')
-        .or(`service_id.eq.${currentServiceId},service_request_id.eq.${currentServiceId}`)
-        .order('created_at', { ascending: true });
-
-      if (data && data.length > 0) {
-        setChatMessages(data);
-      }
-    }
-
-    // 1. Polling de respaldo cada 2 segundos
-    const pollInterval = setInterval(fetchChatUpdates, 2000);
-
-    // 2. Suscripción instantánea mediante WebSocket Realtime
     const channel = supabase
-      .channel(`live_room_chat_${currentServiceId}`)
+      .channel(`live_status_${service.id}`)
       .on(
         'postgres_changes',
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'service_messages'
-        },
-        (payload) => {
-          const msg = payload.new;
-          if (msg.service_id === currentServiceId || msg.service_request_id === currentServiceId) {
-            setChatMessages((prev) => {
-              if (prev.some(m => m.id === msg.id)) return prev;
-              const filtered = prev.filter(m => !m.id.toString().startsWith('temp_'));
-              return [...filtered, msg];
-            });
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'service_requests', filter: `id=eq.${currentServiceId}` },
+        { event: 'UPDATE', schema: 'public', table: 'service_requests', filter: `id=eq.${service.id}` },
         (payload) => {
           setService(payload.new);
           if (payload.new.status === 'IN_PROGRESS') {
             setPinMode('CHECKOUT');
+          }
+          if (payload.new.status === 'COMPLETED' && !payload.new.rating && !ratingDone) {
+            setShowRatingModal(true);
           }
         }
       )
       .subscribe();
 
     return () => {
-      clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
-  }, [service?.id, supabase]);
+  }, [service?.id, supabase, ratingDone]);
 
-  // Auto-scroll del chat
+  // Disparar modal si el servicio está concluido
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages]);
+    if (service?.status === 'COMPLETED' && !service.rating && !ratingDone) {
+      setShowRatingModal(true);
+    }
+  }, [service?.status, service?.rating, ratingDone]);
 
-  // 1. VALIDACIÓN SEGURA DEL PIN MEDIANTE RPC
   async function handleVerifyPin(e: React.FormEvent) {
     e.preventDefault();
     if (!service) return;
 
     setPinActionLoading(true);
     setPinFeedback(null);
-
     const enteredPin = inputPin.trim();
 
     try {
@@ -285,11 +225,11 @@ function LiveRoomContent() {
         });
         setInputPin('');
         if (pinMode === 'CHECKIN') setPinMode('CHECKOUT');
+        else setShowRatingModal(true);
         setPinActionLoading(false);
         return;
       }
 
-      // Fallback si la RPC no existe
       const expectedPin = pinMode === 'CHECKIN' 
         ? (service.checkin_pin || '').toString() 
         : (service.checkout_pin || '').toString();
@@ -306,72 +246,23 @@ function LiveRoomContent() {
         setService((prev: any) => ({ ...prev, status: nextStatus }));
         setPinFeedback({
           type: 'success',
-          text: pinMode === 'CHECKIN' ? 'Check-In validado con éxito.' : 'Check-Out completado con éxito.'
+          text: pinMode === 'CHECKIN' ? 'Check-In validado.' : 'Check-Out validado.'
         });
         setInputPin('');
         if (pinMode === 'CHECKIN') setPinMode('CHECKOUT');
+        else setShowRatingModal(true);
       } else {
         throw new Error('El PIN ingresado es incorrecto.');
       }
     } catch (err: any) {
-      setPinFeedback({
-        type: 'error',
-        text: err.message || 'Error al validar el PIN.'
-      });
+      setPinFeedback({ type: 'error', text: err.message || 'Error al validar el PIN.' });
     } finally {
       setPinActionLoading(false);
     }
   }
 
-  // 2. ENVIAR MENSAJE AL CHAT
-  async function handleSendMessage(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newMessage.trim() || !service?.id || !currentUser) return;
-
-    const targetServiceId = service.id;
-    const texto = newMessage.trim();
-    setNewMessage('');
-    setSendingMsg(true);
-
-    const senderName = currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'Usuario';
-    const tempId = `temp_${Date.now()}`;
-    const tempMsg = {
-      id: tempId,
-      service_id: targetServiceId,
-      service_request_id: targetServiceId,
-      sender_id: currentUser.id,
-      sender_name: senderName,
-      message: texto,
-      created_at: new Date().toISOString()
-    };
-
-    setChatMessages((prev) => [...prev, tempMsg]);
-
-    try {
-      const { error } = await supabase
-        .from('service_messages')
-        .insert([{
-          service_id: targetServiceId,
-          service_request_id: targetServiceId,
-          sender_id: currentUser.id,
-          sender_name: senderName,
-          message: texto
-        }]);
-
-      if (error) {
-        console.error('Error insertando en service_messages:', error);
-      }
-    } catch (error) {
-      console.error('Error enviando mensaje:', error);
-    } finally {
-      setSendingMsg(false);
-    }
-  }
-
-  // 3. ASIGNAR / ACTUALIZAR ACOMPAÑANTE
   async function handleSaveCompanion() {
     if (!selectedCompanionId || !service) return;
-
     setSavingComp(true);
     const chosen = allCompanions.find(c => c.id === selectedCompanionId);
     if (!chosen) {
@@ -391,11 +282,7 @@ function LiveRoomContent() {
       .eq('id', service.id);
 
     if (!error) {
-      setCompanion({
-        id: chosen.id,
-        full_name: chosen.full_name,
-        phone: chosen.phone
-      });
+      setCompanion({ id: chosen.id, full_name: chosen.full_name, phone: chosen.phone });
       setService((prev: any) => ({
         ...prev,
         assigned_companion_id: chosen.id,
@@ -411,22 +298,48 @@ function LiveRoomContent() {
     setSavingComp(false);
   }
 
-  // 4. ALERTA SOS
+  async function handleSubmitReview(e: React.FormEvent) {
+    e.preventDefault();
+    if (!service) return;
+
+    setSavingRating(true);
+    try {
+      const { error } = await supabase
+        .from('service_requests')
+        .update({
+          rating: ratingValue,
+          review_comment: ratingComment.trim(),
+          reviewed_at: new Date().toISOString()
+        })
+        .eq('id', service.id);
+
+      if (!error) {
+        setRatingDone(true);
+        setShowRatingModal(false);
+        setService((prev: any) => ({ ...prev, rating: ratingValue, review_comment: ratingComment.trim() }));
+      } else {
+        alert('Error guardando la calificación: ' + error.message);
+      }
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    } finally {
+      setSavingRating(false);
+    }
+  }
+
   async function handleTriggerSOS() {
     if (!service) return;
-    const confirmSOS = confirm('¿Deseas emitir una ALERTA SOS prioritaria a la Mesa Central de Operaciones?');
-    if (!confirmSOS) return;
-
+    if (!confirm('¿Deseas emitir una ALERTA SOS prioritaria a la Mesa Central?')) return;
     await supabase.from('service_requests').update({ emergency_status: 'SOS_ACTIVE' }).eq('id', service.id);
     setSosSent(true);
-    alert('🚨 ALERTA SOS EMITIDA a la Mesa Central.');
+    alert('🚨 ALERTA SOS EMITIDA.');
   }
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-slate-400 gap-3 font-mono text-xs">
         <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-        <p>Cargando sala operativa en vivo...</p>
+        <p>Cargando sala operativa...</p>
       </div>
     );
   }
@@ -438,10 +351,7 @@ function LiveRoomContent() {
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto space-y-4">
           <Radio className="w-10 h-10 text-emerald-400 mx-auto animate-pulse" />
           <h2 className="text-xl font-black text-white">No hay órdenes activas</h2>
-          <Link
-            href="/services/new"
-            className="inline-flex items-center gap-2 bg-emerald-500 text-slate-950 font-black px-6 py-3 rounded-2xl text-xs transition"
-          >
+          <Link href="/services/new" className="inline-flex items-center gap-2 bg-emerald-500 text-slate-950 font-black px-6 py-3 rounded-2xl text-xs">
             <CalendarPlus className="w-4 h-4" /> Solicitar Nuevo Acompañante
           </Link>
         </div>
@@ -449,16 +359,12 @@ function LiveRoomContent() {
     );
   }
 
-  const checkinPin = service.checkin_pin || '----';
-  const checkoutPin = service.checkout_pin || '----';
-
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans pb-20 selection:bg-emerald-500 selection:text-white">
       <Navbar />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 w-full space-y-6">
-        
-        {/* HEADER DE ESTADO Y BOTONES */}
+        {/* HEADER */}
         <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 shadow-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -501,20 +407,13 @@ function LiveRoomContent() {
 
         {/* CUERPO PRINCIPAL */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          
-          {/* COLUMNA 1: FICHA Y DOBLE PIN */}
+          {/* COLUMNA 1: FICHA Y PINS */}
           <div className="space-y-6">
-            
-            {/* FICHA DEL ACOMPAÑANTE */}
             <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
               <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400">
-                  Ficha del Acompañante
-                </h3>
+                <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400">Ficha del Acompañante</h3>
                 <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-                  companion?.id 
-                    ? 'text-emerald-400 bg-emerald-950/60 border-emerald-500/30' 
-                    : 'text-amber-400 bg-amber-950/60 border-amber-500/30'
+                  companion?.id ? 'text-emerald-400 bg-emerald-950/60 border-emerald-500/30' : 'text-amber-400 bg-amber-950/60 border-amber-500/30'
                 }`}>
                   {companion?.id ? 'ASIGNACIÓN CONFIRMADA' : 'POR ASIGNAR'}
                 </span>
@@ -525,93 +424,43 @@ function LiveRoomContent() {
                   {companion?.full_name ? companion.full_name.charAt(0).toUpperCase() : 'A'}
                 </div>
                 <div className="space-y-1">
-                  <h4 className="font-black text-white text-base">
-                    {companion?.full_name || 'Por asignar por Mesa Central'}
-                  </h4>
+                  <h4 className="font-black text-white text-base">{companion?.full_name || 'Por asignar por Mesa Central'}</h4>
                   <p className="text-xs text-slate-300 font-mono flex items-center gap-1.5">
                     <Phone className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Contacto: </span>
                     <strong className="text-emerald-400">{companion?.phone || '809-541-2000'}</strong>
                   </p>
-                  <div className="flex items-center gap-2 pt-0.5">
-                    <span className="bg-emerald-950 text-emerald-400 border border-emerald-500/40 text-[9px] font-mono px-2 py-0.5 rounded font-bold">
-                      ✓ ACREDITADO KYC
-                    </span>
-                    <span className="text-[10px] text-slate-400">• Antecedentes Cotejados</span>
-                  </div>
                 </div>
               </div>
 
               <div className="border-t border-slate-800/80 pt-3 text-xs text-slate-300 space-y-1">
                 <p><strong className="text-white">Usuario:</strong> {service.recipient_name || service.client_name || 'No especificado'}</p>
                 <p><strong className="text-white">Punto de Encuentro:</strong> {service.facility_or_location || service.address || 'Distrito Nacional'}</p>
-                <p><strong className="text-white">Familiar Responsable:</strong> {clientProfile?.full_name || 'Contacto Registrado'} ({clientProfile?.phone || service.recipient_phone || '809-541-2000'})</p>
+                <p><strong className="text-white">Familiar:</strong> {clientProfile?.full_name || 'Contacto'} ({clientProfile?.phone || service.recipient_phone || '809-541-2000'})</p>
               </div>
             </div>
 
-            {/* CONTROL DE VALIDACIÓN ANTIFRAUDE CON DOBLE PIN */}
+            {/* CONTROL DE VALIDACIÓN */}
             <div className="bg-slate-950 border border-emerald-500/40 rounded-3xl p-6 space-y-5 shadow-2xl">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                 <span className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-1.5">
-                  <KeyRound className="w-4 h-4 text-emerald-400" /> Control de Validación Antifraude
+                  <KeyRound className="w-4 h-4 text-emerald-400" /> Control de Validación
                 </span>
-                <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded font-bold">
-                  DOBLE PIN
-                </span>
+                <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded font-bold">DOBLE PIN</span>
               </div>
 
-              {/* TARJETAS DE VISUALIZACIÓN DE PINS */}
               <div className="grid grid-cols-2 gap-3 text-center">
                 <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl">
-                  <span className="text-[10px] font-bold text-slate-400 block uppercase">1. PIN Check-In (Llegada)</span>
-                  <span className="font-mono text-2xl font-black text-emerald-400 tracking-widest">{checkinPin}</span>
-                  <span className="text-[9px] text-slate-500 block mt-0.5">Dictar al verse en persona</span>
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">1. PIN Check-In</span>
+                  <span className="font-mono text-2xl font-black text-emerald-400 tracking-widest">{service.checkin_pin || '----'}</span>
                 </div>
                 <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl">
-                  <span className="text-[10px] font-bold text-slate-400 block uppercase">2. PIN Check-Out (Salida)</span>
-                  <span className="font-mono text-2xl font-black text-amber-400 tracking-widest">{checkoutPin}</span>
-                  <span className="text-[9px] text-slate-500 block mt-0.5">Dictar al terminar el servicio</span>
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">2. PIN Check-Out</span>
+                  <span className="font-mono text-2xl font-black text-amber-400 tracking-widest">{service.checkout_pin || '----'}</span>
                 </div>
               </div>
 
-              {/* FORMULARIO DE VALIDACIÓN */}
               <div className="pt-2 border-t border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-200">
-                    Ingresar PIN para Validación:
-                  </label>
-                  <div className="flex gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-[10px]">
-                    <button
-                      type="button"
-                      onClick={() => { setPinMode('CHECKIN'); setPinFeedback(null); }}
-                      className={`px-2.5 py-1 rounded-lg font-bold transition ${
-                        pinMode === 'CHECKIN' ? 'bg-emerald-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Check-In
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setPinMode('CHECKOUT'); setPinFeedback(null); }}
-                      className={`px-2.5 py-1 rounded-lg font-bold transition ${
-                        pinMode === 'CHECKOUT' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Check-Out
-                    </button>
-                  </div>
-                </div>
-
-                {pinFeedback && (
-                  <div className={`text-xs p-2.5 rounded-xl text-center border ${
-                    pinFeedback.type === 'success' 
-                      ? 'bg-emerald-950/80 border-emerald-700 text-emerald-300' 
-                      : 'bg-rose-950/80 border-rose-800 text-rose-300'
-                  }`}>
-                    {pinFeedback.text}
-                  </div>
-                )}
-
                 <form onSubmit={handleVerifyPin} className="flex gap-2">
                   <input
                     type="text"
@@ -625,84 +474,43 @@ function LiveRoomContent() {
                   <button
                     type="submit"
                     disabled={pinActionLoading || inputPin.trim().length < 4}
-                    className={`px-5 py-2.5 rounded-xl text-xs font-black transition disabled:opacity-50 shrink-0 ${
-                      pinMode === 'CHECKIN' 
-                        ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950' 
-                        : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
-                    }`}
+                    className="px-5 py-2.5 rounded-xl text-xs font-black transition disabled:opacity-50 shrink-0 bg-emerald-500 hover:bg-emerald-400 text-slate-950"
                   >
                     {pinActionLoading ? 'Validando...' : 'Validar PIN'}
                   </button>
                 </form>
+                {pinFeedback && (
+                  <p className={`text-xs text-center ${pinFeedback.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>{pinFeedback.text}</p>
+                )}
               </div>
 
               {service.status === 'COMPLETED' && (
-                <div className="bg-emerald-950/60 border border-emerald-500/40 p-3 rounded-2xl text-center space-y-1">
+                <div className="bg-emerald-950/60 border border-emerald-500/40 p-4 rounded-2xl text-center space-y-3">
                   <span className="text-emerald-400 font-bold text-xs flex items-center justify-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4" /> ¡SERVICIO FINALIZADO CON ÉXITO!
                   </span>
+                  {!service.rating && (
+                    <button
+                      type="button"
+                      onClick={() => setShowRatingModal(true)}
+                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs inline-flex items-center gap-1.5 transition"
+                    >
+                      <Star className="w-3.5 h-3.5 fill-slate-950" /> Calificar Servicio
+                    </button>
+                  )}
                 </div>
               )}
             </div>
-
           </div>
 
-          {/* COLUMNA 2: CHAT OPERATIVO EN VIVO */}
-          <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 shadow-2xl flex flex-col h-[560px]">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
-              <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                <MessageSquare className="w-4 h-4 text-emerald-400" /> Chat Operativo del Servicio
-              </span>
-              <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950 px-2 py-0.5 rounded border border-emerald-500/30 font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> EN VIVO
-              </span>
-            </div>
-
-            {/* LISTA DE MENSAJES */}
-            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs">
-              {chatMessages.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-center text-slate-500 px-4">
-                  No hay mensajes aún. Escribe para coordinar el punto de encuentro en tiempo real.
-                </div>
-              ) : (
-                chatMessages.map((msg, idx) => {
-                  const isMine = msg.sender_id === currentUser.id;
-                  return (
-                    <div key={msg.id || idx} className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
-                      <span className="text-[9px] text-slate-500 font-mono mb-0.5">{msg.sender_name}</span>
-                      <div className={`p-2.5 rounded-2xl max-w-[85%] break-words ${
-                        isMine 
-                          ? 'bg-emerald-500 text-slate-950 font-medium rounded-br-none' 
-                          : 'bg-slate-900 text-slate-200 border border-slate-800 rounded-bl-none'
-                      }`}>
-                        {msg.message}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-              <div ref={chatBottomRef} />
-            </div>
-
-            {/* FORMULARIO DE ENVÍO */}
-            <form onSubmit={handleSendMessage} className="pt-3 border-t border-slate-800 flex gap-2">
-              <input
-                type="text"
-                placeholder="Escribe un mensaje de coordinación..."
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-emerald-500"
-              />
-              <button
-                type="submit"
-                disabled={sendingMsg || !newMessage.trim()}
-                className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 p-2.5 rounded-xl transition shadow"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            </form>
+          {/* COLUMNA 2: COMPONENTE CHAT OFICIAL AUDITADO */}
+          <div>
+            <ServiceChatRoom
+              serviceId={service.id}
+              currentUserId={currentUser.id}
+              currentUserName={currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'Usuario'}
+            />
           </div>
-
         </div>
 
         {/* MODAL PARA ASIGNAR ACOMPAÑANTE */}
@@ -711,28 +519,23 @@ function LiveRoomContent() {
             <div className="bg-slate-950 border border-emerald-500/40 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
               <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                 <h3 className="text-sm font-black text-white flex items-center gap-2">
-                  <UserPlus className="w-4 h-4 text-emerald-400" /> Seleccionar Acompañante Acreditado
+                  <UserPlus className="w-4 h-4 text-emerald-400" /> Seleccionar Acompañante
                 </h3>
                 <button onClick={() => setShowEditCompanionModal(false)} className="text-slate-400 hover:text-white">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="space-y-2 text-xs">
-                <label className="text-slate-300 font-bold block">Personal depurado en la plataforma:</label>
-                <select
-                  value={selectedCompanionId}
-                  onChange={(e) => setSelectedCompanionId(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 font-medium"
-                >
-                  <option value="">-- Elige un acompañante --</option>
-                  {allCompanions.map((comp) => (
-                    <option key={comp.id} value={comp.id}>
-                      {comp.full_name} ({comp.phone || 'S/N'})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <select
+                value={selectedCompanionId}
+                onChange={(e) => setSelectedCompanionId(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 font-medium text-xs"
+              >
+                <option value="">-- Elige un acompañante --</option>
+                {allCompanions.map((comp) => (
+                  <option key={comp.id} value={comp.id}>{comp.full_name} ({comp.phone || 'S/N'})</option>
+                ))}
+              </select>
 
               <div className="flex gap-2 pt-2">
                 <button
@@ -746,15 +549,65 @@ function LiveRoomContent() {
                   type="button"
                   onClick={handleSaveCompanion}
                   disabled={!selectedCompanionId || savingComp}
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-3 rounded-xl text-xs font-black shadow-lg shadow-emerald-500/20 transition disabled:opacity-50"
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-3 rounded-xl text-xs font-black transition disabled:opacity-50"
                 >
-                  {savingComp ? 'Guardando...' : 'Confirmar Asignación'}
+                  {savingComp ? 'Guardando...' : 'Confirmar'}
                 </button>
               </div>
             </div>
           </div>
         )}
 
+        {/* MODAL DE CALIFICACIÓN */}
+        {showRatingModal && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-950 border border-emerald-500/40 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl text-center">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-950 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
+                <Star className="w-6 h-6 fill-emerald-400 text-emerald-400" />
+              </div>
+
+              <div className="space-y-1">
+                <h3 className="text-lg font-black text-white">¿Cómo estuvo la asistencia?</h3>
+                <p className="text-xs text-slate-400">Califica el desempeño de <strong className="text-white">{companion?.full_name}</strong></p>
+              </div>
+
+              <div className="flex justify-center gap-2 py-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button key={star} type="button" onClick={() => setRatingValue(star)} className="p-1 transition hover:scale-125">
+                    <Star className={`w-8 h-8 ${star <= ratingValue ? 'fill-amber-400 text-amber-400' : 'text-slate-700'}`} />
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={handleSubmitReview} className="space-y-3">
+                <textarea
+                  rows={3}
+                  placeholder="Escribe un comentario..."
+                  value={ratingComment}
+                  onChange={(e) => setRatingComment(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-2xl p-3 text-xs text-white outline-none focus:border-emerald-500"
+                />
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowRatingModal(false)}
+                    className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-400 py-3 rounded-xl text-xs font-bold"
+                  >
+                    Omitir
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingRating}
+                    className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-3 rounded-xl text-xs font-black transition"
+                  >
+                    {savingRating ? 'Enviando...' : 'Enviar Calificación'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
