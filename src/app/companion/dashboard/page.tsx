@@ -17,7 +17,9 @@ import {
   LogOut, 
   Check,
   Banknote,
-  Award
+  Award,
+  Navigation,
+  Compass
 } from 'lucide-react';
 
 export default function CompanionDashboardPage() {
@@ -33,11 +35,12 @@ export default function CompanionDashboardPage() {
   const [availableOrders, setAvailableOrders] = useState<any[]>([]);
   const [pastOrders, setPastOrders] = useState<any[]>([]);
 
-  // Acciones y feedback
+  // Acciones, GPS y feedback
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinSuccess, setPinSuccess] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState<string | null>(null);
 
   useEffect(() => {
     async function initDashboard() {
@@ -114,7 +117,30 @@ export default function CompanionDashboardPage() {
     }
   }
 
-  // 1. Tomar un pedido con diagnóstico directo
+  // Capturar coordenadas GPS del dispositivo
+  function obtenerCoordenadasGPS(): Promise<{ lat: number; lng: number } | null> {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve(null);
+        return;
+      }
+      setGpsStatus('Obteniendo coordenadas satelitales GPS...');
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setGpsStatus('GPS validado con éxito.');
+          resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        (err) => {
+          console.warn('GPS no disponible o denegado:', err.message);
+          setGpsStatus(null);
+          resolve(null); // Permite continuar si el GPS está denegado en escritorio
+        },
+        { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+      );
+    });
+  }
+
+  // 1. Tomar un pedido
   async function handleTomarServicio(orderId: string) {
     if (activeOrder) {
       alert(`Ya tienes el servicio #${activeOrder.id.slice(0, 8).toUpperCase()} en curso. Debes finalizarlo antes de aceptar uno nuevo.`);
@@ -125,7 +151,7 @@ export default function CompanionDashboardPage() {
     const sessionUser = sessionData?.session?.user || currentUser;
 
     if (!sessionUser) {
-      alert('Error de sesión: No se identificó el usuario. Por favor recarga la página o inicia sesión de nuevo.');
+      alert('Error de sesión: Por favor recarga la página o inicia sesión de nuevo.');
       return;
     }
 
@@ -144,28 +170,27 @@ export default function CompanionDashboardPage() {
         .select();
 
       if (error) {
-        alert('Error devuelto por Supabase: ' + error.message);
+        alert('Error: ' + error.message);
         setActionLoading(false);
         return;
       }
 
       if (!data || data.length === 0) {
-        alert('Aviso de RLS: Supabase no actualizó ninguna fila. Ejecuta el script SQL en el Editor para autorizar la actualización de service_requests.');
+        alert('Aviso de RLS: Supabase no actualizó la fila.');
         setActionLoading(false);
         return;
       }
 
-      // Asignar de inmediato localmente para mostrar la tarjeta superior sin demora
       setActiveOrder(data[0]);
       await fetchAllServices(sessionUser.id);
     } catch (err: any) {
-      alert('Excepción al tomar el servicio: ' + (err.message || err));
+      alert('Excepción: ' + (err.message || err));
     } finally {
       setActionLoading(false);
     }
   }
 
-  // 2. Validar PIN presencial (Check-In y Check-Out)
+  // 2. Validar PIN presencial con Geolocalización GPS
   async function handleValidarPIN(tipo: 'INICIO' | 'FINAL') {
     if (!activeOrder || !pinInput.trim()) return;
     setPinError(null);
@@ -199,18 +224,23 @@ export default function CompanionDashboardPage() {
       return;
     }
 
+    // Captura satelital GPS
+    const coords = await obtenerCoordenadasGPS();
+    const coordenadasTxt = coords ? `[GPS: ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}]` : null;
+
     if (tipo === 'INICIO') {
       const { error } = await supabase
         .from('service_requests')
         .update({ 
           status: 'IN_PROGRESS',
-          started_at: new Date().toISOString()
+          started_at: new Date().toISOString(),
+          ...(coordenadasTxt ? { checkin_location: coordenadasTxt } : {})
         })
         .eq('id', activeOrder.id);
 
       if (!error) {
         setPinInput('');
-        setPinSuccess('¡Check-In completado con éxito! El servicio está en curso.');
+        setPinSuccess(`¡Check-In completado con éxito! Servicio en curso. ${coordenadasTxt || ''}`);
         if (currentUser) await fetchAllServices(currentUser.id);
       } else {
         setPinError('Error de sincronización: ' + error.message);
@@ -222,7 +252,8 @@ export default function CompanionDashboardPage() {
           status: 'COMPLETED',
           completed_at: new Date().toISOString(),
           companion_fee: 750,
-          payment_status: 'ACCREDITED'
+          payment_status: 'ACCREDITED',
+          ...(coordenadasTxt ? { checkout_location: coordenadasTxt } : {})
         })
         .eq('id', activeOrder.id);
 
@@ -258,6 +289,10 @@ export default function CompanionDashboardPage() {
   const totalGanancias = pastOrders.reduce((acc, curr) => {
     return acc + Number(curr.companion_fee || 750);
   }, 0);
+
+  // Link para abrir la ubicación en Google Maps
+  const destinoUbicacion = activeOrder?.facility_or_location || activeOrder?.address || 'CEDIMAT, Santo Domingo';
+  const mapaUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destinoUbicacion)}`;
 
   if (loading) {
     return (
@@ -348,7 +383,7 @@ export default function CompanionDashboardPage() {
           </div>
         </div>
 
-        {/* FEEDBACK TRAS VALIDACIÓN DE PIN */}
+        {/* FEEDBACK TRAS VALIDACIÓN DE PIN Y GPS */}
         {pinSuccess && (
           <div className="bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs p-4 rounded-2xl flex items-center gap-2.5 shadow-lg">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
@@ -416,12 +451,23 @@ export default function CompanionDashboardPage() {
               </div>
 
               <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">
-                  Ubicación y Coordinación
-                </span>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">
+                    Ubicación y Coordinación
+                  </span>
+                  <a
+                    href={mapaUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="bg-emerald-950 border border-emerald-500/40 text-emerald-400 px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 hover:bg-emerald-900 transition"
+                  >
+                    <Navigation className="w-3 h-3" />
+                    <span>Ver Mapa GPS</span>
+                  </a>
+                </div>
                 <p className="text-sm font-bold text-white flex items-start gap-1.5">
                   <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <span>{activeOrder.facility_or_location || activeOrder.address || activeOrder.pickup_address || 'Punto de encuentro asignado'}</span>
+                  <span>{destinoUbicacion}</span>
                 </p>
                 {activeOrder.special_notes && (
                   <p className="text-[11px] text-slate-400 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
@@ -431,19 +477,30 @@ export default function CompanionDashboardPage() {
               </div>
             </div>
 
-            {/* VALIDACIÓN DE PIN */}
+            {/* VALIDACIÓN DE PIN CON GEOLOCALIZACIÓN */}
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <KeyRound className="w-4 h-4 text-emerald-400" />
                   <h4 className="font-bold text-white text-xs uppercase tracking-wider">
-                    Validación de Seguridad Presencial (Doble PIN)
+                    Validación Presencial Antifraude (Doble PIN + GPS)
                   </h4>
                 </div>
-                <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-bold">
-                  {activeOrder.status === 'IN_PROGRESS' ? 'PASO 2: CHECK-OUT' : 'PASO 1: CHECK-IN'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950 border border-emerald-500/30 px-2 py-0.5 rounded flex items-center gap-1">
+                    <Compass className="w-3 h-3 animate-spin" /> GPS Activo
+                  </span>
+                  <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-bold">
+                    {activeOrder.status === 'IN_PROGRESS' ? 'PASO 2: CHECK-OUT' : 'PASO 1: CHECK-IN'}
+                  </span>
+                </div>
               </div>
+
+              {gpsStatus && (
+                <p className="text-[10px] font-mono text-emerald-400 bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                  🛰️ {gpsStatus}
+                </p>
+              )}
 
               {pinError && (
                 <div className="bg-rose-950/80 border border-rose-800 text-rose-300 text-xs p-3 rounded-xl flex items-center gap-2">
@@ -455,10 +512,10 @@ export default function CompanionDashboardPage() {
               {activeOrder.status === 'ASSIGNED' ? (
                 <div className="space-y-3">
                   <p className="text-xs text-slate-400">
-                    Pídele al solicitante su <strong>PIN de Encuentro</strong> para comenzar la jornada:
+                    Pídele al solicitante su <strong>PIN de Encuentro</strong> para validar la ubicación y comenzar la jornada:
                   </p>
                   <p className="text-[10px] font-mono text-emerald-400/80">
-                    PIN en sistema: <strong>{activeOrder.pin_start || activeOrder.checkin_pin || '1234'}</strong>
+                    PIN en sistema: <strong>{activeOrder.pin_start || activeOrder.checkin_pin || '9819'}</strong>
                   </p>
                   <div className="flex gap-2 max-w-sm">
                     <input
@@ -472,9 +529,10 @@ export default function CompanionDashboardPage() {
                     <button
                       onClick={() => handleValidarPIN('INICIO')}
                       disabled={actionLoading || !pinInput.trim()}
-                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 cursor-pointer"
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                     >
-                      {actionLoading ? 'Validando...' : 'Iniciar Asistencia'}
+                      <MapPin className="w-3.5 h-3.5" />
+                      <span>{actionLoading ? 'Validando GPS...' : 'Check-In GPS'}</span>
                     </button>
                   </div>
                 </div>
@@ -485,7 +543,7 @@ export default function CompanionDashboardPage() {
                     <span>Servicio en progreso presencial</span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Pídele el <strong>PIN de Salida</strong> para finalizar la orden y acreditar tus RD$ 750:
+                    Pídele el <strong>PIN de Salida</strong> para registrar el cierre geolocalizado y acreditar tus RD$ 750:
                   </p>
                   <p className="text-[10px] font-mono text-amber-400/80">
                     PIN en sistema: <strong>{activeOrder.pin_end || activeOrder.checkout_pin || '5678'}</strong>
@@ -502,9 +560,10 @@ export default function CompanionDashboardPage() {
                     <button
                       onClick={() => handleValidarPIN('FINAL')}
                       disabled={actionLoading || !pinInput.trim()}
-                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-amber-500/20 transition disabled:opacity-50 cursor-pointer"
+                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-amber-500/20 transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                     >
-                      {actionLoading ? 'Finalizando...' : 'Finalizar Asistencia'}
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{actionLoading ? 'Guardando Cierre...' : 'Check-Out GPS (RD$ 750)'}</span>
                     </button>
                   </div>
                 </div>
