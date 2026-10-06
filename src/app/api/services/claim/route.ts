@@ -1,71 +1,114 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-export async function POST(request: Request) {
+export async function POST(req: Request) {
   try {
-    const body = await request.json();
-    const { serviceId, companionId, companionName, companionPhone } = body;
+    const supabase = await createClient();
 
-    let targetId = serviceId;
-
-    // Si no enviaron serviceId o viene vacío, buscar el servicio pendiente más reciente
-    if (!targetId) {
-      const { data: pending } = await supabase
-        .from('service_requests')
-        .select('id')
-        .in('status', ['PENDING', 'PENDING_DISPATCH', 'SCHEDULED', 'AGENDADO'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (pending) targetId = pending.id;
+    // 1. Validar autenticación obligatoria
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'No autorizado. Debe iniciar sesión.' },
+        { status: 401 }
+      );
     }
 
-    if (!targetId) {
-      const { data: anySrv } = await supabase
-        .from('service_requests')
-        .select('id')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (anySrv) targetId = anySrv.id;
-    }
-
-    if (!targetId) {
-      return NextResponse.json({ error: 'No se encontró ninguna orden para asignar' }, { status: 404 });
-    }
-
-    const cId = companionId || 'companion_active';
-    const cName = companionName || 'Acompañante Acreditado';
-    const cPhone = companionPhone || '809-541-2000';
-
-    const { data: updated, error } = await supabase
-      .from('service_requests')
-      .update({
-        companion_id: cId,
-        companion_name: cName,
-        companion_phone: cPhone,
-        status: 'ASSIGNED'
-      })
-      .eq('id', targetId)
-      .select()
+    // 2. Validar que el usuario tenga rol COMPANION y KYC APROBADO
+    const { data: profile, error: profError } = await supabase
+      .from('profiles')
+      .select('id, role, status')
+      .eq('id', user.id)
       .maybeSingle();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (profError || !profile) {
+      return NextResponse.json(
+        { error: 'Perfil no encontrado.' },
+        { status: 404 }
+      );
     }
+
+    if (profile.role !== 'COMPANION' && profile.role !== 'ADMIN') {
+      return NextResponse.json(
+        { error: 'Acceso denegado: solo acompañantes acreditados pueden tomar servicios.' },
+        { status: 403 }
+      );
+    }
+
+    if (profile.role === 'COMPANION' && profile.status !== 'APROBADO') {
+      return NextResponse.json(
+        { error: 'Su perfil de acompañante está pendiente de aprobación KYC.' },
+        { status: 403 }
+      );
+    }
+
+    // 3. Obtener el serviceId obligatorio
+    const body = await req.json();
+    const { serviceId } = body;
+
+    if (!serviceId) {
+      return NextResponse.json(
+        { error: 'El parámetro serviceId es obligatorio.' },
+        { status: 400 }
+      );
+    }
+
+    // 4. Verificar que la orden exista y esté disponible para despacho
+    const { data: service, error: srvError } = await supabase
+      .from('service_requests')
+      .select('id, status, companion_id')
+      .eq('id', serviceId)
+      .maybeSingle();
+
+    if (srvError || !service) {
+      return NextResponse.json(
+        { error: 'Servicio no encontrado.' },
+        { status: 404 }
+      );
+    }
+
+    const estadosDisponibles = ['PENDING', 'PENDING_DISPATCH', 'SOLICITADO'];
+    if (!estadosDisponibles.includes(service.status?.toUpperCase())) {
+      return NextResponse.json(
+        { error: 'El servicio ya fue tomado o no está disponible para asignación.' },
+        { status: 409 }
+      );
+    }
+
+    // 5. Asignar exclusivamente al ID de la sesión autenticada (auth.uid())
+    const { data: updatedService, error: updateError } = await supabase
+      .from('service_requests')
+      .update({
+        companion_id: user.id,
+        status: 'ASSIGNED',
+        assigned_at: new Date().toISOString()
+      })
+      .eq('id', serviceId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return NextResponse.json(
+        { error: 'Error al asignar el servicio: ' + updateError.message },
+        { status: 500 }
+      );
+    }
+
+    // 6. Registro de auditoría
+    await supabase.from('audit_logs').insert({
+      user_id: user.id,
+      action: 'SERVICE_CLAIMED',
+      details: { service_id: serviceId, companion_id: user.id }
+    }).select().maybeSingle();
 
     return NextResponse.json({
       success: true,
-      serviceId: targetId,
-      service: updated
+      service: updatedService
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Error en claim' }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message || 'Error interno del servidor.' },
+      { status: 500 }
+    );
   }
 }
