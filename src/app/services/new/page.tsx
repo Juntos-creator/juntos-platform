@@ -22,7 +22,8 @@ import {
   Activity,
   Navigation,
   ExternalLink,
-  LocateFixed
+  LocateFixed,
+  Banknote
 } from 'lucide-react';
 
 function ServiceBookingWizard() {
@@ -39,6 +40,11 @@ function ServiceBookingWizard() {
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [acceptedTerms, setAcceptedTerms] = useState<boolean>(true);
 
+  // Modelo financiero oficial JUNTOS: RD$ 1,350 tarifa estándar por servicio
+  const BASE_TICKET_PRICE = 1350;
+  const COMPANION_FEE = 750;
+  const PLATFORM_MARGIN = 600;
+
   const [formData, setFormData] = useState({
     forWhom: 'FAMILY',
     recipientName: '',
@@ -49,7 +55,7 @@ function ServiceBookingWizard() {
     address: '',
     serviceDate: '',
     serviceTime: '08:00',
-    hours: 2,
+    durationHours: 2,
     geoLat: '',
     geoLng: '',
     mapsUrl: '',
@@ -67,14 +73,6 @@ function ServiceBookingWizard() {
   useEffect(() => {
     let isMounted = true;
 
-    const hoursParam = searchParams.get('hours');
-    if (hoursParam) {
-      const parsedHours = parseInt(hoursParam, 10);
-      if (!isNaN(parsedHours) && parsedHours >= 2) {
-        setFormData(prev => ({ ...prev, hours: parsedHours }));
-      }
-    }
-
     async function checkAuthAndActiveService() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -90,27 +88,6 @@ function ServiceBookingWizard() {
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
-
-          // 2. Fallback de rescate para órdenes previas no enlazadas
-          if (!activeOrder) {
-            const { data: recentOrder } = await supabase
-              .from('service_requests')
-              .select('id, status, client_id')
-              .in('status', ['PENDING', 'PENDING_DISPATCH', 'ASSIGNED', 'IN_PROGRESS'])
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-
-            if (recentOrder) {
-              activeOrder = recentOrder;
-              if (!recentOrder.client_id) {
-                await supabase
-                  .from('service_requests')
-                  .update({ client_id: user.id })
-                  .eq('id', recentOrder.id);
-              }
-            }
-          }
 
           if (activeOrder) {
             window.location.replace(`/services/live?id=${activeOrder.id}`);
@@ -148,10 +125,8 @@ function ServiceBookingWizard() {
     };
   }, [searchParams, supabase]);
 
-  const RATE_PER_HOUR = 900;
-  const subtotal = formData.hours * RATE_PER_HOUR;
-  const discountAmount = (subtotal * discountPercent) / 100;
-  const total = subtotal - discountAmount;
+  const discountAmount = (BASE_TICKET_PRICE * discountPercent) / 100;
+  const total = BASE_TICKET_PRICE - discountAmount;
 
   function updateField(field: string, value: any) {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -232,74 +207,47 @@ function ServiceBookingWizard() {
         `Condición de Movilidad: ${formData.mobilitySupport}`,
         formData.specialInstructions ? `Punto de encuentro: ${formData.specialInstructions}` : '',
         formData.mapsUrl ? `Maps: ${formData.mapsUrl}` : '',
-        formData.requiresNCF ? `NCF: ${formData.fiscalName} (RNC: ${formData.rncOrCedula})` : '',
-        discountAmount > 0 ? `Descuento: RD$ ${discountAmount}` : '',
+        formData.requiresNCF ? `Solicitud NCF: ${formData.fiscalName} (RNC: ${formData.rncOrCedula})` : '',
+        discountAmount > 0 ? `Descuento Familiar: RD$ ${discountAmount}` : '',
         `Consentimiento Ley 172-13: ACEPTADO`
       ].filter(Boolean).join(' | ');
 
-      const randomCheckinPin = Math.floor(1000 + Math.random() * 9000).toString();
-      const randomCheckoutPin = Math.floor(1000 + Math.random() * 9000).toString();
-
-      const universalPayload: any = {
+      // Modelo financiero estandarizado (RD$ 1,350 total / 750 acompañante / 600 plataforma)
+      const servicePayload: any = {
         client_id: activeUser.id,
         user_id: activeUser.id,
         customer_id: activeUser.id,
         recipient_name: recipientFinal,
-        recipient_phone: formData.recipientPhone || formData.contactPhone || '809-000-0000',
+        recipient_phone: formData.recipientPhone || formData.contactPhone || '809-541-2000',
         service_type: formData.serviceType,
         facility_or_location: ubicacionConsolidada,
         scheduled_date: validDate,
         requested_date: validDate,
         scheduled_time: formData.serviceTime || '08:00',
-        duration_hours: formData.hours,
+        duration_hours: formData.durationHours || 2,
+        total_amount: total,
         rate_total: total,
+        companion_fee: COMPANION_FEE,
+        platform_margin: PLATFORM_MARGIN,
+        payment_status: 'PENDING',
         special_notes: notasConsolidadas,
         mobility_notes: formData.mobilitySupport,
         status: 'PENDING_DISPATCH',
-        emergency_status: 'NORMAL',
-        checkin_pin: randomCheckinPin,
-        checkout_pin: randomCheckoutPin
+        emergency_status: 'NORMAL'
       };
 
       const { data, error } = await supabase
         .from('service_requests')
-        .insert([universalPayload])
+        .insert([servicePayload])
         .select('id')
         .single();
 
-      let serviceId = data?.id;
+      if (error) throw error;
 
-      if (error) {
-        console.warn('Esquema extendido no disponible, aplicando payload core:', error.message);
-        
-        const corePayload: any = {
-          client_id: activeUser.id,
-          user_id: activeUser.id,
-          recipient_name: recipientFinal,
-          service_type: formData.serviceType,
-          facility_or_location: ubicacionConsolidada,
-          scheduled_date: validDate,
-          scheduled_time: formData.serviceTime || '08:00',
-          duration_hours: formData.hours,
-          rate_total: total,
-          special_notes: notasConsolidadas,
-          status: 'PENDING_DISPATCH'
-        };
-
-        const { data: fallbackData, error: coreError } = await supabase
-          .from('service_requests')
-          .insert([corePayload])
-          .select('id')
-          .single();
-
-        if (coreError) throw coreError;
-        serviceId = fallbackData?.id;
-      }
-
-      if (serviceId) {
-        window.location.href = `/services/live?id=${serviceId}`;
+      if (data?.id) {
+        window.location.href = `/services/live?id=${data.id}`;
       } else {
-        window.location.href = '/profile';
+        window.location.href = '/companion/dashboard';
       }
     } catch (err: any) {
       alert(`Error al registrar el servicio: ${err.message || 'Intente nuevamente'}`);
@@ -345,8 +293,9 @@ function ServiceBookingWizard() {
                 <Tag className="w-3 h-3" /> 5% DESC. FAMILIAR
               </span>
             )}
-            <span className="bg-slate-950/90 border border-slate-800 text-amber-400 font-mono text-xs px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-sm">
-              <span>RD$ 900 / Hora</span>
+            <span className="bg-slate-950/90 border border-emerald-500/30 text-emerald-400 font-mono text-xs px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-sm">
+              <Banknote className="w-3.5 h-3.5" />
+              <span>RD$ 1,350 Tarifa Piloto</span>
             </span>
           </div>
         </div>
@@ -632,48 +581,54 @@ function ServiceBookingWizard() {
             </div>
           )}
 
-          {/* PASO 5 */}
+          {/* PASO 5: MODELO FINANCIERO OFICIAL */}
           {step === 5 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  Duración del Servicio
+                  Tarifa Única de Acompañamiento
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Selecciona las horas estimadas (mínimo 2 horas por traslado):
+                  Servicio integral con cobertura presencial y respaldo de la Mesa de Operaciones:
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[2, 3, 4, 6, 8, 10, 12].map((h) => (
-                  <button
-                    key={h}
-                    type="button"
-                    onClick={() => updateField('hours', h)}
-                    className={`p-4 rounded-2xl border text-center transition-all cursor-pointer ${
-                      formData.hours === h
-                        ? 'bg-emerald-950/40 border-emerald-500 text-white shadow-lg shadow-emerald-500/10'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
-                    }`}
-                  >
-                    <span className="text-2xl font-black block text-white">{h}h</span>
-                    <span className="text-[11px] text-slate-400 font-mono mt-1 block">
-                      RD$ {(h * RATE_PER_HOUR).toLocaleString()}
+              <div className="bg-slate-900/90 border border-emerald-500/40 rounded-3xl p-6 space-y-4 shadow-xl">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[10px] font-mono text-emerald-400 uppercase font-bold tracking-wider bg-emerald-950 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                      TARIFA PLANA PILOTO
                     </span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex justify-between items-center text-xs">
-                <div>
-                  <p className="text-slate-400">Total calculado ({formData.hours} horas):</p>
-                  <p className="text-xl font-black text-white">RD$ {total.toLocaleString()}</p>
+                    <h3 className="text-lg font-black text-white mt-1">Acompañamiento por Turno Médico</h3>
+                    <p className="text-xs text-slate-400">Hasta 3-4 horas de soporte presencial completo.</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-2xl font-black text-emerald-400 font-mono">RD$ 1,350</span>
+                    <span className="text-[10px] text-slate-500 block">precio final transparente</span>
+                  </div>
                 </div>
-                {discountPercent > 0 && (
-                  <span className="text-emerald-400 font-bold bg-emerald-950/80 border border-emerald-600/40 px-3 py-1 rounded-xl text-xs">
-                    Incluye 5% de descuento
-                  </span>
-                )}
+
+                <div className="divide-y divide-slate-800 text-xs pt-2">
+                  <div className="py-2.5 flex justify-between text-slate-300">
+                    <span>Honorarios de Acompañante Acreditado PGR</span>
+                    <span className="font-mono text-white">RD$ 750.00</span>
+                  </div>
+                  <div className="py-2.5 flex justify-between text-slate-300">
+                    <span>Monitoreo en Vivo Mesa de Operaciones y Cobertura</span>
+                    <span className="font-mono text-white">RD$ 600.00</span>
+                  </div>
+                  {discountPercent > 0 && (
+                    <div className="py-2.5 flex justify-between text-emerald-400 font-bold">
+                      <span>Descuento Especial Red Familiar (5%)</span>
+                      <span className="font-mono">- RD$ {discountAmount.toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex justify-between items-center text-sm font-black">
+                  <span className="text-white">Total a Pagar:</span>
+                  <span className="text-emerald-400 font-mono text-lg">RD$ {total.toLocaleString()}</span>
+                </div>
               </div>
             </div>
           )}
@@ -862,7 +817,7 @@ function ServiceBookingWizard() {
             </div>
           )}
 
-          {/* PASO 8 */}
+          {/* PASO 8: COMPROBANTE DGII (SIN NCf FICTICIO) */}
           {step === 8 && (
             <div className="space-y-6">
               <div>
@@ -870,7 +825,7 @@ function ServiceBookingWizard() {
                   Comprobante Fiscal Dominicano
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Emisión de recibo digital estándar o factura con valor fiscal (NCF):
+                  Emisión de recibo digital estándar o factura con valor fiscal autorizada por la DGII:
                 </p>
               </div>
 
@@ -887,7 +842,7 @@ function ServiceBookingWizard() {
                   />
                   <div>
                     <h4 className="font-bold text-white text-xs">¿Requiere Factura con Crédito Fiscal (NCF tipo B01)?</h4>
-                    <p className="text-[11px] text-slate-400">Para deducción de gastos autorizada ante la DGII</p>
+                    <p className="text-[11px] text-slate-400">Para deducción de gastos ante la DGII en República Dominicana</p>
                   </div>
                 </div>
 
@@ -920,7 +875,7 @@ function ServiceBookingWizard() {
             </div>
           )}
 
-          {/* PASO 9 */}
+          {/* PASO 9: RESUMEN Y CONFIRMACIÓN */}
           {step === 9 && (
             <div className="space-y-6">
               <div>
@@ -964,13 +919,8 @@ function ServiceBookingWizard() {
                 </div>
 
                 <div className="flex justify-between border-b border-slate-800/80 pb-2">
-                  <span className="text-slate-400">Duración:</span>
-                  <span className="font-bold text-white">{formData.hours} Horas</span>
-                </div>
-
-                <div className="flex justify-between border-b border-slate-800/80 pb-2">
-                  <span className="text-slate-400">Subtotal:</span>
-                  <span className="font-mono text-white">RD$ {subtotal.toLocaleString()}</span>
+                  <span className="text-slate-400">Tarifa del Servicio:</span>
+                  <span className="font-mono text-white">RD$ {BASE_TICKET_PRICE.toLocaleString()}</span>
                 </div>
 
                 {discountPercent > 0 && (
@@ -1001,7 +951,7 @@ function ServiceBookingWizard() {
                 </label>
               </div>
 
-              {/* POLÍTICA DE CANCELACIÓN Y GARANTÍA */}
+              {/* PROTOCOLO Y CANCELACIÓN */}
               <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex items-start gap-3 text-xs text-slate-400">
                 <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                 <p className="leading-relaxed text-[11px]">
