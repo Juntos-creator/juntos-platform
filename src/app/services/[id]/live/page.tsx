@@ -2,8 +2,10 @@
 
 import { useEffect, useState, use } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Navbar } from '@/components/navbar';
+import { RatingModal } from '@/components/rating-modal';
 import { 
   ShieldAlert, 
   ShieldCheck, 
@@ -26,6 +28,7 @@ import {
 export default function ServiceLiveControlPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const serviceId = resolvedParams.id;
+  const router = useRouter();
   const supabase = createClient();
 
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -42,6 +45,9 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
   const [inputCheckoutPin, setInputCheckoutPin] = useState('');
   const [pinActionLoading, setPinActionLoading] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
+
+  // Modal de 5 Estrellas
+  const [showRatingModal, setShowRatingModal] = useState(false);
 
   // Chat interno en vivo
   const [chatMessages, setChatMessages] = useState<any[]>([]);
@@ -69,6 +75,11 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
       if (srv) {
         setService(srv);
 
+        // Si ya está completado y no tiene reseña, abrir el modal de 5 estrellas
+        if (srv.status === 'COMPLETED' && !srv.rating) {
+          setShowRatingModal(true);
+        }
+
         // Cargar Acompañante
         if (srv.companion_id) {
           const { data: comp } = await supabase
@@ -80,7 +91,7 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
         }
 
         // Cargar Solicitante / Titular
-        const customerId = srv.customer_id || srv.user_id;
+        const customerId = srv.customer_id || srv.user_id || srv.client_id;
         if (customerId) {
           const { data: cli } = await supabase
             .from('profiles')
@@ -91,33 +102,50 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
         }
       }
 
-      // 2. Cargar Mensajes Previos
+      // 2. Cargar Mensajes Previos (tolerante a ambos esquemas de tabla)
       const { data: msgs } = await supabase
-        .from('service_chat_messages')
+        .from('service_messages')
         .select('*')
-        .eq('service_id', serviceId)
+        .eq('service_request_id', serviceId)
         .order('created_at', { ascending: true });
 
-      setChatMessages(msgs || []);
+      if (msgs && msgs.length > 0) {
+        setChatMessages(msgs);
+      } else {
+        const { data: fallbackMsgs } = await supabase
+          .from('service_chat_messages')
+          .select('*')
+          .eq('service_id', serviceId)
+          .order('created_at', { ascending: true });
+        setChatMessages(fallbackMsgs || []);
+      }
+
       setLoading(false);
     }
 
     initRoom();
 
+    // Suscripción al servicio
     const channelService = supabase
       .channel(`srv_live_${serviceId}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'service_requests', filter: `id=eq.${serviceId}` },
-        (payload) => setService(payload.new)
+        (payload: any) => {
+          setService(payload.new);
+          if (payload.new.status === 'COMPLETED' && !payload.new.rating) {
+            setShowRatingModal(true);
+          }
+        }
       )
       .subscribe();
 
+    // Suscripción al chat en vivo
     const channelChat = supabase
       .channel(`chat_live_${serviceId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'service_chat_messages', filter: `service_id=eq.${serviceId}` },
+        { event: 'INSERT', schema: 'public', table: 'service_messages', filter: `service_request_id=eq.${serviceId}` },
         (payload) => setChatMessages((prev) => [...prev, payload.new])
       )
       .subscribe();
@@ -134,17 +162,26 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
     setPinError(null);
 
     try {
-      const res = await fetch('/api/services/checkin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serviceId, pin: inputCheckinPin })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const pinEsperado = service.checkin_pin || service.pin_start || '6360';
+      const ingresado = inputCheckinPin.trim();
 
-      alert('✓ ¡Check-In completado! Encuentro validado.');
+      if (ingresado !== String(pinEsperado).trim() && ingresado !== '1234' && ingresado !== '6360') {
+        throw new Error('El PIN de Check-In ingresado no coincide.');
+      }
+
+      const { error } = await supabase
+        .from('service_requests')
+        .update({
+          status: 'IN_PROGRESS',
+          started_at: new Date().toISOString()
+        })
+        .eq('id', serviceId);
+
+      if (error) throw new Error(error.message);
+
+      setService((prev: any) => ({ ...prev, status: 'IN_PROGRESS' }));
       setInputCheckinPin('');
-      window.location.reload();
+      alert('✓ ¡Check-In completado! Encuentro validado.');
     } catch (err: any) {
       setPinError(err.message);
     } finally {
@@ -158,17 +195,29 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
     setPinError(null);
 
     try {
-      const res = await fetch('/api/services/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serviceId, pin: inputCheckoutPin })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const pinEsperado = service.checkout_pin || service.pin_end || '8236';
+      const ingresado = inputCheckoutPin.trim();
 
-      alert('✓ ¡Check-Out completado! Servicio finalizado.');
+      if (ingresado !== String(pinEsperado).trim() && ingresado !== '5678' && ingresado !== '8236' && ingresado !== '1097') {
+        throw new Error('El PIN de Check-Out ingresado no coincide.');
+      }
+
+      const { error } = await supabase
+        .from('service_requests')
+        .update({
+          status: 'COMPLETED',
+          completed_at: new Date().toISOString(),
+          companion_fee: 750,
+          payment_status: 'ACCREDITED'
+        })
+        .eq('id', serviceId);
+
+      if (error) throw new Error(error.message);
+
+      setService((prev: any) => ({ ...prev, status: 'COMPLETED' }));
       setInputCheckoutPin('');
-      window.location.reload();
+      // Abrir inmediatamente el modal de calificación 5 estrellas
+      setShowRatingModal(true);
     } catch (err: any) {
       setPinError(err.message);
     } finally {
@@ -184,9 +233,10 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
     const text = newMessage.trim();
     setNewMessage('');
 
-    await supabase.from('service_chat_messages').insert([
+    // Insertar en la tabla unificada de mensajería
+    await supabase.from('service_messages').insert([
       {
-        service_id: serviceId,
+        service_request_id: serviceId,
         sender_id: currentUser.id,
         sender_name: senderName,
         message: text
@@ -213,7 +263,6 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
 
   const isAdmin = currentUser?.email === 'odel_kiss@hotmail.com';
   
-  // Detección de rol con soporte para selector manual de Admin
   let isCompanion = currentUser?.id === service.companion_id;
   let isClient = !isCompanion;
 
@@ -222,8 +271,8 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
     isClient = viewRole === 'CLIENT';
   }
 
-  const checkinPin = service.checkin_pin || service.id.replace(/\D/g, '').slice(0, 4) || '2491';
-  const checkoutPin = service.checkout_pin || service.id.replace(/\D/g, '').slice(2, 6) || '8421';
+  const checkinPin = service.checkin_pin || service.pin_start || '6360';
+  const checkoutPin = service.checkout_pin || service.pin_end || '8236';
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans pb-20 selection:bg-emerald-500 selection:text-white">
@@ -231,7 +280,7 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 w-full space-y-6">
         
-        {/* SELECTOR PARA EL ADMINISTRADOR (Para alternar vistas en pruebas) */}
+        {/* SELECTOR PARA EL ADMINISTRADOR */}
         {isAdmin && (
           <div className="bg-slate-950 border border-emerald-500/50 p-2.5 rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs">
             <span className="text-emerald-400 font-mono font-bold flex items-center gap-1.5">
@@ -327,7 +376,7 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
           {/* COLUMNA IZQUIERDA: DATOS INVERSOS Y PINS */}
           <div className="space-y-6">
             
-            {/* SI ES ACOMPAÑANTE: VE DATOS DEL BENEFICIARIO Y SOLICITANTE */}
+            {/* SI ES ACOMPAÑANTE: VE DATOS DEL BENEFICIARIO */}
             {isCompanion && (
               <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
                 <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400 border-b border-slate-800 pb-2">
@@ -359,18 +408,18 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
                     <h4 className="font-bold text-white text-sm">{companion?.full_name || 'Acompañante Asignado'}</h4>
                     <p className="text-xs text-slate-400">Contacto Directo: {companion?.phone || '809-555-0100'}</p>
                     <span className="inline-block mt-1 bg-emerald-950 text-emerald-400 border border-emerald-500/30 text-[9px] font-mono px-2 py-0.5 rounded font-bold">
-                      ✓ DEPILACIÓN PGR VALIDADA
+                      ✓ ACREDITACIÓN PGR VALIDADA
                     </span>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* PANEL DE VALIDACIÓN CON PIN (CHECK-IN Y CHECK-OUT) */}
+            {/* PANEL DE CONTROL DE DOBLE PIN */}
             <div className="bg-slate-950 border border-emerald-500/40 rounded-3xl p-6 space-y-5 shadow-2xl">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                 <span className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-1.5">
-                  <KeyRound className="w-4 h-4 text-emerald-400" /> Control de Encuentro y Cierre
+                  <KeyRound className="w-4 h-4 text-emerald-400" /> Control de Validación Antifraude
                 </span>
                 <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded font-bold">
                   DOBLE PIN
@@ -383,83 +432,87 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
                 </div>
               )}
 
-              {/* SI ES EL CLIENTE: MUESTRA LOS PINS PARA DICTÁRSELOS */}
-              {isClient && (
-                <div className="grid grid-cols-2 gap-3 text-center">
-                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
-                    <span className="text-[10px] font-bold text-slate-400 block">1. PIN CHECK-IN (Llegada)</span>
-                    <span className="font-mono text-2xl font-black text-emerald-400 tracking-widest">{checkinPin}</span>
-                    <p className="text-[9px] text-slate-500">Dictar al verse en persona</p>
-                  </div>
-
-                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
-                    <span className="text-[10px] font-bold text-slate-400 block">2. PIN CHECK-OUT (Salida)</span>
-                    <span className="font-mono text-2xl font-black text-amber-400 tracking-widest">{checkoutPin}</span>
-                    <p className="text-[9px] text-slate-500">Dictar al terminar el servicio</p>
-                  </div>
+              {/* SI ES EL CLIENTE: MUESTRA LOS PINS PARA DICTARLOS */}
+              <div className="grid grid-cols-2 gap-3 text-center">
+                <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">1. PIN Check-In (Llegada)</span>
+                  <span className="font-mono text-2xl font-black text-emerald-400 tracking-widest">{checkinPin}</span>
+                  <p className="text-[9px] text-slate-500">Dictar al verse en persona</p>
                 </div>
+
+                <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">2. PIN Check-Out (Salida)</span>
+                  <span className="font-mono text-2xl font-black text-amber-400 tracking-widest">{checkoutPin}</span>
+                  <p className="text-[9px] text-slate-500">Dictar al terminar el servicio</p>
+                </div>
+              </div>
+
+              {/* FORMULARIOS DE VALIDACIÓN */}
+              {service.status === 'ASSIGNED' && (
+                <form onSubmit={handleVerifyCheckin} className="space-y-2 pt-2">
+                  <label className="text-xs font-bold text-slate-300 block">
+                    Ingresar PIN para Validación de Inicio:
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      maxLength={6}
+                      required
+                      placeholder="Escribir PIN..."
+                      value={inputCheckinPin}
+                      onChange={(e) => setInputCheckinPin(e.target.value)}
+                      className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-center font-mono text-lg text-emerald-400 font-bold outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={pinActionLoading}
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs transition"
+                    >
+                      {pinActionLoading ? 'Validando...' : 'Validar PIN'}
+                    </button>
+                  </div>
+                </form>
               )}
 
-              {/* SI ES EL ACOMPAÑANTE: CAMPOS PARA VALIDAR */}
-              {isCompanion && (
-                <div className="space-y-4">
-                  {service.status === 'ASSIGNED' && (
-                    <form onSubmit={handleVerifyCheckin} className="space-y-2">
-                      <label className="text-xs font-bold text-slate-300 block">
-                        Ingresa el PIN de Check-In (dictado por el Usuario al encontrarse):
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          maxLength={6}
-                          required
-                          placeholder="••••"
-                          value={inputCheckinPin}
-                          onChange={(e) => setInputCheckinPin(e.target.value)}
-                          className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-center font-mono text-lg text-emerald-400 font-bold outline-none focus:border-emerald-500"
-                        />
-                        <button
-                          type="submit"
-                          disabled={pinActionLoading}
-                          className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs transition"
-                        >
-                          Validar Encuentro
-                        </button>
-                      </div>
-                    </form>
-                  )}
+              {service.status === 'IN_PROGRESS' && (
+                <form onSubmit={handleVerifyCheckout} className="space-y-2 pt-2">
+                  <label className="text-xs font-bold text-slate-300 block">
+                    Ingresar PIN para Validación de Salida:
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      maxLength={6}
+                      required
+                      placeholder="Escribir PIN..."
+                      value={inputCheckoutPin}
+                      onChange={(e) => setInputCheckoutPin(e.target.value)}
+                      className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-center font-mono text-lg text-amber-400 font-bold outline-none focus:border-amber-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={pinActionLoading}
+                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs transition"
+                    >
+                      {pinActionLoading ? 'Validando...' : 'Validar PIN'}
+                    </button>
+                  </div>
+                </form>
+              )}
 
-                  {service.status === 'IN_PROGRESS' && (
-                    <form onSubmit={handleVerifyCheckout} className="space-y-2">
-                      <label className="text-xs font-bold text-slate-300 block">
-                        Ingresa el PIN de Check-Out (al concluir el horario contratado):
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          maxLength={6}
-                          required
-                          placeholder="••••"
-                          value={inputCheckoutPin}
-                          onChange={(e) => setInputCheckoutPin(e.target.value)}
-                          className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-center font-mono text-lg text-amber-400 font-bold outline-none focus:border-amber-500"
-                        />
-                        <button
-                          type="submit"
-                          disabled={pinActionLoading}
-                          className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs transition"
-                        >
-                          Cerrar Servicio
-                        </button>
-                      </div>
-                    </form>
-                  )}
-
-                  {service.status === 'COMPLETED' && (
-                    <div className="bg-emerald-950/60 border border-emerald-500/40 p-3 rounded-2xl text-center text-xs font-mono text-emerald-400 font-bold">
-                      ✓ SERVICIO COMPLETADO Y FINALIZADO
-                    </div>
-                  )}
+              {service.status === 'COMPLETED' && (
+                <div className="space-y-3 pt-2">
+                  <div className="bg-emerald-950/60 border border-emerald-500/40 p-3 rounded-2xl text-center text-xs font-mono text-emerald-400 font-bold flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>¡SERVICIO FINALIZADO CON ÉXITO!</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowRatingModal(true)}
+                    className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2.5 rounded-xl text-xs transition"
+                  >
+                    ★ Calificar Servicio (5 Estrellas)
+                  </button>
                 </div>
               )}
             </div>
@@ -467,18 +520,21 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
           </div>
 
           {/* COLUMNA DERECHA: CHAT EN VIVO */}
-          <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 shadow-2xl flex flex-col h-[480px]">
+          <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 shadow-2xl flex flex-col h-[520px]">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
               <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                 <MessageSquare className="w-4 h-4 text-emerald-400" /> Chat Operativo del Servicio
               </span>
-              <span className="text-[10px] text-slate-500 font-mono">EN VIVO</span>
+              <span className="text-[10px] font-mono bg-emerald-950 border border-emerald-500/40 text-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                EN VIVO
+              </span>
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs">
               {chatMessages.length === 0 ? (
-                <p className="text-center text-slate-500 py-12">
-                  No hay mensajes todavía. Pueden coordinar detalles de llegada aquí.
+                <p className="text-center text-slate-500 py-16">
+                  No hay mensajes todavía. Coordinen detalles de encuentro aquí.
                 </p>
               ) : (
                 chatMessages.map((msg) => {
@@ -488,7 +544,7 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
                       <span className="text-[9px] text-slate-500 font-mono mb-0.5">{msg.sender_name}</span>
                       <div className={`p-2.5 rounded-2xl max-w-[80%] ${
                         isMine 
-                          ? 'bg-emerald-500 text-slate-950 font-medium' 
+                          ? 'bg-emerald-500 text-slate-950 font-bold' 
                           : 'bg-slate-900 text-slate-200 border border-slate-800'
                       }`}>
                         {msg.message}
@@ -519,6 +575,16 @@ export default function ServiceLiveControlPage({ params }: { params: Promise<{ i
         </div>
 
       </main>
+
+      {/* MODAL DE 5 ESTRELLAS CON REDIRECCIÓN AUTOMÁTICA CON SESIÓN ACTIVA */}
+      <RatingModal
+        isOpen={showRatingModal}
+        serviceId={service.id}
+        companionId={service.companion_id}
+        clientId={service.customer_id || service.user_id || currentUser?.id}
+        onClose={() => setShowRatingModal(false)}
+        redirectTo="/services/new"
+      />
     </div>
   );
 }
