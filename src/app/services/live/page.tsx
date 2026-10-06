@@ -179,21 +179,12 @@ function LiveRoomContent() {
         setClientProfile(cli);
       }
 
-      // Cargar Mensajes con compatibilidad de tablas
-      let { data: msgs } = await supabase
-        .from('service_chat_messages')
+      // Cargar Mensajes directamente desde service_messages
+      const { data: msgs } = await supabase
+        .from('service_messages')
         .select('*')
-        .eq('service_id', targetId)
+        .or(`service_id.eq.${targetId},service_request_id.eq.${targetId}`)
         .order('created_at', { ascending: true });
-
-      if (!msgs || msgs.length === 0) {
-        const { data: altMsgs } = await supabase
-          .from('service_messages')
-          .select('*')
-          .eq('service_request_id', targetId)
-          .order('created_at', { ascending: true });
-        msgs = altMsgs;
-      }
 
       setChatMessages(msgs || []);
       setLoading(false);
@@ -202,7 +193,7 @@ function LiveRoomContent() {
     loadData();
   }, [rawId, supabase]);
 
-  // Suscripción Realtime para chat y estado del servicio
+  // Suscripción Realtime Unificada para Chat y Estado del Servicio
   useEffect(() => {
     if (!service?.id) return;
 
@@ -210,22 +201,20 @@ function LiveRoomContent() {
       .channel(`live_channel_${service.id}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'service_chat_messages', filter: `service_id=eq.${service.id}` },
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'service_messages'
+        },
         (payload) => {
-          setChatMessages((prev) => {
-            if (prev.some(m => m.id === payload.new.id)) return prev;
-            return [...prev, payload.new];
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'service_messages', filter: `service_request_id=eq.${service.id}` },
-        (payload) => {
-          setChatMessages((prev) => {
-            if (prev.some(m => m.id === payload.new.id)) return prev;
-            return [...prev, payload.new];
-          });
+          const msg = payload.new;
+          if (msg.service_id === service.id || msg.service_request_id === service.id) {
+            setChatMessages((prev) => {
+              if (prev.some(m => m.id === msg.id)) return prev;
+              const filtered = prev.filter(m => !m.id.toString().startsWith('temp_'));
+              return [...filtered, msg];
+            });
+          }
         }
       )
       .on(
@@ -261,7 +250,6 @@ function LiveRoomContent() {
     const enteredPin = inputPin.trim();
 
     try {
-      // Intentar primero con la función segura en base de datos
       const { data: rpcSuccess, error: rpcError } = await supabase.rpc('verify_service_pin', {
         p_service_id: service.id,
         p_pin: enteredPin,
@@ -281,7 +269,7 @@ function LiveRoomContent() {
         return;
       }
 
-      // Fallback frontend si la RPC no estuviese compilada
+      // Fallback si la RPC no existe
       const expectedPin = pinMode === 'CHECKIN' 
         ? (service.checkin_pin || '').toString() 
         : (service.checkout_pin || '').toString();
@@ -325,9 +313,11 @@ function LiveRoomContent() {
     setSendingMsg(true);
 
     const senderName = currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'Usuario';
+    const tempId = `temp_${Date.now()}`;
     const tempMsg = {
-      id: `temp_${Date.now()}`,
+      id: tempId,
       service_id: service.id,
+      service_request_id: service.id,
       sender_id: currentUser.id,
       sender_name: senderName,
       message: texto,
@@ -337,24 +327,18 @@ function LiveRoomContent() {
     setChatMessages((prev) => [...prev, tempMsg]);
 
     try {
-      const { error: err1 } = await supabase
-        .from('service_chat_messages')
+      const { error } = await supabase
+        .from('service_messages')
         .insert([{
           service_id: service.id,
+          service_request_id: service.id,
           sender_id: currentUser.id,
           sender_name: senderName,
           message: texto
         }]);
 
-      if (err1) {
-        await supabase
-          .from('service_messages')
-          .insert([{
-            service_request_id: service.id,
-            sender_id: currentUser.id,
-            sender_name: senderName,
-            message: texto
-          }]);
+      if (error) {
+        console.error('Error insertando en service_messages:', error);
       }
     } catch (error) {
       console.error('Error enviando mensaje:', error);
