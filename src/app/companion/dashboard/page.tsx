@@ -125,7 +125,6 @@ export default function CompanionDashboardPage() {
       );
       setPastOrders(completed);
 
-      // Si no hay un chat enfocado manualmente, vincular la orden activa o la última concluida
       setSelectedChatOrder((prev: any) => prev || myActive || completed[0] || null);
     }
   }
@@ -160,14 +159,16 @@ export default function CompanionDashboardPage() {
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'service_messages',
-          filter: `service_request_id=eq.${selectedChatOrder.id}`
+          table: 'service_messages'
         },
         (payload) => {
-          if (isSubscribed) {
+          if (!isSubscribed) return;
+          const msg = payload.new;
+          if (msg.service_request_id === selectedChatOrder.id || msg.service_id === selectedChatOrder.id) {
             setMessages((prev) => {
-              if (prev.some((m) => m.id === payload.new.id)) return prev;
-              return [...prev, payload.new];
+              if (prev.some((m) => m.id === msg.id)) return prev;
+              const filtered = prev.filter((m) => !m.id.toString().startsWith('temp_'));
+              return [...filtered, msg];
             });
           }
         }
@@ -248,22 +249,36 @@ export default function CompanionDashboardPage() {
     setNewMessage('');
 
     const senderName = profile?.full_name || currentUser.email?.split('@')[0] || 'Acompañante';
-
+    const tempId = `temp_${Date.now()}`;
     const payload = {
+      id: tempId,
       service_request_id: selectedChatOrder.id,
       service_id: selectedChatOrder.id,
       sender_id: currentUser.id,
       sender_name: senderName,
-      message: content
+      message: content,
+      created_at: new Date().toISOString()
     };
 
-    const { error } = await supabase.from('service_messages').insert([payload]);
+    setMessages((prev) => [...prev, payload]);
 
-    if (error) {
-      await supabase.from('service_chat_messages').insert([payload]);
+    try {
+      const { error } = await supabase.from('service_messages').insert([{
+        service_request_id: selectedChatOrder.id,
+        service_id: selectedChatOrder.id,
+        sender_id: currentUser.id,
+        sender_name: senderName,
+        message: content
+      }]);
+
+      if (error) {
+        console.error('Error enviando a service_messages:', error);
+      }
+    } catch (err) {
+      console.error('Fallo en inserción de chat:', err);
+    } finally {
+      setSendingMsg(false);
     }
-
-    setSendingMsg(false);
   }
 
   // Validación estricta de PIN Server-Side (Check-In / Check-Out)
@@ -546,7 +561,7 @@ export default function CompanionDashboardPage() {
                   <p className="text-xs text-slate-400">
                     Pídele al solicitante su <strong>PIN de Encuentro</strong> personal para iniciar la asistencia presencial:
                   </p>
-                  <div className="flex gap-2 max-w-sm">
+                  <div className="flex flex-col sm:flex-row gap-2 max-w-sm">
                     <input
                       type="text"
                       maxLength={6}
@@ -558,7 +573,7 @@ export default function CompanionDashboardPage() {
                     <button
                       onClick={() => handleValidarPIN('INICIO')}
                       disabled={actionLoading || !pinInput.trim()}
-                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
                     >
                       <MapPin className="w-3.5 h-3.5" />
                       <span>{actionLoading ? 'Validando...' : 'Iniciar Asistencia'}</span>
@@ -574,7 +589,7 @@ export default function CompanionDashboardPage() {
                   <p className="text-xs text-slate-400">
                     Pídele al solicitante su <strong>PIN de Salida</strong> para registrar el cierre geolocalizado:
                   </p>
-                  <div className="flex gap-2 max-w-sm">
+                  <div className="flex flex-col sm:flex-row gap-2 max-w-sm">
                     <input
                       type="text"
                       maxLength={6}
@@ -586,7 +601,7 @@ export default function CompanionDashboardPage() {
                     <button
                       onClick={() => handleValidarPIN('FINAL')}
                       disabled={actionLoading || !pinInput.trim()}
-                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-amber-500/20 transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-amber-500/20 transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
                     >
                       <Check className="w-3.5 h-3.5" />
                       <span>{actionLoading ? 'Finalizando...' : 'Finalizar Asistencia'}</span>
@@ -757,7 +772,7 @@ export default function CompanionDashboardPage() {
                       onClick={() => setSelectedChatOrder(ord)}
                       className="bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 transition cursor-pointer"
                     >
-                      <MessageCircle className="w-3 h-3" />
+                      <MessageCircle className="w-3.5 h-3.5" />
                       <span>Ver Chat</span>
                     </button>
                     <div className="text-right">
