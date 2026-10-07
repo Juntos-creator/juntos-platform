@@ -91,12 +91,12 @@ function LiveRoomContent() {
         if (userLatest) {
           const estadoActual = (userLatest.status || '').toUpperCase();
           if (estadoActual === 'COMPLETED' || estadoActual === 'FINALIZADO' || estadoActual === 'CANCELLED') {
-            router.replace('/');
+            window.location.href = '/';
             return;
           }
           targetId = userLatest.id;
         } else {
-          router.replace('/');
+          window.location.href = '/';
           return;
         }
       }
@@ -133,7 +133,7 @@ function LiveRoomContent() {
       // Validación doble de seguridad si el estado viene finalizado
       const statusUpper = (srv.status || '').toUpperCase();
       if ((statusUpper === 'COMPLETED' || statusUpper === 'FINALIZADO') && userProfile?.role === 'CLIENT') {
-        router.replace('/');
+        window.location.href = '/';
         return;
       }
 
@@ -208,7 +208,7 @@ function LiveRoomContent() {
             if (!updated.rating && !ratingDone) {
               setShowRatingModal(true);
             } else {
-              router.replace('/');
+              window.location.href = '/';
             }
           }
         }
@@ -218,7 +218,7 @@ function LiveRoomContent() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [service?.id, supabase, ratingDone, currentUserRole, router]);
+  }, [service?.id, supabase, ratingDone, currentUserRole]);
 
   async function handleVerifyPin(e: React.FormEvent) {
     e.preventDefault();
@@ -335,8 +335,8 @@ function LiveRoomContent() {
       if (!error) {
         setRatingDone(true);
         setShowRatingModal(false);
-        // Redirigir de inmediato a la página de inicio (/) manteniendo la sesión abierta
-        router.replace('/');
+        // Redirección forzada inmediata a la página de inicio
+        window.location.href = '/';
       } else {
         alert('Error guardando la calificación: ' + error.message);
       }
@@ -611,7 +611,7 @@ function LiveRoomContent() {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => router.replace('/')}
+                    onClick={() => { window.location.href = '/'; }}
                     className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-400 py-3 rounded-xl text-xs font-bold"
                   >
                     Omitir
