@@ -9,46 +9,77 @@ import { CheckCircle2, Clock, ArrowRight, RefreshCw } from 'lucide-react';
 
 export default function CompanionOnboardingPage() {
   const router = useRouter();
-  const supabase = createClient();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
+
     async function checkStatus() {
-      const { data: { user } } = await supabase.auth.getUser();
+      try {
+        const supabase = createClient();
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
 
-      if (!user) {
-        router.replace('/login');
-        return;
+        if (authError) throw authError;
+
+        if (!user) {
+          router.replace('/login');
+          return;
+        }
+
+        const { data: application, error: applicationError } = await supabase
+          .from('companion_applications')
+          .select('id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (applicationError) throw applicationError;
+
+        if (application) {
+          router.replace('/companion/dashboard');
+          return;
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (profileError) throw profileError;
+
+        const role = String(profile?.role ?? '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toUpperCase();
+
+        if (role.includes('COMPANION') || role.includes('ACOMPANANTE')) {
+          router.replace('/companion/dashboard');
+          return;
+        }
+
+        if (active) setLoading(false);
+      } catch (err) {
+        console.error('Error verificando el perfil de acompañante:', err);
+        if (active) {
+          setError(
+            'No se pudo verificar tu perfil. Inténtalo de nuevo; no vuelvas a registrarte mientras tanto.'
+          );
+          setLoading(false);
+        }
       }
-
-      // 1. Si ya tiene postulación o perfil registrado, redirigir al panel
-      const { data: app } = await supabase
-        .from('companion_applications')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (app) {
-        router.replace('/companion/dashboard');
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (profile?.role === 'COMPANION') {
-        router.replace('/companion/dashboard');
-        return;
-      }
-
-      setLoading(false);
     }
 
-    checkStatus();
-  }, [router, supabase]);
+    void checkStatus();
+
+    return () => {
+      active = false;
+    };
+  }, [router]);
 
   if (loading) {
     return (
@@ -57,6 +88,26 @@ export default function CompanionOnboardingPage() {
         <p className="text-xs font-mono tracking-widest uppercase">
           Verificando expediente laboral...
         </p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+        <Navbar />
+        <main className="max-w-xl mx-auto px-4 py-16 w-full text-center">
+          <div className="rounded-3xl border border-rose-900 bg-slate-900 p-8">
+            <p className="text-rose-300">{error}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-5 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-bold text-slate-950"
+            >
+              Volver a intentar
+            </button>
+          </div>
+        </main>
       </div>
     );
   }
