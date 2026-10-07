@@ -91,12 +91,12 @@ function LiveRoomContent() {
         if (userLatest) {
           const estadoActual = (userLatest.status || '').toUpperCase();
           if (estadoActual === 'COMPLETED' || estadoActual === 'FINALIZADO' || estadoActual === 'CANCELLED') {
-            router.replace('/profile');
+            router.replace('/');
             return;
           }
           targetId = userLatest.id;
         } else {
-          router.replace('/profile');
+          router.replace('/');
           return;
         }
       }
@@ -133,7 +133,7 @@ function LiveRoomContent() {
       // Validación doble de seguridad si el estado viene finalizado
       const statusUpper = (srv.status || '').toUpperCase();
       if ((statusUpper === 'COMPLETED' || statusUpper === 'FINALIZADO') && userProfile?.role === 'CLIENT') {
-        router.replace('/profile');
+        router.replace('/');
         return;
       }
 
@@ -208,7 +208,7 @@ function LiveRoomContent() {
             if (!updated.rating && !ratingDone) {
               setShowRatingModal(true);
             } else {
-              router.replace('/profile');
+              router.replace('/');
             }
           }
         }
@@ -335,7 +335,8 @@ function LiveRoomContent() {
       if (!error) {
         setRatingDone(true);
         setShowRatingModal(false);
-        router.replace('/profile');
+        // Redirigir de inmediato a la página de inicio (/) manteniendo la sesión abierta
+        router.replace('/');
       } else {
         alert('Error guardando la calificación: ' + error.message);
       }
@@ -610,7 +611,7 @@ function LiveRoomContent() {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => router.replace('/profile')}
+                    onClick={() => router.replace('/')}
                     className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-400 py-3 rounded-xl text-xs font-bold"
                   >
                     Omitir
