@@ -4,94 +4,113 @@ import { createClient } from '@/lib/supabase/server';
 export async function POST(req: Request) {
   try {
     const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-    // 1. Validar autenticación
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: 'No autorizado. Inicie sesión.' }, { status: 401 });
+      return NextResponse.json({ error: 'Debe iniciar sesión.' }, { status: 401 });
     }
 
     const body = await req.json();
     const { serviceId, pin, latitude, longitude } = body;
 
-    if (!serviceId || !pin) {
-      return NextResponse.json({ error: 'Faltan parámetros requeridos (serviceId, pin).' }, { status: 400 });
-    }
-
-    // 2. Obtener el servicio
-    const { data: service, error: srvError } = await supabase
-      .from('service_requests')
-      .select('id, status, companion_id, checkout_pin, pin_end, client_id, user_id, customer_id, total_amount')
-      .eq('id', serviceId)
-      .maybeSingle();
-
-    if (srvError || !service) {
-      return NextResponse.json({ error: 'Servicio no encontrado.' }, { status: 404 });
-    }
-
-    // 3. Verificar autorización
-    const isCompanion = service.companion_id === user.id;
-    const isClient = [service.client_id, service.user_id, service.customer_id].includes(user.id);
-
-    if (!isCompanion && !isClient) {
+    if (
+      typeof serviceId !== 'string' ||
+      !serviceId ||
+      typeof pin !== 'string' ||
+      !pin.trim()
+    ) {
       return NextResponse.json(
-        { error: 'Acceso denegado: no estás asignado a este servicio.' },
-        { status: 403 }
-      );
-    }
-
-    // 4. Verificar estado del servicio
-    if (service.status !== 'IN_PROGRESS') {
-      return NextResponse.json(
-        { error: `El servicio no está en curso (estado actual: ${service.status}).` },
+        { error: 'Se requieren serviceId y pin.' },
         { status: 400 }
       );
     }
 
-    // 5. Validación ESTRICTA del PIN (SIN fallbacks 1234/5678)
-    const pinEsperado = String(service.checkout_pin || service.pin_end || '').trim();
-    const pinIngresado = String(pin).trim();
+    const hasLatitude = latitude !== undefined && latitude !== null;
+    const hasLongitude = longitude !== undefined && longitude !== null;
 
-    if (!pinEsperado || pinIngresado !== pinEsperado) {
+    if (hasLatitude !== hasLongitude) {
       return NextResponse.json(
-        { error: 'PIN de Check-Out incorrecto. Solicítalo al usuario al concluir.' },
+        { error: 'Envía ambas coordenadas o ninguna.' },
         { status: 400 }
       );
     }
 
-    // 6. Cálculo financiero en servidor (Modelo JUNTOS: RD$ 750 tarifa acompañante)
-    const coordenadasTxt = (latitude && longitude) ? `[GPS: ${latitude}, ${longitude}]` : null;
-
-    const { data: updatedService, error: updateError } = await supabase
-      .from('service_requests')
-      .update({
-        status: 'COMPLETED',
-        completed_at: new Date().toISOString(),
-        companion_fee: 750.00,
-        payment_status: 'ACCREDITED',
-        ...(coordenadasTxt ? { checkout_location: coordenadasTxt } : {})
-      })
-      .eq('id', serviceId)
-      .select()
-      .single();
-
-    if (updateError) {
-      return NextResponse.json({ error: 'Error al finalizar el servicio: ' + updateError.message }, { status: 500 });
+    if (
+      hasLatitude &&
+      (typeof latitude !== 'number' ||
+        !Number.isFinite(latitude) ||
+        latitude < -90 ||
+        latitude > 90 ||
+        typeof longitude !== 'number' ||
+        !Number.isFinite(longitude) ||
+        longitude < -180 ||
+        longitude > 180)
+    ) {
+      return NextResponse.json({ error: 'Coordenadas inválidas.' }, { status: 400 });
     }
 
-    // 7. Registro de auditoría
-    await supabase.from('audit_logs').insert({
+    const location = hasLatitude ? `[GPS: ${latitude}, ${longitude}]` : null;
+
+    const { error: rpcError } = await supabase.rpc('service_checkout', {
+      p_service_id: serviceId,
+      p_pin: pin.trim(),
+      p_latitude: hasLatitude ? latitude : null,
+      p_longitude: hasLongitude ? longitude : null,
+    });
+
+    if (rpcError) {
+      const message = rpcError.message ?? '';
+
+      if (message.includes('Solo el cliente')) {
+        return NextResponse.json({ error: message }, { status: 403 });
+      }
+
+      if (message.includes('no encontrado')) {
+        return NextResponse.json({ error: message }, { status: 404 });
+      }
+
+      if (
+        message.includes('PIN') ||
+        message.includes('Coordenadas')
+      ) {
+        return NextResponse.json({ error: message }, { status: 400 });
+      }
+
+      if (
+        message.includes('estado') ||
+        message.includes('finalizado') ||
+        message.includes('no está en curso')
+      ) {
+        return NextResponse.json({ error: message }, { status: 409 });
+      }
+
+      console.error('Error en service_checkout:', message);
+      return NextResponse.json(
+        { error: 'No se pudo finalizar el servicio.' },
+        { status: 500 }
+      );
+    }
+
+    const { error: auditError } = await supabase.from('audit_logs').insert({
       user_id: user.id,
-      action: 'SERVICE_CHECKOUT_COMPLETED',
-      details: { service_id: serviceId, companion_fee: 750.00, location: coordenadasTxt }
-    }).select().maybeSingle();
+      action: 'SERVICE_CHECKOUT_VALIDATED',
+      details: { service_id: serviceId, location },
+    });
+
+    if (auditError) {
+      console.error('No se pudo registrar la auditoría:', auditError.message);
+    }
 
     return NextResponse.json({
       success: true,
-      message: 'Servicio finalizado exitosamente. RD$ 750 acreditados.',
-      service: updatedService
+      message: 'Check-out validado; el servicio finalizó.',
+      service: { id: serviceId, status: 'COMPLETED' },
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Error interno.' }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Error interno.';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
