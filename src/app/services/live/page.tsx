@@ -78,16 +78,27 @@ function LiveRoomContent() {
 
       let targetId = rawId?.trim();
 
-      if (!targetId) {
+      // Si es un cliente y no pasa ID por URL, evaluamos su última orden de forma limpia en JS
+      if (!targetId && userProfile?.role === 'CLIENT') {
         const { data: userLatest } = await supabase
           .from('service_requests')
-          .select('id')
+          .select('id, status')
           .eq('client_id', user.id)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
-        if (userLatest) targetId = userLatest.id;
+        if (userLatest) {
+          const estadoActual = (userLatest.status || '').toUpperCase();
+          if (estadoActual === 'COMPLETED' || estadoActual === 'FINALIZADO' || estadoActual === 'CANCELLED') {
+            router.replace('/profile');
+            return;
+          }
+          targetId = userLatest.id;
+        } else {
+          router.replace('/profile');
+          return;
+        }
       }
 
       if (!targetId) {
@@ -119,15 +130,16 @@ function LiveRoomContent() {
         return;
       }
 
-      // Si el servicio ya está completado y es cliente, redirigir directamente al perfil
-      if ((srv.status === 'COMPLETED' || srv.status === 'FINALIZADO') && userProfile?.role === 'CLIENT') {
+      // Validación doble de seguridad si el estado viene finalizado
+      const statusUpper = (srv.status || '').toUpperCase();
+      if ((statusUpper === 'COMPLETED' || statusUpper === 'FINALIZADO') && userProfile?.role === 'CLIENT') {
         router.replace('/profile');
         return;
       }
 
       setService(srv);
       setSosSent(srv.emergency_status === 'SOS_ACTIVE');
-      if (srv.status === 'IN_PROGRESS') {
+      if (statusUpper === 'IN_PROGRESS') {
         setPinMode('CHECKOUT');
       }
 
@@ -196,7 +208,6 @@ function LiveRoomContent() {
             if (!updated.rating && !ratingDone) {
               setShowRatingModal(true);
             } else {
-              // Si ya está calificado o no requiere calificación, redirige manteniendo la sesión
               router.replace('/profile');
             }
           }
@@ -324,7 +335,6 @@ function LiveRoomContent() {
       if (!error) {
         setRatingDone(true);
         setShowRatingModal(false);
-        // Redirigir al perfil/inicio manteniendo la sesión abierta
         router.replace('/profile');
       } else {
         alert('Error guardando la calificación: ' + error.message);
@@ -512,7 +522,7 @@ function LiveRoomContent() {
             </div>
           </div>
 
-          {/* COLUMNA 2: COMPONENTE CHAT OFICIAL AUDITADO */}
+          {/* COLUMNA 2: CHAT */}
           <div>
             <ServiceChatRoom
               serviceId={service.id}
