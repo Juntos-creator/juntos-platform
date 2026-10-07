@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Navbar } from '@/components/navbar';
@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 
 function LiveRoomContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const rawId = searchParams.get('id');
   const supabase = createClient();
@@ -60,7 +61,7 @@ function LiveRoomContent() {
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        window.location.href = `/login?redirect=/services/live${rawId ? `?id=${rawId}` : ''}`;
+        router.push(`/login?redirect=/services/live${rawId ? `?id=${rawId}` : ''}`);
         return;
       }
       setCurrentUser(user);
@@ -118,6 +119,12 @@ function LiveRoomContent() {
         return;
       }
 
+      // Si el servicio ya está completado y es cliente, redirigir directamente al perfil
+      if ((srv.status === 'COMPLETED' || srv.status === 'FINALIZADO') && userProfile?.role === 'CLIENT') {
+        router.replace('/profile');
+        return;
+      }
+
       setService(srv);
       setSosSent(srv.emergency_status === 'SOS_ACTIVE');
       if (srv.status === 'IN_PROGRESS') {
@@ -166,7 +173,7 @@ function LiveRoomContent() {
     }
 
     loadData();
-  }, [rawId, supabase]);
+  }, [rawId, supabase, router]);
 
   // Escuchar cambios de estado en Realtime
   useEffect(() => {
@@ -178,12 +185,20 @@ function LiveRoomContent() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'service_requests', filter: `id=eq.${service.id}` },
         (payload) => {
-          setService(payload.new);
-          if (payload.new.status === 'IN_PROGRESS') {
+          const updated = payload.new;
+          setService(updated);
+          
+          if (updated.status === 'IN_PROGRESS') {
             setPinMode('CHECKOUT');
           }
-          if (payload.new.status === 'COMPLETED' && !payload.new.rating && !ratingDone) {
-            setShowRatingModal(true);
+          
+          if ((updated.status === 'COMPLETED' || updated.status === 'FINALIZADO') && currentUserRole === 'CLIENT') {
+            if (!updated.rating && !ratingDone) {
+              setShowRatingModal(true);
+            } else {
+              // Si ya está calificado o no requiere calificación, redirige manteniendo la sesión
+              router.replace('/profile');
+            }
           }
         }
       )
@@ -192,14 +207,7 @@ function LiveRoomContent() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [service?.id, supabase, ratingDone]);
-
-  // Disparar modal si el servicio está concluido
-  useEffect(() => {
-    if (service?.status === 'COMPLETED' && !service.rating && !ratingDone) {
-      setShowRatingModal(true);
-    }
-  }, [service?.status, service?.rating, ratingDone]);
+  }, [service?.id, supabase, ratingDone, currentUserRole, router]);
 
   async function handleVerifyPin(e: React.FormEvent) {
     e.preventDefault();
@@ -316,7 +324,8 @@ function LiveRoomContent() {
       if (!error) {
         setRatingDone(true);
         setShowRatingModal(false);
-        setService((prev: any) => ({ ...prev, rating: ratingValue, review_comment: ratingComment.trim() }));
+        // Redirigir al perfil/inicio manteniendo la sesión abierta
+        router.replace('/profile');
       } else {
         alert('Error guardando la calificación: ' + error.message);
       }
@@ -484,7 +493,7 @@ function LiveRoomContent() {
                 )}
               </div>
 
-              {service.status === 'COMPLETED' && (
+              {(service.status === 'COMPLETED' || service.status === 'FINALIZADO') && (
                 <div className="bg-emerald-950/60 border border-emerald-500/40 p-4 rounded-2xl text-center space-y-3">
                   <span className="text-emerald-400 font-bold text-xs flex items-center justify-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4" /> ¡SERVICIO FINALIZADO CON ÉXITO!
@@ -591,7 +600,7 @@ function LiveRoomContent() {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowRatingModal(false)}
+                    onClick={() => router.replace('/profile')}
                     className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-400 py-3 rounded-xl text-xs font-bold"
                   >
                     Omitir

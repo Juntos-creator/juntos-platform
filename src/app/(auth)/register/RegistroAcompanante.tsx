@@ -568,7 +568,7 @@ export default function RegistroAcompanante(): JSX.Element {
   ];
 
   return (
-    <div className="w-full max-w-xl mx-auto space-y-6 text-slate-100 font-sans">
+    <div className="w-full max-w-xl mx-auto space-y-6 text-slate-100 font-sans p-4 sm:p-6">
       
       {esAdmin && (
         <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between text-xs">
@@ -697,6 +697,7 @@ export default function RegistroAcompanante(): JSX.Element {
 
       <form onSubmit={fase === 4 ? handleSubmitFinal : handleAvanzar} className="space-y-5 text-xs">
         
+        {/* FASE 1: IDENTIDAD Y DOMICILIO */}
         {fase === 1 && (
           <div className="space-y-4">
             <div>
@@ -790,7 +791,7 @@ export default function RegistroAcompanante(): JSX.Element {
                   <input 
                     type="tel" 
                     className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 font-mono outline-none focus:border-emerald-500 transition"
-                    placeholder="Opcional" 
+                    placeholder="829-555-0000" 
                     value={datosIdentidad.telefonoSecundario} 
                     onChange={e => setDatosIdentidad({...datosIdentidad, telefonoSecundario: e.target.value})} 
                   />
@@ -798,80 +799,71 @@ export default function RegistroAcompanante(): JSX.Element {
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-800 space-y-3">
-              <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                <Home className="w-4 h-4" />
-                <span>Domicilio Residencial Verificado</span>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-slate-300 font-bold block">Dirección Exacta (Calle, No., Edif./Apto.) *</label>
+            <div className="space-y-1">
+              <label className="text-slate-300 font-bold block">Dirección de Domicilio (Calle, No., Edif., Apto) *</label>
+              <div className="relative flex items-center">
+                <Home className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
                 <input 
                   type="text" 
-                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                  placeholder="Ej: C/ Mella #45, Edif. Real III, Apto 2-A" 
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  placeholder="Ej: Av. Las Américas No. 142, Edif. Aurora III" 
                   value={datosIdentidad.direccionCalle} 
                   onChange={e => setDatosIdentidad({...datosIdentidad, direccionCalle: e.target.value})} 
                 />
               </div>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-slate-300 font-bold block">Sector / Barrio *</label>
-                  <input 
-                    type="text" 
-                    className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                    placeholder="Ej: Ensanche Ozama" 
-                    value={datosIdentidad.sector} 
-                    onChange={e => setDatosIdentidad({...datosIdentidad, sector: e.target.value})} 
-                  />
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">Sector *</label>
+                <input 
+                  type="text" 
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
+                  placeholder="Ej: Ensanche Ozama" 
+                  value={datosIdentidad.sector} 
+                  onChange={e => setDatosIdentidad({...datosIdentidad, sector: e.target.value})} 
+                />
+              </div>
 
-                <div className="space-y-1">
-                  <label className="text-slate-300 font-bold block">Municipio / Provincia *</label>
-                  <select 
-                    className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white outline-none focus:border-emerald-500 transition cursor-pointer"
-                    value={datosIdentidad.municipioProvincia}
-                    onChange={e => setDatosIdentidad({...datosIdentidad, municipioProvincia: e.target.value})}
-                  >
-                    <option value="Distrito Nacional">Distrito Nacional (D.N.)</option>
-                    <option value="Santo Domingo Este">Santo Domingo Este</option>
-                    <option value="Santo Domingo Norte">Santo Domingo Norte</option>
-                    <option value="Santo Domingo Oeste">Santo Domingo Oeste</option>
-                    <option value="Santiago de los Caballeros">Santiago de los Caballeros</option>
-                    <option value="San Cristóbal">San Cristóbal</option>
-                    <option value="La Vega">La Vega</option>
-                    <option value="Puerto Plata">Puerto Plata</option>
-                    <option value="Otra Provincia">Otra Provincia</option>
-                  </select>
-                </div>
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">Municipio / Provincia *</label>
+                <select 
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white outline-none focus:border-emerald-500 transition"
+                  value={datosIdentidad.municipioProvincia} 
+                  onChange={e => setDatosIdentidad({...datosIdentidad, municipioProvincia: e.target.value})}
+                >
+                  <option value="Santo Domingo Este">Santo Domingo Este</option>
+                  <option value="Distrito Nacional">Distrito Nacional</option>
+                  <option value="Santo Domingo Norte">Santo Domingo Norte</option>
+                  <option value="Santo Domingo Oeste">Santo Domingo Oeste</option>
+                  <option value="Santiago">Santiago</option>
+                  <option value="San Cristóbal">San Cristóbal</option>
+                  <option value="Otra Provincia">Otra Provincia</option>
+                </select>
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-800 space-y-3">
-              <div className="flex items-center gap-2 text-rose-400 font-bold">
-                <AlertCircle className="w-4 h-4" />
-                <span>Contacto de Emergencia Inmediato *</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
+              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Contacto de Emergencia</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <input 
                   type="text" 
-                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                  placeholder="Nombre y apellido" 
+                  placeholder="Nombre completo *" 
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 transition"
                   value={datosIdentidad.contactoEmergenciaNombre} 
                   onChange={e => setDatosIdentidad({...datosIdentidad, contactoEmergenciaNombre: e.target.value})} 
                 />
                 <input 
                   type="text" 
-                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                  placeholder="Parentesco (Ej: Hermano)" 
+                  placeholder="Parentesco (Ej: Hermano) *" 
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 transition"
                   value={datosIdentidad.contactoEmergenciaParentesco} 
                   onChange={e => setDatosIdentidad({...datosIdentidad, contactoEmergenciaParentesco: e.target.value})} 
                 />
                 <input 
                   type="tel" 
-                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 font-mono outline-none focus:border-emerald-500 transition"
-                  placeholder="Teléfono directo" 
+                  placeholder="Teléfono directo *" 
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 transition font-mono"
                   value={datosIdentidad.contactoEmergenciaTelefono} 
                   onChange={e => setDatosIdentidad({...datosIdentidad, contactoEmergenciaTelefono: e.target.value})} 
                 />
@@ -880,398 +872,318 @@ export default function RegistroAcompanante(): JSX.Element {
           </div>
         )}
 
+        {/* FASE 2: DOCUMENTACIÓN Y ANTECEDENTES */}
         {fase === 2 && (
           <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-slate-300 font-bold block">1. Escaneo de Documento de Identidad *</label>
+            <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
+              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Documento de Identidad Oficial</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="border border-dashed border-slate-800 bg-slate-900/40 rounded-2xl p-4 text-center flex flex-col justify-between items-center min-h-[170px]">
-                  {previewFrontal ? (
-                    <div className="w-full flex flex-col items-center gap-2">
-                      <img src={previewFrontal} alt="Frontal" className="h-24 w-full object-cover rounded-xl border border-slate-700" />
-                      <button type="button" onClick={() => setPreviewFrontal(null)} className="text-[11px] text-rose-400 font-bold hover:underline cursor-pointer">Cambiar foto</button>
-                    </div>
-                  ) : (
-                    <>
-                      <FileText className="w-8 h-8 text-slate-500 mb-1" />
-                      <p className="font-bold text-slate-200">Lado Frontal</p>
-                      <div className="flex gap-2 w-full mt-2">
-                        <button type="button" onClick={() => iniciarCamara('frontal')} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer">
-                          <Camera className="w-3.5 h-3.5" /> Cámara
-                        </button>
-                        <label className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer">
-                          <Upload className="w-3.5 h-3.5" /> Subir
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'frontal')} />
-                        </label>
-                      </div>
-                    </>
-                  )}
+                <div className="space-y-2">
+                  <span className="text-[11px] font-bold text-slate-300 block">
+                    {tipoDocumento === 'CEDULA' ? 'Cédula - Cara Frontal *' : 'Pasaporte - Hoja Principal *'}
+                  </span>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => iniciarCamara('frontal')} className="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-xl text-slate-200 font-bold flex items-center justify-center gap-1 transition cursor-pointer">
+                      <Camera className="w-3.5 h-3.5" /> Foto
+                    </button>
+                    <label className="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-xl text-slate-200 font-bold flex items-center justify-center gap-1 cursor-pointer transition text-center">
+                      <Upload className="w-3.5 h-3.5" /> Subir
+                      <input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => handleFileUpload(e, 'frontal')} />
+                    </label>
+                  </div>
+                  {previewFrontal && <img src={previewFrontal} alt="Frontal" className="w-full h-24 object-cover rounded-xl border border-emerald-500/40" />}
                 </div>
 
-                <div className="border border-dashed border-slate-800 bg-slate-900/40 rounded-2xl p-4 text-center flex flex-col justify-between items-center min-h-[170px]">
-                  {previewDorsal ? (
-                    <div className="w-full flex flex-col items-center gap-2">
-                      <img src={previewDorsal} alt="Dorsal" className="h-24 w-full object-cover rounded-xl border border-slate-700" />
-                      <button type="button" onClick={() => setPreviewDorsal(null)} className="text-[11px] text-rose-400 font-bold hover:underline cursor-pointer">Cambiar foto</button>
-                    </div>
-                  ) : (
-                    <>
-                      <FileCheck2 className="w-8 h-8 text-slate-500 mb-1" />
-                      <p className="font-bold text-slate-200">Lado Posterior</p>
-                      <div className="flex gap-2 w-full mt-2">
-                        <button type="button" onClick={() => iniciarCamara('dorsal')} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer">
-                          <Camera className="w-3.5 h-3.5" /> Cámara
-                        </button>
-                        <label className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer">
-                          <Upload className="w-3.5 h-3.5" /> Subir
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'dorsal')} />
-                        </label>
-                      </div>
-                    </>
-                  )}
+                <div className="space-y-2">
+                  <span className="text-[11px] font-bold text-slate-300 block">
+                    {tipoDocumento === 'CEDULA' ? 'Cédula - Cara Posterior *' : 'Permiso de Trabajo DGM *'}
+                  </span>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => iniciarCamara('dorsal')} className="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-xl text-slate-200 font-bold flex items-center justify-center gap-1 transition cursor-pointer">
+                      <Camera className="w-3.5 h-3.5" /> Foto
+                    </button>
+                    <label className="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-xl text-slate-200 font-bold flex items-center justify-center gap-1 cursor-pointer transition text-center">
+                      <Upload className="w-3.5 h-3.5" /> Subir
+                      <input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => handleFileUpload(e, 'dorsal')} />
+                    </label>
+                  </div>
+                  {previewDorsal && <img src={previewDorsal} alt="Dorsal" className="w-full h-24 object-cover rounded-xl border border-emerald-500/40" />}
                 </div>
               </div>
             </div>
 
             <div className="space-y-1">
-              <label className="text-slate-300 font-bold block">2. Comprobante de Domicilio *</label>
-              <label className="w-full bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:border-slate-700 transition">
-                <span className="text-slate-400 truncate">{comprobanteDomicilio ? `✓ ${comprobanteDomicilio.name}` : 'Adjuntar PDF o Foto de Factura'}</span>
-                <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
-                <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setComprobanteDomicilio(e.target.files?.[0] || null)} />
-              </label>
+              <label className="text-slate-300 font-bold block">Comprobante de Domicilio (Luz, Agua, Cable o Contrato) *</label>
+              <input 
+                type="file" 
+                accept="image/*,application/pdf" 
+                className="w-full bg-slate-900/80 border border-slate-800 rounded-xl p-2 text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-emerald-500 file:text-slate-950 file:font-bold file:text-xs cursor-pointer"
+                onChange={e => setComprobanteDomicilio(e.target.files?.[0] || null)} 
+              />
             </div>
 
-            <div className="space-y-2 pt-2 border-t border-slate-800">
-              <label className="text-slate-300 font-bold block">3. Certificado No Antecedentes PGR (Vigencia 30 días) *</label>
-              <label className="w-full bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:border-slate-700 transition">
-                <span className="text-slate-400 truncate">{certAntecedentes ? `✓ ${certAntecedentes.name}` : 'Adjuntar Certificado Oficial PGR'}</span>
-                <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
-                <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setCertAntecedentes(e.target.files?.[0] || null)} />
-              </label>
-              {certAntecedentes && (
-                <div className="space-y-1">
-                  <span className="text-[11px] text-slate-400 font-medium">Fecha de emisión del certificado:</span>
-                  <input type="date" value={fechaAntecedentes} onChange={(e) => setFechaAntecedentes(e.target.value)} className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2 px-3 text-white outline-none focus:border-emerald-500" />
+            <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Certificado PGR (Antecedentes No Penales)</h4>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950 border border-emerald-500/30 px-2 py-0.5 rounded-md">Vigencia: Máx. 30 días hábiles</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Fecha de Emisión PGR *</label>
+                  <input 
+                    type="date" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 transition"
+                    value={fechaAntecedentes} 
+                    onChange={e => setFechaAntecedentes(e.target.value)} 
+                  />
                 </div>
-              )}
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Adjuntar Certificado PGR (PDF/Imagen) *</label>
+                  <input 
+                    type="file" 
+                    accept="image/*,application/pdf" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-1.5 text-slate-300 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:bg-emerald-500 file:text-slate-950 file:font-bold file:text-[10px] cursor-pointer"
+                    onChange={e => setCertAntecedentes(e.target.files?.[0] || null)} 
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-slate-300 font-bold block">4. Diploma de Bachiller *</label>
-              <label className="w-full bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:border-slate-700 transition">
-                <span className="text-slate-400 truncate">{certBachiller ? `✓ ${certBachiller.name}` : 'Adjuntar Diploma de Bachiller'}</span>
-                <GraduationCap className="w-4 h-4 text-emerald-400 shrink-0" />
-                <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setCertBachiller(e.target.files?.[0] || null)} />
-              </label>
-            </div>
-
-            <div className="space-y-2 pt-2 border-t border-slate-800">
-              <label className="text-slate-300 font-bold block">5. Certificado JUNTOS Academia *</label>
-              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">Título o Certificado de Bachiller *</label>
                 <input 
-                  type="text" 
-                  value={codigoAcademia} 
-                  onChange={(e) => setCodigoAcademia(e.target.value)} 
-                  placeholder="Código de acreditación (Ej: JACAD-2026-XXXX)" 
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-white font-mono uppercase outline-none focus:border-emerald-500"
+                  type="file" 
+                  accept="image/*,application/pdf" 
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl p-2 text-slate-300 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:bg-emerald-500 file:text-slate-950 file:font-bold file:text-[10px] cursor-pointer"
+                  onChange={e => setCertBachiller(e.target.files?.[0] || null)} 
                 />
-                <label className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2.5 rounded-xl block text-center cursor-pointer transition shadow-md shadow-emerald-500/20">
-                  {certAcademia ? `✓ ${certAcademia.name}` : 'Adjuntar Diploma Academia'}
-                  <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setCertAcademia(e.target.files?.[0] || null)} />
-                </label>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">Diploma JUNTOS Academia *</label>
+                <input 
+                  type="file" 
+                  accept="image/*,application/pdf" 
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl p-2 text-slate-300 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:bg-emerald-500 file:text-slate-950 file:font-bold file:text-[10px] cursor-pointer"
+                  onChange={e => setCertAcademia(e.target.files?.[0] || null)} 
+                />
               </div>
             </div>
           </div>
         )}
 
+        {/* FASE 3: REFERENCIAS Y PAGO */}
         {fase === 3 && (
           <div className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-slate-300 font-bold block">Experiencia en Acompañamiento o Cuidado *</label>
-              <select 
-                className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white outline-none focus:border-emerald-500 transition cursor-pointer"
-                value={datosLaborales.experienciaAnios} 
-                onChange={e => setDatosLaborales({...datosLaborales, experienciaAnios: e.target.value})}
-              >
-                <option value="0-1">Menos de 1 año</option>
-                <option value="1-3">1 a 3 años de experiencia</option>
-                <option value="3-5">3 a 5 años de experiencia</option>
-                <option value="5+">Más de 5 años de experiencia</option>
-              </select>
-            </div>
-
-            <div className="pt-2 border-t border-slate-800 space-y-2">
-              <span className="text-emerald-400 font-bold block">Referencia Laboral 1 *</span>
-              <input 
-                type="text" 
-                placeholder="Nombre supervisor / empleador" 
-                className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                value={datosLaborales.refLab1Nombre}
-                onChange={e => setDatosLaborales({...datosLaborales, refLab1Nombre: e.target.value})}
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
+              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Referencia Laboral 1 (Obligatoria)</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <input 
                   type="text" 
-                  placeholder="Empresa o Familia" 
-                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                  value={datosLaborales.refLab1Empresa}
-                  onChange={e => setDatosLaborales({...datosLaborales, refLab1Empresa: e.target.value})}
+                  placeholder="Nombre del supervisor/contacto *" 
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 transition"
+                  value={datosLaborales.refLab1Nombre} 
+                  onChange={e => setDatosLaborales({...datosLaborales, refLab1Nombre: e.target.value})} 
                 />
                 <input 
                   type="tel" 
-                  placeholder="Teléfono directo" 
-                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 font-mono outline-none focus:border-emerald-500 transition"
-                  value={datosLaborales.refLab1Telefono}
-                  onChange={e => setDatosLaborales({...datosLaborales, refLab1Telefono: e.target.value})}
+                  placeholder="Teléfono directo *" 
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono outline-none focus:border-emerald-500 transition"
+                  value={datosLaborales.refLab1Telefono} 
+                  onChange={e => setDatosLaborales({...datosLaborales, refLab1Telefono: e.target.value})} 
+                />
+                <input 
+                  type="text" 
+                  placeholder="Empresa o institución" 
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 transition"
+                  value={datosLaborales.refLab1Empresa} 
+                  onChange={e => setDatosLaborales({...datosLaborales, refLab1Empresa: e.target.value})} 
+                />
+                <input 
+                  type="text" 
+                  placeholder="Cargo ejercido" 
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 transition"
+                  value={datosLaborales.refLab1Cargo} 
+                  onChange={e => setDatosLaborales({...datosLaborales, refLab1Cargo: e.target.value})} 
                 />
               </div>
             </div>
 
-            <div className="pt-2 border-t border-slate-800 space-y-2">
-              <span className="text-emerald-400 font-bold block">Referencia Personal *</span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
+              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Referencia Personal 1 (Obligatoria)</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <input 
                   type="text" 
-                  placeholder="Nombre completo" 
-                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                  value={datosLaborales.refPers1Nombre}
-                  onChange={e => setDatosLaborales({...datosLaborales, refPers1Nombre: e.target.value})}
+                  placeholder="Nombre completo *" 
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 transition"
+                  value={datosLaborales.refPers1Nombre} 
+                  onChange={e => setDatosLaborales({...datosLaborales, refPers1Nombre: e.target.value})} 
                 />
                 <input 
                   type="text" 
-                  placeholder="Relación (Ej: Vecino)" 
-                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                  value={datosLaborales.refPers1Relacion}
-                  onChange={e => setDatosLaborales({...datosLaborales, refPers1Relacion: e.target.value})}
+                  placeholder="Relación/Vínculo" 
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 transition"
+                  value={datosLaborales.refPers1Relacion} 
+                  onChange={e => setDatosLaborales({...datosLaborales, refPers1Relacion: e.target.value})} 
                 />
                 <input 
                   type="tel" 
-                  placeholder="Teléfono" 
-                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white placeholder-slate-500 font-mono outline-none focus:border-emerald-500 transition"
-                  value={datosLaborales.refPers1Telefono}
-                  onChange={e => setDatosLaborales({...datosLaborales, refPers1Telefono: e.target.value})}
+                  placeholder="Teléfono directo *" 
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono outline-none focus:border-emerald-500 transition"
+                  value={datosLaborales.refPers1Telefono} 
+                  onChange={e => setDatosLaborales({...datosLaborales, refPers1Telefono: e.target.value})} 
                 />
               </div>
             </div>
 
-            <div className="pt-2 border-t border-slate-800 space-y-2">
-              <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                <CreditCard className="w-4 h-4" />
-                <span>Cuenta Bancaria para Pago de Servicios</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <select 
-                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white outline-none focus:border-emerald-500 cursor-pointer"
-                  value={datosLaborales.bancoDestino}
-                  onChange={e => setDatosLaborales({...datosLaborales, bancoDestino: e.target.value})}
-                >
-                  <option value="Banreservas">Banreservas</option>
-                  <option value="Banco Popular">Banco Popular</option>
-                  <option value="Banco BHD">Banco BHD</option>
-                  <option value="Asociación Popular">APAP</option>
-                  <option value="Scotiabank">Scotiabank</option>
-                </select>
-                <select 
-                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white outline-none focus:border-emerald-500 cursor-pointer"
-                  value={datosLaborales.tipoCuenta}
-                  onChange={e => setDatosLaborales({...datosLaborales, tipoCuenta: e.target.value})}
-                >
-                  <option value="Ahorros">Ahorros</option>
-                  <option value="Corriente">Corriente</option>
-                </select>
-                <input 
-                  type="text" 
-                  placeholder="No. de Cuenta" 
-                  className="bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 px-3 text-white font-mono outline-none focus:border-emerald-500 transition"
-                  value={datosLaborales.numeroCuentaBanco}
-                  onChange={e => setDatosLaborales({...datosLaborales, numeroCuentaBanco: e.target.value})}
-                />
+            <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
+              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Datos de Nómina para Depósitos (Banco Local RD)</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Banco de Destino *</label>
+                  <select 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 transition"
+                    value={datosLaborales.bancoDestino} 
+                    onChange={e => setDatosLaborales({...datosLaborales, bancoDestino: e.target.value})}
+                  >
+                    <option value="Banreservas">Banreservas</option>
+                    <option value="Banco Popular Dominicano">Banco Popular</option>
+                    <option value="Banco BHD">Banco BHD</option>
+                    <option value="Scotiabank RD">Scotiabank RD</option>
+                    <option value="Banco Santa Cruz">Banco Santa Cruz</option>
+                    <option value="Qik Banco Digital">Qik Banco Digital</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Tipo de Cuenta *</label>
+                  <select 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 transition"
+                    value={datosLaborales.tipoCuenta} 
+                    onChange={e => setDatosLaborales({...datosLaborales, tipoCuenta: e.target.value})}
+                  >
+                    <option value="Ahorros">Cuenta de Ahorros</option>
+                    <option value="Corriente">Cuenta Corriente</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Número de Cuenta *</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ej: 7894561230" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono outline-none focus:border-emerald-500 transition"
+                    value={datosLaborales.numeroCuentaBanco} 
+                    onChange={e => setDatosLaborales({...datosLaborales, numeroCuentaBanco: e.target.value})} 
+                  />
+                </div>
               </div>
             </div>
           </div>
         )}
 
+        {/* FASE 4: CREDENCIALES, BIOMETRÍA Y CONTRATO LEGAL */}
         {fase === 4 && (
           <div className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-slate-300 font-bold block">Correo Electrónico Oficial *</label>
-              <div className="relative flex items-center">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
-                <input 
-                  type="email" 
-                  required
-                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                  placeholder="correo@ejemplo.com" 
-                  value={credenciales.email} 
-                  onChange={e => setCredenciales({...credenciales, email: e.target.value})} 
-                />
-              </div>
-              <p className="text-[10px] text-slate-400">Una copia fiel y certificada de este contrato rubricado será enviada a esta dirección de correo.</p>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-slate-300 font-bold block">Contraseña de acceso *</label>
-              <div className="relative flex items-center">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
-                <input 
-                  type="password" 
-                  required
-                  className="w-full bg-slate-900/80 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-white placeholder-slate-500 outline-none focus:border-emerald-500 transition"
-                  placeholder="Mínimo 6 caracteres" 
-                  value={credenciales.password} 
-                  onChange={e => setCredenciales({...credenciales, password: e.target.value})} 
-                />
-              </div>
-            </div>
-
-            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" /> Contrato Marco de Adhesión y Exoneración
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setVerContratoCompleto(!verContratoCompleto)}
-                  className="text-[11px] text-emerald-400 font-bold hover:underline cursor-pointer"
-                >
-                  {verContratoCompleto ? 'Ocultar texto legal' : 'Leer contrato completo'}
-                </button>
-              </div>
-
-              <div className={`p-3 bg-slate-950 rounded-xl text-[10px] text-slate-300 leading-relaxed font-mono overflow-y-auto ${verContratoCompleto ? 'max-h-56' : 'max-h-24'}`}>
-                <p className="font-bold text-white mb-1">CONTRATO DE ARRENDAMIENTO DE SERVICIOS INDEPENDIENTES, DESCARGO DE RESPONSABILIDAD CIVIL Y ADHESIÓN A PÓLIZA DE SEGURO:</p>
-                <p>1. NATURALEZA NO LABORAL (LEY 16-92): El postulante ({datosIdentidad.nombre || 'EL ACOMPAÑANTE'}) declara bajo la fe del juramento que la relación jurídica que le vinculará a la plataforma JUNTOS Asistencia RD y a su fundadora Dra. Odelkis Domínguez es estrictamente civil y comercial. No existe subordinación laboral, sujeción horaria ni exclusividad de ningún tipo.</p>
-                <p className="mt-1">2. OBLIGACIONES FISCALES (LEY 11-92): El prestador asume plena titularidad frente a la Dirección General de Impuestos Internos (DGII), autorizando a la plataforma a practicar las retenciones legales de ISR que apliquen por concepto de servicios independientes.</p>
-                <p className="mt-1">3. EXONERACIÓN E INDEMNIDAD CIVIL (CÓDIGO CIVIL ART. 1382): Se exonera de forma expresa, voluntaria e irrevocable a la Dra. Odelkis Domínguez, socios y marcas registradas de toda responsabilidad civil extracontractual derivada de impericia, omisiones o eventualidades acaecidas antes, durante o después de las asistencias.</p>
-                <p className="mt-1">4. PÓLIZA COLECTIVA DE SEGURO: El acompañante acepta y autoriza su incorporación a la póliza colectiva de seguro de accidentes y personas contratada para resguardar la cobertura del servicio presencial.</p>
-              </div>
-
-              <div className="space-y-2 pt-1 text-[11px] text-slate-300">
-                <label className="flex items-start gap-2.5 cursor-pointer">
+            <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
+              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Credenciales de Acceso</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Correo Electrónico *</label>
                   <input 
-                    type="checkbox"
-                    required
-                    checked={aceptaContrato}
-                    onChange={e => setAceptaContrato(e.target.checked)}
-                    className="mt-0.5 rounded border-slate-700 bg-slate-950 text-emerald-500 focus:ring-0 shrink-0" 
+                    type="email" 
+                    placeholder="acompanante@juntos.do" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 transition"
+                    value={credenciales.email} 
+                    onChange={e => setCredenciales({...credenciales, email: e.target.value})} 
                   />
-                  <span>Acepto los términos del contrato de servicios independientes y ratifico la ausencia de vínculo de subordinación laboral.</span>
-                </label>
-
-                <label className="flex items-start gap-2.5 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    required
-                    checked={aceptaExoneracion}
-                    onChange={e => setAceptaExoneracion(e.target.checked)}
-                    className="mt-0.5 rounded border-slate-700 bg-slate-950 text-emerald-500 focus:ring-0 shrink-0" 
-                  />
-                  <span>Eximo de toda responsabilidad civil y patrimonial a la fundadora Dra. Odelkis Domínguez y a JUNTOS Asistencia RD.</span>
-                </label>
-
-                <label className="flex items-start gap-2.5 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    required
-                    checked={aceptaSeguro}
-                    onChange={e => setAceptaSeguro(e.target.checked)}
-                    className="mt-0.5 rounded border-slate-700 bg-slate-950 text-emerald-500 focus:ring-0 shrink-0" 
-                  />
-                  <span>Consiento estar adherido(a) y registrado(a) bajo la cobertura de seguro de personas y accidentes durante los servicios.</span>
-                </label>
-              </div>
-            </div>
-
-            <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center space-y-2">
-              <div className="flex items-center gap-2 text-xs font-bold text-white">
-                <Fingerprint className="w-4 h-4 text-emerald-400" />
-                <span>Corroboración Biométrica de Identidad (Ley 126-02)</span>
-              </div>
-              <p className="text-[10px] text-slate-400 max-w-sm">
-                Para validar la autenticidad de tu firma digital, autentica con Face ID, sensor dactilar o llave biométrica de tu dispositivo.
-              </p>
-
-              {!biometriaVerificada ? (
-                <button
-                  type="button"
-                  onClick={autenticarBiometria}
-                  disabled={verificandoBiometria}
-                  className="mt-1 bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-emerald-500/40 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 transition cursor-pointer"
-                >
-                  {verificandoBiometria ? 'Verificando sensor...' : '📱 Validar Face ID / Huella Dactilar'}
-                </button>
-              ) : (
-                <div className="inline-flex items-center gap-1.5 text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-3 py-1 rounded-full text-[11px] font-bold">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Cotejo biométrico verificado y vinculado
                 </div>
-              )}
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Contraseña de Acceso *</label>
+                  <input 
+                    type="password" 
+                    placeholder="••••••••" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white outline-none focus:border-emerald-500 transition"
+                    value={credenciales.password} 
+                    onChange={e => setCredenciales({...credenciales, password: e.target.value})} 
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="border border-slate-800 bg-slate-950/80 rounded-2xl p-4 flex flex-col items-center justify-center min-h-[130px] text-center">
-              {!firma ? (
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    if (!aceptaContrato || !aceptaExoneracion || !aceptaSeguro) {
-                      setErrorMsg('Debes marcar las 3 casillas legales de contrato, descargo y seguro antes de firmar.');
-                      return;
-                    }
-                    if (!biometriaVerificada) {
-                      setErrorMsg('Debes autenticar tu Face ID o huella dactilar antes de estampar la firma.');
-                      return;
-                    }
-                    setErrorMsg('');
-                    setFirma(true);
-                  }} 
-                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-3 rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition flex items-center gap-2 cursor-pointer"
-                >
-                  ✍ Estampar Firma Digital en el Contrato
-                </button>
-              ) : (
-                <div className="space-y-1">
-                  <div className="text-2xl italic text-emerald-400 font-serif border-b border-slate-800 pb-1">
-                    {datosIdentidad.nombre || 'Firma Registrada'}
-                  </div>
-                  <span className="text-[10px] text-slate-500 font-mono block">
-                    ID: {datosIdentidad.numeroDocumento || '---'} • FECHA: {new Date().toLocaleDateString()} • BIOMETRÍA: COTEJADA
-                  </span>
-                  <button type="button" onClick={() => setFirma(false)} className="text-[11px] text-rose-400 underline font-bold mt-1 cursor-pointer">
-                    Borrar y firmar de nuevo
-                  </button>
-                </div>
-              )}
+            <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
+              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Verificación Biométrica Obligatoria</h4>
+              <button 
+                type="button"
+                onClick={autenticarBiometria}
+                disabled={verificandoBiometria || biometriaVerificada}
+                className={`w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer ${
+                  biometriaVerificada 
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' 
+                    : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                }`}
+              >
+                <Fingerprint className="w-4 h-4" />
+                {biometriaVerificada ? '✓ Biometría Validada Exitosamente' : verificandoBiometria ? 'Verificando...' : 'Autenticar con Rostro / Huella dactilar'}
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
+              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Acuerdos Legales Conformes a Ley 172-13 y Código Civil RD</h4>
+              
+              <div className="space-y-2 text-[11px] text-slate-300">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" checked={aceptaContrato} onChange={e => setAceptaContrato(e.target.checked)} className="mt-0.5 rounded border-slate-700 text-emerald-500 focus:ring-0" />
+                  <span>Acepto el <b>Contrato de Prestación de Servicios Independientes</b> de Acompañamiento.</span>
+                </label>
+
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" checked={aceptaExoneracion} onChange={e => setAceptaExoneracion(e.target.checked)} className="mt-0.5 rounded border-slate-700 text-emerald-500 focus:ring-0" />
+                  <span>Acepto la <b>Cláusula de Exoneración de Responsabilidad Médica Directa</b> de la plataforma JUNTOS.</span>
+                </label>
+
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" checked={aceptaSeguro} onChange={e => setAceptaSeguro(e.target.checked)} className="mt-0.5 rounded border-slate-700 text-emerald-500 focus:ring-0" />
+                  <span>Acepto la adhesión a la póliza colectiva de <b>Seguro de Accidentes Personales</b> durante el servicio.</span>
+                </label>
+
+                <label className="flex items-start gap-2 cursor-pointer pt-2 border-t border-slate-800">
+                  <input type="checkbox" checked={firma} onChange={e => setFirma(e.target.checked)} className="mt-0.5 rounded border-slate-700 text-emerald-500 focus:ring-0" />
+                  <span>Estampo mi <b>Firma Digital Acreditada</b> a nombre de: <b>{datosIdentidad.nombre || 'Acompañante'}</b>.</span>
+                </label>
+              </div>
             </div>
           </div>
         )}
 
-        <div className="flex gap-3 pt-3">
-          {fase > 1 && (
-            <button 
-              type="button" 
-              className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold px-5 py-3.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer" 
-              onClick={() => { setErrorMsg(''); setFase(fase - 1); }}
+        {/* CONTROLES DE NAVEGACIÓN */}
+        <div className="flex justify-between items-center pt-4 border-t border-slate-800">
+          {fase > 1 ? (
+            <button
+              type="button"
+              onClick={() => setFase(prev => prev - 1)}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
             >
-              <ArrowLeft className="w-4 h-4" /> Atrás
+              <ArrowLeft className="w-4 h-4" /> Anterior
+            </button>
+          ) : <div />}
+
+          {fase < 4 ? (
+            <button
+              type="submit"
+              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 transition cursor-pointer"
+            >
+              Siguiente <ArrowRight className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={loading}
+              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-3 rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 cursor-pointer"
+            >
+              {loading ? 'Procesando Expediente...' : 'Finalizar Registro & Entrar al Dashboard'}
             </button>
           )}
-
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 rounded-xl shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.01] flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-          >
-            <span>
-              {loading 
-                ? 'Procesando expediente...' 
-                : fase === 4 
-                ? 'Firmar y Entrar a la Sala de Operaciones' 
-                : 'Continuar a Siguiente Fase'}
-            </span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
         </div>
-
       </form>
     </div>
   );
