@@ -14,7 +14,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Validar que el usuario tenga rol COMPANION y KYC APROBADO
+    // 2. Validar que el usuario tenga rol COMPANION u ADMIN y status APROBADO
     const { data: profile, error: profError } = await supabase
       .from('profiles')
       .select('id, role, status')
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 5. Asignar exclusivamente al ID de la sesión autenticada (auth.uid())
+    // 5. Asignar exclusivamente al ID de la sesión autenticada
     const { data: updatedService, error: updateError } = await supabase
       .from('service_requests')
       .update({
@@ -85,12 +85,20 @@ export async function POST(req: Request) {
       })
       .eq('id', serviceId)
       .select()
-      .maybeSingle(); // 🟢 Corregido: un solo par de paréntesis
+      .maybeSingle();
 
     if (updateError) {
       return NextResponse.json(
         { error: 'Error al asignar el servicio: ' + updateError.message },
         { status: 500 }
+      );
+    }
+
+    // Si Supabase RLS bloqueó el update silenciosamente
+    if (!updatedService) {
+      return NextResponse.json(
+        { error: 'No se pudo actualizar el servicio. Verifique los permisos RLS en Supabase.' },
+        { status: 403 }
       );
     }
 
