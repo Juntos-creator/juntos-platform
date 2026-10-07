@@ -85,7 +85,7 @@ export async function POST(req: Request) {
       })
       .eq('id', serviceId)
       .select()
-      .single();
+      .maybeSingle()();
 
     if (updateError) {
       return NextResponse.json(
