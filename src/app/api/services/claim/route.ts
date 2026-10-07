@@ -85,7 +85,7 @@ export async function POST(req: Request) {
       })
       .eq('id', serviceId)
       .select()
-      .maybeSingle()();
+      .maybeSingle(); // 🟢 Corregido: un solo par de paréntesis
 
     if (updateError) {
       return NextResponse.json(
@@ -99,7 +99,7 @@ export async function POST(req: Request) {
       user_id: user.id,
       action: 'SERVICE_CLAIMED',
       details: { service_id: serviceId, companion_id: user.id }
-    }).select().maybeSingle();
+    });
 
     return NextResponse.json({
       success: true,
