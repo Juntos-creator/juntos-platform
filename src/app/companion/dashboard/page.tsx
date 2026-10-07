@@ -67,6 +67,10 @@ export default function CompanionDashboardPage() {
   const [newMessage, setNewMessage] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [sendingMsg, setSendingMsg] = useState(false);
+  const [ratingService, setRatingService] = useState<Service | null>(null);
+  const [companionRating, setCompanionRating] = useState(0);
+  const [companionReview, setCompanionReview] = useState('');
+  const [savingRating, setSavingRating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const fetchAllServices = useCallback(
@@ -82,9 +86,10 @@ export default function CompanionDashboardPage() {
       }
 
       const mine = requests.filter((service) => service.companion_id === userId);
-      const active = mine.find((service) =>
-        ACTIVE_STATUSES.has(normalizeStatus(service.status))
-      ) ?? null;
+      const active =
+        mine.find((service) =>
+          ACTIVE_STATUSES.has(normalizeStatus(service.status))
+        ) ?? null;
 
       const available = requests.filter(
         (service) =>
@@ -110,7 +115,6 @@ export default function CompanionDashboardPage() {
     [supabase]
   );
 
-  // Inicializa sesión y mantiene sincronizados los servicios.
   useEffect(() => {
     let mounted = true;
 
@@ -175,7 +179,6 @@ export default function CompanionDashboardPage() {
     };
   }, [fetchAllServices, router, supabase]);
 
-  // Carga y escucha el chat del servicio seleccionado.
   useEffect(() => {
     if (!selectedChatOrder?.id) {
       setMessages([]);
@@ -331,7 +334,6 @@ export default function CompanionDashboardPage() {
       );
 
       if (action === 'INICIO') {
-        // Refleja el check-in confirmado mientras se sincroniza la fila real.
         setActiveOrder((previous) =>
           previous
             ? {
@@ -342,6 +344,13 @@ export default function CompanionDashboardPage() {
             : previous
         );
       } else {
+        setRatingService({
+          ...activeOrder,
+          ...(result.service ?? {}),
+          status: result.service?.status ?? 'COMPLETED',
+        });
+        setCompanionRating(0);
+        setCompanionReview('');
         setActiveOrder(null);
       }
 
@@ -353,6 +362,49 @@ export default function CompanionDashboardPage() {
     } finally {
       setActionLoading(false);
     }
+  }
+
+  async function handleSubmitCompanionRating(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    if (!ratingService || !currentUser || companionRating < 1) return;
+
+    const reviewedId =
+      ratingService.client_id ||
+      ratingService.customer_id ||
+      ratingService.user_id;
+
+    if (!reviewedId) {
+      setPinError('No se encontró el solicitante para guardar la valoración.');
+      return;
+    }
+
+    setSavingRating(true);
+    setPinError(null);
+
+    const { error } = await supabase.from('service_reviews').insert({
+      service_id: String(ratingService.id),
+      reviewer_id: currentUser.id,
+      reviewed_id: reviewedId,
+      reviewer_role: 'companion',
+      rating: companionRating,
+      comment: companionReview.trim() || null,
+      tags: [],
+    });
+
+    if (error) {
+      console.error('No se pudo guardar la valoración:', error);
+      setPinError('No se pudo guardar la valoración. Inténtalo de nuevo.');
+    } else {
+      setRatingService(null);
+      setCompanionRating(0);
+      setCompanionReview('');
+      if (currentUser) await fetchAllServices(currentUser.id);
+    }
+
+    setSavingRating(false);
   }
 
   async function handleSendMessage(event: React.FormEvent<HTMLFormElement>) {
@@ -442,9 +494,9 @@ export default function CompanionDashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-3 text-slate-400">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 text-slate-400">
         <RefreshCw className="h-8 w-8 animate-spin text-emerald-400" />
-        <p className="text-xs font-mono uppercase tracking-widest">
+        <p className="font-mono text-xs uppercase tracking-widest">
           Sincronizando sala de operaciones…
         </p>
       </div>
@@ -526,6 +578,56 @@ export default function CompanionDashboardPage() {
             <AlertTriangle className="h-5 w-5 shrink-0" />
             {pinError}
           </div>
+        )}
+
+        {ratingService && (
+          <section className="space-y-4 rounded-3xl border border-emerald-500/40 bg-slate-900 p-6">
+            <h2 className="font-black">Valora al solicitante</h2>
+            <p className="text-sm text-slate-400">
+              Servicio #{String(ratingService.id).slice(0, 8).toUpperCase()}
+            </p>
+
+            <form onSubmit={handleSubmitCompanionRating} className="space-y-4">
+              <div
+                className="flex gap-2"
+                role="group"
+                aria-label="Calificación de 1 a 5 estrellas"
+              >
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setCompanionRating(star)}
+                    aria-label={`${star} estrellas`}
+                    aria-pressed={companionRating === star}
+                    className={`text-3xl ${
+                      star <= companionRating
+                        ? 'text-amber-400'
+                        : 'text-slate-600'
+                    }`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                value={companionReview}
+                onChange={(event) => setCompanionReview(event.target.value)}
+                maxLength={1000}
+                placeholder="Comentario (opcional)"
+                className="min-h-24 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm outline-none focus:border-emerald-500"
+              />
+
+              <button
+                type="submit"
+                disabled={savingRating || companionRating < 1}
+                className="rounded-xl bg-emerald-500 px-5 py-3 text-sm font-bold text-slate-950 disabled:opacity-50"
+              >
+                {savingRating ? 'Guardando…' : 'Enviar valoración'}
+              </button>
+            </form>
+          </section>
         )}
 
         {activeOrder && (
